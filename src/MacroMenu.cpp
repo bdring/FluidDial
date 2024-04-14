@@ -162,8 +162,6 @@ public:
         background();
 
         if (num_items()) {
-            drawPngBackground("/filesbg.png");
-
             // Draw dot showing the selected file
             if (num_items() > 1) {
                 int span   = 100;  // degrees
@@ -174,8 +172,6 @@ public:
 
                 drawFilledCircle({ dx, dy }, 8, WHITE);
             }
-        } else {
-            drawBackground(BLUE);
         }
         if (state != Idle) {
             drawStatus();

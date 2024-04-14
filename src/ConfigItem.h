@@ -13,7 +13,8 @@ private:
 
 public:
     ConfigItem(const char* name) : _name(name), _known(false) {}
-    virtual void set(const char* s);
+
+    virtual void set(const char* s) = 0;
     const char*  name() { return _name; }
     bool         known() { return _known; }
     void         init() {

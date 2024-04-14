@@ -252,8 +252,12 @@ extern "C" void show_gcode_modes(struct gcode_modes* modes) {
     myModes += modes->distance;
     myModes += " ";
     myModes += modes->spindle;
-    myModes += " ";
-    myModes += modes->coolant;
+    if (strcmp(modes->mist, "On") == 0) {
+      myModes += " Mist";
+    }
+    if (strcmp(modes->flood, "On") == 0) {
+      myModes += " Flood";
+    }
     //    myModes += " T";
     //    myModes += modes->tool;
     current_scene->reDisplay();

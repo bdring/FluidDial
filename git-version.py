@@ -25,7 +25,10 @@ else:
     else:
         dirty = ""
     rev = "%s-%s%s" % (branchname, revision, dirty)
-    url = subprocess.check_output(["git", "config", "--get", "remote.origin.url"]).strip().decode("utf-8")
+    try:
+        url = subprocess.check_output(["git", "config", "--get", "remote.origin.url"]).strip().decode("utf-8")
+    except:
+        url = "None"
 
 git_info = rev
 git_url = url
