@@ -1,0 +1,20 @@
+#include "ConfigItem.h"
+
+std::vector<ConfigItem*> configRequests;
+
+void parse_dollar(const char* line) {
+    for (auto it = configRequests.begin(); it != configRequests.end(); ++it) {
+        auto item = *it;
+
+        size_t cmdlen = strlen(req->_name);
+
+        if (strncmp(line, req->_name, cmdlen) == 0 && line[cmdlen] == '=') {
+            line += cmdlen + 1;
+            item->got(line);
+
+            current_scene->onConfigItem(item);
+            configRequests.erase(it);
+            break;
+        }
+    }
+}
