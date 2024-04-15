@@ -1,0 +1,109 @@
+class MacroMenu : public Menu {
+private:
+    int _selected = 0;
+
+public:
+    MacroMenu() : Menu("Macros") {}
+
+    const std::string& selected_name();
+    void               onEntry(void* arg) override;
+
+    void onRedButtonPress() { request_macro_list(); }
+    void onFilesList() {
+        _selected = 0;
+        reDisplay();
+    }
+
+    void onDialButtonPress() { pop_scene(); }
+
+    void onGreenButtonPress() {
+        if (state != Idle) {
+            return;
+        }
+        if (num_items()) {
+            invoke();
+        }
+    }
+    void reDisplay() override {
+        dbg_printf("MM redisp sel %d ni %d\n", _selected, num_items());
+        menuBackground();
+        if (num_items() == 0) {
+            Point where { 0, 0 };
+            Point wh { 200, 45 };
+            drawRect(where, wh, 20, YELLOW);
+            text("No Files", where, BLACK, MEDIUM, middle_center);
+        } else {
+            if (_selected > 1) {
+                _items[_selected - 2]->show({ 0, 70 });
+            }
+            if (_selected > 0) {
+                _items[_selected - 1]->show({ 0, 40 });
+            }
+            dbg_println(selected_name());
+            _items[_selected]->show({ 0, 0 });
+            if (_selected < num_items() - 1) {
+                _items[_selected + 1]->show({ 0, -40 });
+            }
+            if (_selected < num_items() - 2) {
+                _items[_selected + 2]->show({ 0, -70 });
+            }
+        }
+        buttonLegends();
+        refreshDisplay();
+    }
+
+    void buttonLegends() {
+        const char* grnLabel = "";
+        const char* redLabel = "";
+
+        if (state == Idle) {
+            redLabel = "Refresh";
+            if (num_items()) {
+                grnLabel = "Load";
+            }
+        }
+
+        drawButtonLegends(redLabel, grnLabel, "Back");
+    }
+
+    void rotate(int delta) override {
+        if (_selected == 0 && delta <= 0) {
+            return;
+        }
+        if (_selected == num_items() && delta >= 0) {
+            return;
+        }
+        if (_selected != -1) {
+            _items[_selected]->unhighlight();
+        }
+        _selected += delta;
+        if (_selected < 0) {
+            _selected = 0;
+        }
+        if (_selected >= num_items()) {
+            _selected = num_items() - 1;
+        }
+        _items[_selected]->highlight();
+        reDisplay();
+    }
+
+    int touchedItem(int x, int y) override { return -1; };
+
+    void menuBackground() override {
+        background();
+        drawPngBackground("/filesbg.png");
+
+        text("Macros", { 0, 100 }, YELLOW, MEDIUM);
+
+        // Draw dot showing the selected file
+        if (num_items() > 1) {
+            int span   = 100;  // degrees
+            int dtheta = span * _selected / (num_items() - 1);
+            int theta  = (span / 2) - dtheta;
+            int dx, dy;
+            r_degrees_to_xy(110, theta, &dx, &dy);
+
+            drawFilledCircle({ dx, dy }, 8, WHITE);
+        }
+    }
+} macroMenu;

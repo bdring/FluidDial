@@ -1,0 +1,11 @@
+enum FileType {
+    ORDINARY,
+    DIRECTORY,
+};
+struct fileinfo {
+    std::string fileName;
+    FileType    fileType;
+    int         fileSize;
+};
+extern fileinfo              fileInfo;
+extern std::vector<fileinfo> fileVector;

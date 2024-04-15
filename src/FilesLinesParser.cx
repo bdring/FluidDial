@@ -1,0 +1,96 @@
+class FileLinesListener : public JsonListener {
+private:
+    bool _in_array;
+
+public:
+    void whitespace(char c) override {}
+
+    void startDocument() override {}
+    void startArray() override {
+        fileLines.clear();
+        _in_array = true;
+    }
+    void startObject() override {}
+
+    void key(const char* key) override {
+        //      if (strcmp(key, "path") == 0) {}
+    }
+
+    void value(const char* value) override {
+        if (_in_array) {
+            fileLines.push_back(value);
+        }
+    }
+
+    void endArray() override { _in_array = false; }
+    void endObject() override {}
+    void endDocument() override {
+        init_listener();
+        current_scene->onFileLines();
+    }
+} fileLinesListener;
+
+class InitialListener : public JsonListener {
+private:
+public:
+    void whitespace(char c) override {}
+    void startDocument() override {}
+    void value(const char* value) override {}
+    void endArray() override {}
+    void endObject() override {}
+    void endDocument() override {}
+    void startArray() override {}
+    void startObject() override {}
+
+    void key(const char* key) override {
+        if (strcmp(key, "files") == 0) {
+            parser.setListener(&filesListListener);
+            return;
+        }
+        if (strcmp(key, "file_lines") == 0) {
+            parser.setListener(&fileLinesListener);
+            return;
+        }
+    }
+} initialListener;
+
+void init_listener() {
+    parser.setListener(&initialListener);
+    parser_needs_reset = true;
+}
+
+void request_file_list() {
+    send_linef("$Files/ListGCode=%s", dirName.c_str());
+    parser_needs_reset = true;
+}
+
+void init_file_list() {
+    init_listener();
+    dirLevel = 0;
+    dirName  = "/sd";
+    request_file_list();
+}
+
+void request_file_preview(const char* name) {
+    send_linef("$File/ShowSome=7,%s/%s", dirName.c_str(), name);
+}
+extern "C" void handle_msg(char* command, char* arguments) {
+    if (strcmp(command, "RST") == 0) {
+        dbg_println("FluidNC Reset");
+    }
+    if (strcmp(command, "Files changed") == 0) {
+        dbg_println("Files changed");
+        init_file_list();
+    }
+    if (strcmp(command, "JSON") == 0) {
+        if (parser_needs_reset) {
+            parser.reset();
+            parser_needs_reset = false;
+        }
+        while (*arguments) {
+            parser.parse(*arguments++);
+        }
+#define Ack 0xB2
+        fnc_realtime((realtime_cmd_t)Ack);
+    }
+}
