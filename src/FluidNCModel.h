@@ -34,6 +34,8 @@ extern const char*        myFile;
 extern file_percent_t     myPercent;
 extern override_percent_t myFro;
 extern override_percent_t mySro;
+extern uint32_t           myFeed;
+extern uint32_t           mySpeed;
 extern int                lastAlarm;
 extern int                lastError;
 extern uint32_t           errorExpire;
