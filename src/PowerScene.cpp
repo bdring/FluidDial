@@ -3,7 +3,7 @@
 
 #include "Scene.h"
 #ifdef ARDUINO
-#    include <driver/rtc_io.h>
+#include <driver/rtc_io.h>
 #endif
 
 #ifdef ARDUINO
@@ -16,31 +16,45 @@
 // For some reason, GPIO_1 is the only one of the button pins
 // that works right for wakeup.  If GPIO_2 is used, the system
 // wakes up immediately without a button press.
-#    define WAKEUP_GPIO (gpio_num_t) RED_BUTTON_PIN
+#define WAKEUP_GPIO (gpio_num_t) RED_BUTTON_PIN
 
-void deep_sleep(int us) {
+void deep_sleep(int us)
+{
     M5.Display.sleep();
     rtc_gpio_pullup_en(WAKEUP_GPIO);
     esp_sleep_enable_ext0_wakeup(WAKEUP_GPIO, false);
-    while (digitalRead(WAKEUP_GPIO) == false) {
+    while (digitalRead(WAKEUP_GPIO) == false)
+    {
         delay_ms(10);
     }
-    if (us > 0) {
+    if (us > 0)
+    {
         esp_sleep_enable_timer_wakeup(us);
-    } else {
+    }
+    else
+    {
         // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     }
     esp_deep_sleep_start();
 }
 #endif
 
-class PowerScene : public Scene {
+class PowerScene : public Scene
+{
 private:
+    int _brightness = 255;
+
 public:
     PowerScene() : Scene("Power") {}
-    int  brightness = 255;
-    void onEntry() {}
-    void onRedButtonPress() {
+    void onEntry(void *arg) override
+    {
+        if (initPrefs())
+        {
+            getPref("brightness", &_brightness);
+        }
+    }
+    void onRedButtonPress()
+    {
         set_disconnected_state();
 #ifdef ARDUINO
         centered_text("Use red button to wakeup", 118, RED, TINY);
@@ -52,32 +66,39 @@ public:
         dbg_println("Sleep");
 #endif
     }
-    void onGreenButtonPress() {
+    void onGreenButtonPress()
+    {
         set_disconnected_state();
 #ifdef ARDUINO
         esp_restart();
 #endif
     }
     void onDialButtonPress() { pop_scene(); }
-    void reDisplay() {
+    void reDisplay()
+    {
         background();
 #ifdef ARDUINO
-        const char* greenLegend = "Restart";
+        const char *greenLegend = "Restart";
 #else
-        const char* greenLegend = "";
+        const char *greenLegend = "";
 #endif
         text("Brightness:", 122, 90, LIGHTGREY, TINY, bottom_right);
-        text(intToCStr(brightness), 126, 90, GREEN, TINY, bottom_left);
+        text(intToCStr(_brightness), 126, 90, GREEN, TINY, bottom_left);
         drawButtonLegends("Sleep", greenLegend, "Back");
         refreshDisplay();
     }
 
-    void onEncoder(int delta) {
-        if (delta > 0 && brightness < 255) {
-            M5Dial.Display.setBrightness(++brightness);
+    void onEncoder(int delta)
+    {
+        if (delta > 0 && _brightness < 255)
+        {
+            M5Dial.Display.setBrightness(++_brightness);
+            setPref("brightness", _brightness);
         }
-        if (delta < 0 && brightness > 0) {
-            M5Dial.Display.setBrightness(--brightness);
+        if (delta < 0 && _brightness > 0)
+        {
+            M5Dial.Display.setBrightness(--_brightness);
+            setPref("brightness", _brightness);
         }
         reDisplay();
     }

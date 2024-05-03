@@ -33,6 +33,7 @@ extern bool               myProbeSwitch;
 extern const char*        myFile;
 extern file_percent_t     myPercent;
 extern override_percent_t myFro;
+extern override_percent_t mySro;
 extern int                lastAlarm;
 extern int                lastError;
 extern uint32_t           errorExpire;
