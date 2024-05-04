@@ -3,19 +3,20 @@
 
 // System interface routines for Windows
 
-#ifdef WINDOWS
 // stdio.h must precede the include of M5Unified.h in System.h
 // in order for image files to work correctly
-#    include "stdio.h"
+#include "stdio.h"
 
-#    include "System.h"
-#    include "FluidNCModel.h"
+#include "System.h"
+#include "FluidNCModel.h"
+#include "M5GFX.h"
+#include "Drawing.h"
 
-#    include <windows.h>
-#    include <commctrl.h>
+#include <windows.h>
+#include <commctrl.h>
 
-M5GFX&   display = M5.Display;
-M5Canvas canvas(&M5.Display);
+LGFX_Device& display = M5.Display;
+LGFX_Sprite  canvas(&M5.Display);
 
 m5::Speaker_Class& speaker     = M5.Speaker;
 m5::Touch_Class&   touch       = M5.Touch;
@@ -23,12 +24,22 @@ m5::Button_Class&  dialButton  = M5.BtnB;
 m5::Button_Class&  greenButton = M5.BtnC;
 m5::Button_Class&  redButton   = M5.BtnA;
 
+bool round_display = true;
+
+void system_background() {
+    drawPngFile("PCBackground.png", 0, 0);
+}
+
 //
 void update_events() {
     lgfx::Panel_sdl::loop();
     M5.update();
 
     auto ms = m5gfx::millis();
+}
+
+extern "C" int milliseconds() {
+    return m5gfx::millis();
 }
 
 void delay_ms(uint32_t ms) {
@@ -43,17 +54,17 @@ void drawPngFile(const char* filename, int x, int y) {
     canvas.drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
-#    define TIOCM_LE 0x001
-#    define TIOCM_DTR 0x002
-#    define TIOCM_RTS 0x004
-#    define TIOCM_ST 0x008
-#    define TIOCM_SR 0x010
-#    define TIOCM_CTS 0x020
-#    define TIOCM_CAR 0x040
-#    define TIOCM_RNG 0x080
-#    define TIOCM_DSR 0x100
-#    define TIOCM_CD TIOCM_CAR
-#    define TIOCM_RI TIOCM_RNG
+#define TIOCM_LE 0x001
+#define TIOCM_DTR 0x002
+#define TIOCM_RTS 0x004
+#define TIOCM_ST 0x008
+#define TIOCM_SR 0x010
+#define TIOCM_CTS 0x020
+#define TIOCM_CAR 0x040
+#define TIOCM_RNG 0x080
+#define TIOCM_DSR 0x100
+#define TIOCM_CD TIOCM_CAR
+#define TIOCM_RI TIOCM_RNG
 
 static bool getcomm(HANDLE comfid, LPDCB dcb) {
     if (!GetCommState((HANDLE)comfid, dcb)) {
@@ -199,14 +210,14 @@ HANDLE serial_open_com(char* portname) {  // Open COM port
     FillMemory(&dcb, sizeof(dcb), 0);
     dcb.DCBlength = sizeof(DCB);
 
-#    ifdef NOTDEF
+#ifdef NOTDEF
     if (!GetCommState(hComm, &dcb)) {
         printf("Can't get COM mode, error %d\n", GetLastError());
         CloseHandle((HANDLE)hComm);
         return INVALID_HANDLE_VALUE;
     }
     printf("\nBaudRate = %d, ByteSize = %d, Parity = %d, StopBits = %d\n", dcb.BaudRate, dcb.ByteSize, dcb.Parity, dcb.StopBits);
-#    endif
+#endif
 
     if (!BuildCommDCB("115200,n,8,1", &dcb)) {
         printf("Can't build DCB\n");
@@ -254,19 +265,21 @@ void   init_system() {
         serial_set_baud(hFNC, 115200);
     }
 
-    //    display.setResolution(320, 320);
-    // display.init();
-
-    init_encoder();  // Use our own encoder driver
     // Make an offscreen canvas that can be copied to the screen all at once
     canvas.createSprite(display.width(), display.height());
 
     // Draw the logo screen
     display.clear();
-    //    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-
     speaker.setVolume(255);
 }
+
+Point sprite_offset { 0, 0 };
+
+void base_display() {
+    display.clear();
+}
+
+void next_layout(int delta) {}
 
 void resetFlowControl() {}
 
@@ -279,9 +292,9 @@ extern "C" int fnc_getchar() {
     int  cnt = serial_timed_read_com(hFNC, &c, 1, 1);
     if (cnt > 0) {
         update_rx_time();
-#    ifdef ECHO_FNC_TO_DEBUG
+#ifdef ECHO_FNC_TO_DEBUG
         dbg_write(c);
-#    endif
+#endif
         return c;
     }
     return -1;
@@ -299,4 +312,89 @@ void dbg_print(const char* s) {
         putchar(c);
     }
 }
-#endif
+
+bool screen_encoder(int x, int y, int& delta) {
+    x -= display.width() / 2;
+    y -= display.height() / 2;
+    if (y >= 0) {
+        // The encoder area is the top half of the screen so
+        // if we are in the bottom half, return 0.
+        return false;
+    }
+    int magsq = x * x + y * y;
+    if (magsq < (120 * 120)) {
+        return false;
+    }
+
+    int tangent = y * 100 / x;
+    if (tangent < 0) {
+        tangent = -tangent;
+    }
+    delta = 4;
+    if (tangent > 172) {  // tan(60)*100
+        delta = 1;
+    } else if (tangent > 100) {  // tan(45)*100
+        delta = 2;
+    } else if (tangent > 58) {  // tan(30)*100
+        delta = 3;
+    }
+    if (x < 0) {
+        delta = -delta;
+    }
+    return true;
+}
+
+bool screen_button_touched(int x, int y, int& button) {
+    if (x <= -90) {
+        button = 0;
+    } else if (x >= 90) {
+        button = 2;
+    } else {
+        button = 1;
+    }
+    return true;
+}
+
+bool switch_button_touched(bool& pressed, int& button) {
+    if (redButton.wasPressed()) {
+        button  = 0;
+        pressed = true;
+        return true;
+    }
+    if (redButton.wasReleased()) {
+        button  = 0;
+        pressed = false;
+        return true;
+    }
+    if (dialButton.wasPressed()) {
+        button  = 1;
+        pressed = true;
+        return true;
+    }
+    if (dialButton.wasReleased()) {
+        button  = 1;
+        pressed = false;
+        return true;
+    }
+    if (greenButton.wasPressed()) {
+        button  = 2;
+        pressed = true;
+        return true;
+    }
+    if (greenButton.wasReleased()) {
+        button  = 2;
+        pressed = false;
+        return true;
+    }
+    return false;
+}
+
+void ackBeep() {
+    speaker.tone(1800, 50);
+}
+
+void deep_sleep() {}
+
+int16_t get_encoder() {
+    return 0;
+}

@@ -5,8 +5,10 @@
 #include "System.h"
 
 Point Point::to_display() const {
-    return { display.width() / 2 + x, display.height() / 2 - y };
+    int center = display_short_side()/2;
+    return { center + x, center - y };
 }
 Point Point::from_display() const {
-    return { x - display.width() / 2, display.height() / 2 - y };
+    int center = display_short_side()/2;
+    return { x - center, center - y };
 }

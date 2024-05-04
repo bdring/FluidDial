@@ -4,10 +4,7 @@
 #include "System.h"
 #include "FluidNCModel.h"
 
-extern "C" int milliseconds() {
-    return m5gfx::millis();
-}
-
+#if 0
 // Helpful for debugging touch development.
 const char* M5TouchStateName(m5::touch_state_t state_num) {
     static constexpr const char* state_name[16] = { "none", "touch", "touch_end", "touch_begin", "___", "hold", "hold_end", "hold_begin",
@@ -15,10 +12,7 @@ const char* M5TouchStateName(m5::touch_state_t state_num) {
 
     return state_name[state_num];
 }
-
-void ackBeep() {
-    speaker.tone(1800, 50);
-}
+#endif
 
 void dbg_printf(const char* format, ...) {
     va_list args;
