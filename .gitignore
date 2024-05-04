@@ -1,4 +1,5 @@
 .pio
 .vscode
 src/version.cpp
-
+*~
+junk

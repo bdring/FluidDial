@@ -1,3 +1,0 @@
-#pragma once
-
-void rtheta_to_xy(int radius, int angle, int* px, int* py);
