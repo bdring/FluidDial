@@ -9,6 +9,15 @@ class StatusScene : public Scene {
 private:
     const char* _entry = nullptr;
 
+    // the fro/sro/rt rotating display state
+    typedef enum {
+        FRO,
+        SRO,
+        RT_FEED_SPEED,
+    } ovrd_display_t;
+
+    ovrd_display_t overd_display = FRO;
+
 public:
     StatusScene() : Scene("Status") {}
 
@@ -16,7 +25,12 @@ public:
     void onExit() override { dbg_println("SoX"); }
 
     void onDialButtonPress() {
-        if (state != Cycle) {
+        if (state == Cycle || state == Hold) {
+            if (overd_display == FRO)
+                fnc_realtime(FeedOvrReset);
+            else if (overd_display == SRO)
+                fnc_realtime(SpindleOvrReset);
+        } else {
             pop_scene();
         }
     }
@@ -28,6 +42,19 @@ public:
     }
 
     void onTouchClick() {
+        if (touchY > 150 && (state == Cycle || state == Hold)) {
+            switch (overd_display) {
+                case FRO:
+                    overd_display = SRO;
+                    break;
+                case SRO:
+                    overd_display = RT_FEED_SPEED;
+                    break;
+                case RT_FEED_SPEED:
+                    overd_display = FRO;
+            }
+            reDisplay();
+        }
         fnc_realtime(StatusReport);  // sometimes you want an extra status
     }
 
@@ -74,11 +101,25 @@ public:
 
     void onEncoder(int delta) {
         if (state == Cycle) {
-            if (delta > 0 && myFro < 200) {
-                fnc_realtime(FeedOvrFinePlus);
-            } else if (delta < 0 && myFro > 10) {
-                fnc_realtime(FeedOvrFineMinus);
+            switch (overd_display) {
+                case FRO:
+                    if (delta > 0 && myFro < 200) {
+                        fnc_realtime(FeedOvrFinePlus);
+                    } else if (delta < 0 && myFro > 10) {
+                        fnc_realtime(FeedOvrFineMinus);
+                    }
+                    break;
+                case SRO:
+                    if (delta > 0 && mySro < 200) {
+                        fnc_realtime(SpindleOvrFinePlus);
+                    } else if (delta < 0 && mySro > 10) {
+                        fnc_realtime(SpindleOvrFineMinus);
+                    }
+                    break;
+                case RT_FEED_SPEED:
+                    overd_display = FRO;
             }
+
             reDisplay();
         }
     }
@@ -112,7 +153,16 @@ public:
             }
             // Feed override
             char legend[50];
-            sprintf(legend, "Feed Rate Ovr:%d%%", myFro);
+            switch (overd_display) {
+                case FRO:
+                    sprintf(legend, "Feed Rate Ovr:%d%%", myFro);
+                    break;
+                case SRO:
+                    sprintf(legend, "Spindle Ovr:%d%%", mySro);
+                    break;
+                case RT_FEED_SPEED:
+                    sprintf(legend, "Fd:%d Spd:%d", myFeed, mySpeed);
+            }
             centered_text(legend, y + 23);
         } else {
             centered_text(mode_string(), y + 23, GREEN, TINY);
@@ -146,8 +196,10 @@ public:
             case Idle:
                 break;
         }
+        if (state == Cycle || state == Hold) {
+            drawButtonLegends(redLabel, grnLabel, (state == Cycle || state == Hold) ? "Rst Ovr" : "Back");
+        }
 
-        drawButtonLegends(redLabel, grnLabel, "Back");
         refreshDisplay();
     }
 };

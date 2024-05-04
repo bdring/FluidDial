@@ -36,10 +36,15 @@ void deep_sleep(int us) {
 
 class PowerScene : public Scene {
 private:
+    int _brightness = 255;
+
 public:
     PowerScene() : Scene("Power") {}
-    int  brightness = 255;
-    void onEntry() {}
+    void onEntry(void* arg) override {
+        if (initPrefs()) {
+            getPref("brightness", &_brightness);
+        }
+    }
     void onRedButtonPress() {
         set_disconnected_state();
 #ifdef ARDUINO
@@ -67,17 +72,19 @@ public:
         const char* greenLegend = "";
 #endif
         text("Brightness:", 122, 90, LIGHTGREY, TINY, bottom_right);
-        text(intToCStr(brightness), 126, 90, GREEN, TINY, bottom_left);
+        text(intToCStr(_brightness), 126, 90, GREEN, TINY, bottom_left);
         drawButtonLegends("Sleep", greenLegend, "Back");
         refreshDisplay();
     }
 
     void onEncoder(int delta) {
-        if (delta > 0 && brightness < 255) {
-            M5Dial.Display.setBrightness(++brightness);
+        if (delta > 0 && _brightness < 255) {
+            M5Dial.Display.setBrightness(++_brightness);
+            setPref("brightness", _brightness);
         }
-        if (delta < 0 && brightness > 0) {
-            M5Dial.Display.setBrightness(--brightness);
+        if (delta < 0 && _brightness > 0) {
+            M5Dial.Display.setBrightness(--_brightness);
+            setPref("brightness", _brightness);
         }
         reDisplay();
     }

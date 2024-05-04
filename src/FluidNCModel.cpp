@@ -22,7 +22,11 @@ bool               myProbeSwitch      = false;
 const char*        myFile             = "";   // running SD filename
 file_percent_t     myPercent          = 0.0;  // percent conplete of SD file
 override_percent_t myFro              = 100;  // Feed rate override
-std::string        myModes            = "no data";
+override_percent_t mySro              = 100;  // Spindle Override
+uint32_t           myFeed             = 0;
+uint32_t           mySpeed            = 0;
+
+std::string myModes = "no data";
 
 int      lastAlarm = 0;
 int      lastError = 0;
@@ -111,7 +115,13 @@ extern "C" void show_file(const char* filename, file_percent_t percent) {
 
 extern "C" void show_overrides(override_percent_t feed_ovr, override_percent_t rapid_ovr, override_percent_t spindle_ovr) {
     myFro = feed_ovr;
+    mySro = spindle_ovr;
 }
+
+extern "C" void show_feed_spindle(uint32_t feedrate, uint32_t spindle_speed) {
+    myFeed  = feedrate;
+    mySpeed = spindle_speed;
+};
 
 extern "C" void show_limits(bool probe, const bool* limits, size_t n_axis) {
     myProbeSwitch = probe;
@@ -253,10 +263,10 @@ extern "C" void show_gcode_modes(struct gcode_modes* modes) {
     myModes += " ";
     myModes += modes->spindle;
     if (strcmp(modes->mist, "On") == 0) {
-      myModes += " Mist";
+        myModes += " Mist";
     }
     if (strcmp(modes->flood, "On") == 0) {
-      myModes += " Flood";
+        myModes += " Flood";
     }
     //    myModes += " T";
     //    myModes += modes->tool;
