@@ -83,7 +83,7 @@ void dispatch_button(bool pressed, int button) {
             break;
         default:
             break;
-    }   
+    }
 }
 void dispatch_touch() {
     static m5::touch_state_t last_touch_state = {};
@@ -160,7 +160,7 @@ void dispatch_events() {
     }
 
     bool pressed;
-    int button;
+    int  button;
     if (switch_button_touched(pressed, button)) {
         dispatch_button(pressed, button);
     }

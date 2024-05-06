@@ -19,7 +19,7 @@ void PieMenu::calculatePositions() {
         angle -= dtheta;
     }
 
-    int layout_radius = display_short_side()/2 - _item_radius - 3;
+    int layout_radius = display_short_side() / 2 - _item_radius - 3;
     angle             = 90;
     for (size_t i = 0; i < num_items(); i++) {
         int x, y;

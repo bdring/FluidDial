@@ -3,13 +3,13 @@
 
 // System interface routines for the Arduino framework
 
-#    include "System.h"
-#    include "FluidNCModel.h"
+#include "System.h"
+#include "FluidNCModel.h"
 
-#    include <Esp.h>  // ESP.restart()
+#include <Esp.h>  // ESP.restart()
 
-#    include <driver/uart.h>
-#    include "hal/uart_hal.h"
+#include <driver/uart.h>
+#include "hal/uart_hal.h"
 
 uart_port_t fnc_uart_port;
 
@@ -20,16 +20,16 @@ uart_port_t fnc_uart_port;
 
 extern "C" void fnc_putchar(uint8_t c) {
     uart_write_bytes(fnc_uart_port, (const char*)&c, 1);
-#    ifdef ECHO_FNC_TO_DEBUG
-        dbg_write(c);
-#    endif
+#ifdef ECHO_FNC_TO_DEBUG
+    dbg_write(c);
+#endif
 }
 
-void ledcolor (int n) {
-    digitalWrite(4, !(n&1));
-    digitalWrite(16, !(n&2));
-    digitalWrite(17, !(n&4));
-}    
+void ledcolor(int n) {
+    digitalWrite(4, !(n & 1));
+    digitalWrite(16, !(n & 2));
+    digitalWrite(17, !(n & 4));
+}
 extern "C" int fnc_getchar() {
     char c;
     int  res = uart_read_bytes(fnc_uart_port, &c, 1, 0);
@@ -37,19 +37,19 @@ extern "C" int fnc_getchar() {
         if (c == '\r' || c == '\n') {
             ledcolor(0);
         } else {
-            ledcolor(c&7);
+            ledcolor(c & 7);
         }
         update_rx_time();
-#    ifdef ECHO_FNC_TO_DEBUG
+#ifdef ECHO_FNC_TO_DEBUG
         dbg_write(c);
-#    endif
+#endif
         return c;
     }
     return -1;
 }
 
 extern "C" void poll_extra() {
-#    ifdef DEBUG_TO_USB
+#ifdef DEBUG_TO_USB
     if (debugPort.available()) {
         char c = debugPort.read();
         if (c == 0x12) {  // CTRL-R
@@ -69,18 +69,18 @@ void drawPngFile(const char* filename, int x, int y) {
     canvas.drawPngFile(LittleFS, fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
-#    define FORMAT_LITTLEFS_IF_FAILED true
+#define FORMAT_LITTLEFS_IF_FAILED true
 
 // Baud rates up to 10M work
-#    ifndef FNC_BAUD
-#        define FNC_BAUD 115200
-#    endif
+#ifndef FNC_BAUD
+#    define FNC_BAUD 115200
+#endif
 
 extern void init_hardware();
 
 void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
     fnc_uart_port = (uart_port_t)uart_num;
-    int baudrate = FNC_BAUD;
+    int baudrate  = FNC_BAUD;
     uart_driver_delete(fnc_uart_port);
     uart_set_pin(fnc_uart_port, (gpio_num_t)tx_pin, (gpio_num_t)rx_pin, -1, -1);
     uart_config_t conf;
@@ -135,17 +135,17 @@ void delay_ms(uint32_t ms) {
 }
 
 void dbg_write(uint8_t c) {
-#    ifdef DEBUG_TO_USB
+#ifdef DEBUG_TO_USB
     if (debugPort.availableForWrite() > 1) {
         debugPort.write(c);
     }
-#    endif
+#endif
 }
 
 void dbg_print(const char* s) {
-#    ifdef DEBUG_TO_USB
+#ifdef DEBUG_TO_USB
     if (debugPort.availableForWrite() > strlen(s)) {
         debugPort.print(s);
     }
-#    endif
+#endif
 }

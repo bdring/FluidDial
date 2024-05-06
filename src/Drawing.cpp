@@ -41,8 +41,8 @@ void drawRect(int x, int y, int width, int height, int radius, int bgcolor) {
     canvas.fillRoundRect(x, y, width, height, radius, bgcolor);
 }
 void drawRect(Point xy, int width, int height, int radius, int bgcolor) {
-    Point offsetxy = { width / 2, -height / 2 };  // { 30, -30}
-    Point dispxy   = (xy - offsetxy).to_display(); // {i 
+    Point offsetxy = { width / 2, -height / 2 };    // { 30, -30}
+    Point dispxy   = (xy - offsetxy).to_display();  // {i
     drawRect(dispxy.x, dispxy.y, width, height, radius, bgcolor);
 }
 void drawRect(Point xy, Point wh, int radius, int bgcolor) {
@@ -166,12 +166,14 @@ void Stripe::draw(const char* center, bool highlighted) {
 #define PUSH_BUTTON_LINE 212
 #define DIAL_BUTTON_LINE 228
 
-static int side_button_line() { return round_display ? PUSH_BUTTON_LINE : DIAL_BUTTON_LINE; }
+static int side_button_line() {
+    return round_display ? PUSH_BUTTON_LINE : DIAL_BUTTON_LINE;
+}
 
 // This shows on the display what the button currently do.
 void drawButtonLegends(const char* red, const char* green, const char* orange) {
     text(red, round_display ? 50 : 10, side_button_line(), RED, TINY, middle_left);
-    text(green, display_short_side() - (round_display ? 50 : 10) , side_button_line(), GREEN, TINY, middle_right);
+    text(green, display_short_side() - (round_display ? 50 : 10), side_button_line(), GREEN, TINY, middle_right);
     centered_text(orange, DIAL_BUTTON_LINE, ORANGE);
 }
 
