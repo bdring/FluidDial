@@ -6,15 +6,17 @@
 #include "Scene.h"
 
 extern void base_display();
+
 void setup() {
     init_system();
 
+    base_display();
+
     delay_ms(1000);  // view the logo and wait for the debug port to connect
 
-    base_display();
-    fnc_realtime(StatusReport);  // Kick FluidNC into action
-
     dbg_println("FluidNC Pendant v0.4");
+
+    fnc_realtime(StatusReport);  // Kick FluidNC into action
 
     // init_file_list();
 

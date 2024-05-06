@@ -119,12 +119,7 @@ void init_system() {
 
     // Make an offscreen canvas that can be copied to the screen all at once
     void* spr = canvas.setColorDepth(8);
-    canvas.createSprite(240, 240); // display.width(), display.height());
-
-    // Draw the logo screen
-    display.clear();
-    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-    base_display();
+    canvas.createSprite(240, 240);  // display.width(), display.height());
 }
 void resetFlowControl() {
     fnc_putchar(0x11);

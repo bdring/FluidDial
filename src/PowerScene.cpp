@@ -49,12 +49,10 @@ public:
     void onEncoder(int delta) {
         if (delta > 0 && _brightness < 255) {
             display.setBrightness(++_brightness);
-            dbg_printf("Bright %d\n", _brightness);
             setPref("brightness", _brightness);
         }
         if (delta < 0 && _brightness > 0) {
             display.setBrightness(--_brightness);
-            dbg_printf("Bright %d\n", _brightness);
             setPref("brightness", _brightness);
         }
         reDisplay();
