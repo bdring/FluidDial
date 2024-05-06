@@ -301,9 +301,9 @@ public:
         --_level;
         if (_in_macros_section) {
             if (_target == "FS") {
-                _filename.insert(0, "/localfs");
+                _filename.insert(0, "/localfs/");
             } else if (_target == "SD") {
-                _filename.insert(0, "/sd");
+                _filename.insert(0, "/sd/");
             } else if (_target == "CMD") {
                 _filename.insert(0, "cmd:");
             } else {
