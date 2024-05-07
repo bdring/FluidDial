@@ -22,7 +22,7 @@ public:
     StatusScene() : Scene("Status") {}
 
     void onEntry(void* arg) { _entry = static_cast<const char*>(arg); }
-    void onExit() override { dbg_println("SoX"); }
+    void onExit() override {}
 
     void onDialButtonPress() {
         if (state == Cycle || state == Hold) {
@@ -61,19 +61,13 @@ public:
     void onRedButtonPress() {
         switch (state) {
             case Alarm:
-                switch (lastAlarm) {
-                    case 1:   // Hard Limit
-                    case 2:   // Soft Limit
-                    case 10:  // Spindle Control
-                    case 13:  // Hard Stop
-                        // Critical alarm that must be hard-cleared with a CTRL-X reset
-                        // since streaming execution of GCode is blocked
-                        fnc_realtime(Reset);
-                        break;
-                    default:
-                        // Non-critical alarm that can be soft-cleared
-                        send_line("$X");
-                        break;
+                if (alarm_is_critical()) {
+                    // Critical alarm that must be hard-cleared with a CTRL-X reset
+                    // since streaming execution of GCode is blocked
+                    fnc_realtime(Reset);
+                } else {
+                    // Non-critical alarm that can be soft-cleared
+                    send_line("$X");
                 }
                 break;
             case Cycle:
@@ -84,6 +78,11 @@ public:
         }
     }
 
+    bool alarm_is_homing() { return lastAlarm == 14 || (lastAlarm >= 6 && lastAlarm <= 9); }
+    bool alarm_is_critical() {
+        // HardLimit or SoftLimit or SpindleControl or HardStop
+        return lastAlarm == 1 || lastAlarm == 2 || lastAlarm == 10 || lastAlarm == 13;
+    }
     void onGreenButtonPress() {
         switch (state) {
             case Cycle:
@@ -93,7 +92,9 @@ public:
                 fnc_realtime(CycleStart);
                 break;
             case Alarm:
-                send_line("$H");
+                if (alarm_is_homing()) {
+                    send_line("$H");
+                }
                 break;
         }
         fnc_realtime(StatusReport);
@@ -132,9 +133,6 @@ public:
         drawMenuTitle(current_scene->name());
         drawStatus();
 
-        const char* grnLabel = "";
-        const char* redLabel = "";
-
         DRO dro(16, 68, 210, 32);
         dro.draw(0, -1, true);
         dro.draw(1, -1, true);
@@ -170,25 +168,33 @@ public:
 
         const char* encoder_button_text = "Menu";
 
+        const char* grnLabel    = "";
+        const char* redLabel    = "";
+        const char* yellowLabel = "Back";
+
         switch (state) {
             case Alarm:
-                if (lastAlarm == 14) {
-                    redLabel = "Unlock";
-                } else {
+                if (alarm_is_critical()) {
                     redLabel = "Reset";
+                } else {
+                    redLabel = "Unlock";
                 }
-                grnLabel = "Home All";
+                if (alarm_is_homing()) {
+                    grnLabel = "Home All";
+                }
                 break;
             case Homing:
                 redLabel = "Reset";
                 break;
             case Cycle:
-                redLabel = "E-Stop";
-                grnLabel = "Hold";
+                redLabel    = "E-Stop";
+                grnLabel    = "Hold";
+                yellowLabel = "Rst Ovr";
                 break;
             case Hold:
-                redLabel = "Quit";
-                grnLabel = "Resume";
+                redLabel    = "Quit";
+                grnLabel    = "Resume";
+                yellowLabel = "Rst Ovr";
                 break;
             case Jog:
                 redLabel = "Jog Cancel";
@@ -196,9 +202,7 @@ public:
             case Idle:
                 break;
         }
-        if (state == Cycle || state == Hold) {
-            drawButtonLegends(redLabel, grnLabel, (state == Cycle || state == Hold) ? "Rst Ovr" : "Back");
-        }
+        drawButtonLegends(redLabel, grnLabel, yellowLabel);
 
         refreshDisplay();
     }
