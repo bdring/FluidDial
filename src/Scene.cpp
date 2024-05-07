@@ -144,6 +144,12 @@ void dispatch_touch() {
     }
 }
 
+ActionHandler action = nullptr;
+
+void schedule_action(ActionHandler _action) {
+    action = _action;
+}
+
 void dispatch_events() {
     update_events();
 
@@ -173,6 +179,10 @@ void dispatch_events() {
             extern Scene menuScene;
             activate_at_top_level(&menuScene);
         }
+    }
+    if (action) {
+        action();
+        action = nullptr;
     }
 }
 

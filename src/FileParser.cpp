@@ -100,7 +100,6 @@ public:
         }
 #endif
         init_listener();
-        current_scene->onFilesList();
     }
 } filesListListener;
 
@@ -161,7 +160,7 @@ public:
 
     void endDocument() override {
         current_scene->onFilesList();
-        parser.setListener(pInitialListener);
+        init_listener();
     }
 } macroLinesListener;
 
@@ -327,14 +326,19 @@ void request_json_file(const char* name) {
     parser_needs_reset = true;
 }
 
-void request_macro_list() {
+void request_macro_list_wu2() {
     //    reading_macros = true;
     request_json_file("macrocfg.json");
 }
+void request_macro_list_wu3() {
+    request_json_file("preferences.json");
+}
 
 void try_next_macro_file(JsonListener* listener) {
+    // We use schedule_action to avoid reentering
+    // the parser code.
     if (!listener) {
-        request_json_file("macrocfg.json");
+        schedule_action(request_macro_list_wu2);
         return;
     }
     if (listener == &preferencesListener) {
@@ -342,7 +346,7 @@ void try_next_macro_file(JsonListener* listener) {
         return;
     }
     if (listener == &macrocfgListener) {
-        request_json_file("preferences.json");
+        schedule_action(request_macro_list_wu3);
     }
 }
 void request_macros() {
@@ -442,6 +446,7 @@ public:
     void startDocument() override {
         _key          = NONE;
         _is_json_file = false;
+        _status       = "ok";
     }
     void value(const char* value) override {
         switch (_key) {
@@ -470,9 +475,6 @@ public:
                 break;
             case STATUS:
                 _status = value;
-                if (_status != "ok" && _file_listener) {
-                    try_next_macro_file(_file_listener);
-                }
                 break;
             case ERROR:
                 current_scene->onError(value);
@@ -483,7 +485,13 @@ public:
 
     void endArray() override {}
     void endObject() override { parser_needs_reset = true; }
-    void endDocument() override { parser_needs_reset = true; }
+    void endDocument() override {
+        parser_needs_reset = true;
+        if (_status != "ok" && _file_listener) {
+            _status = "ok";
+            try_next_macro_file(_file_listener);
+        }
+    }
     void startArray() override {}
     void startObject() override {}
 

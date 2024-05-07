@@ -113,6 +113,12 @@ void rotateNumberLoop(T& currentVal, T increment, T min, T max) {
     }
 }
 
+// schedule_action() defers a function call until the
+// event dispatcher loop runs.  That is useful for
+// avoiding recursion in FileParser.cpp
+typedef void (*ActionHandler)(void);
+void schedule_action(ActionHandler action);
+
 extern Scene* current_scene;
 
 void dispatch_events();
