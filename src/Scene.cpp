@@ -202,7 +202,6 @@ void Scene::getPref(const char* name, int* value) {
     getPref(name, -1, value);
 }
 
-#ifdef ARDUINO
 void Scene::setPref(const char* base_name, int axis, int value) {
     if (!_prefs) {
         return;
@@ -225,57 +224,16 @@ void Scene::getPref(const char* base_name, int axis, char* value, int maxlen) {
     if (!_prefs) {
         return;
     }
-    size_t len = maxlen;
+    int len = maxlen;
     nvs_get_str(_prefs, setting_name(base_name, axis), value, &len);
 }
 bool Scene::initPrefs() {
     if (_prefs) {
         return false;  // Already open
     }
-    esp_err_t err = nvs_open(name(), NVS_READWRITE, &_prefs);
-    return err == ESP_OK;
+    _prefs = nvs_init(name());
+    return _prefs;
 }
-#else
-const char* Scene::prefFileName(const char* pname, int axis) {
-    static char fname[60];
-    snprintf(fname, 60, "prefs/%s/%s", name(), setting_name(pname, axis));
-    return fname;
-}
-void Scene::setPref(const char* base_name, int axis, int value) {
-    char val[20];
-    snprintf(val, 20, "%d", value);
-    setPref(base_name, axis, val);
-}
-void Scene::setPref(const char* base_name, int axis, const char* value) {
-    FILE* fd = fopen(prefFileName(base_name, axis), "wb");
-    if (fd) {
-        fwrite(value, 1, strlen(value), fd);
-        fclose(fd);
-    }
-}
-void Scene::getPref(const char* base_name, int axis, char* value, int maxlen) {
-    FILE* fd = fopen(prefFileName(base_name, axis), "rb");
-    if (fd) {
-        size_t len = fread(value, 1, maxlen - 1, fd);
-        value[len] = '\0';
-    }
-}
-void Scene::getPref(const char* base_name, int axis, int* value) {
-    char strval[20];
-    getPref(base_name, axis, strval, 20);
-    if (*strval) {
-        *value = atoi(strval);
-    }
-}
-bool Scene::initPrefs() {
-    char dname[50];
-    mkdir("prefs");
-    snprintf(dname, 50, "prefs/%s", name());
-    mkdir(dname);
-
-    return true;
-}
-#endif
 
 int Scene::scale_encoder(int delta) {
     _encoder_accum += delta;

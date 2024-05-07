@@ -5,16 +5,9 @@
 
 #include "GrblParserC.h"
 #include "Drawing.h"
-#ifdef ARDUINO
-#    include "nvs_flash.h"
-#endif
+#include "NVS.h"
 
 void pop_scene(void* arg = nullptr);
-
-#ifdef ARDUINO
-#else
-typedef const char* nvs_handle_t;
-#endif
 
 extern int touchX;
 extern int touchY;
@@ -26,10 +19,6 @@ private:
     const char* _name;
 
     nvs_handle_t _prefs {};
-#ifdef ARDUINO
-#else
-    const char* prefFileName(const char* pname, int axis);
-#endif
 
     int _encoder_accum = 0;
     int _encoder_scale = 1;
