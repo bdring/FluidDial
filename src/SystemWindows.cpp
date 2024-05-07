@@ -32,12 +32,9 @@ void system_background() {
     drawPngFile("PCBackground.png", 0, 0);
 }
 
-//
 void update_events() {
     lgfx::Panel_sdl::loop();
     M5.update();
-
-    auto ms = m5gfx::millis();
 }
 
 extern "C" int milliseconds() {
@@ -195,10 +192,10 @@ int serial_write(HANDLE handle, LPCVOID buffer, DWORD len) {
 }
 
 HANDLE serial_open_com(char* portname) {  // Open COM port
-    wchar_twcomname[10];
-    DCBdcb;
-    HANDLEhComm;
-    COMMTIMEOUTStimeouts;
+    wchar_t      wcomname[10];
+    DCB          dcb;
+    HANDLE       hComm;
+    COMMTIMEOUTS timeouts;
 
     // swprintf() is a pain because it comes in two versions,
     // with and without the length parameter.  snwprintf() works
@@ -315,16 +312,19 @@ void dbg_print(const char* s) {
     }
 }
 
-bool screen_encoder(int x, int y, int& delta) {
+static bool outside_of_circle(int& x, int& y) {
     x -= display.width() / 2;
     y -= display.height() / 2;
+    int magsq = x * x + y * y;
+    return magsq > (120 * 120);
+}
+bool screen_encoder(int x, int y, int& delta) {
+    if (!outside_of_circle(x, y)) {
+        return false;
+    }
     if (y >= 0) {
         // The encoder area is the top half of the screen so
         // if we are in the bottom half, return 0.
-        return false;
-    }
-    int magsq = x * x + y * y;
-    if (magsq < (120 * 120)) {
         return false;
     }
 
@@ -347,6 +347,9 @@ bool screen_encoder(int x, int y, int& delta) {
 }
 
 bool screen_button_touched(int x, int y, int& button) {
+    if (!outside_of_circle(x, y)) {
+        return false;
+    }
     if (x <= -90) {
         button = 0;
     } else if (x >= 90) {
