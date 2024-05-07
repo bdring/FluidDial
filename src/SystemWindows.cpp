@@ -411,7 +411,7 @@ static FILE* prefFile(const char* handle, const char* pname, const char* mode) {
     return fopen(fname, mode);
 }
 
-void nvs_get_str(nvs_handle_t handle, const char* name, char* value, int* len) {
+void nvs_get_str(nvs_handle_t handle, const char* name, char* value, size_t* len) {
     FILE* fd = prefFile(handle, name, "rb");
     if (fd) {
         *len = fread(value, 1, *len - 1, fd);
@@ -430,8 +430,8 @@ void nvs_set_str(nvs_handle_t handle, const char* name, const char* value) {
 }
 
 void nvs_get_i32(nvs_handle_t handle, const char* name, int32_t* value) {
-    char strval[20];
-    int  len = 20;
+    char   strval[20];
+    size_t len = 20;
     nvs_get_str(handle, name, strval, &len);
     if (*strval) {
         *value = atoi(strval);

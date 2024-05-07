@@ -224,7 +224,7 @@ void Scene::getPref(const char* base_name, int axis, char* value, int maxlen) {
     if (!_prefs) {
         return;
     }
-    int len = maxlen;
+    size_t len = maxlen;
     nvs_get_str(_prefs, setting_name(base_name, axis), value, &len);
 }
 bool Scene::initPrefs() {
