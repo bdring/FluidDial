@@ -78,10 +78,12 @@ void         init_hardware() {
 
     touch.setFlickThresh(10);
 
+#ifdef LED_DEBUG
     // RGB LED pins
     pinMode(4, OUTPUT);
     pinMode(16, OUTPUT);
     pinMode(17, OUTPUT);
+#endif
 }
 
 void drawButton(int n) {

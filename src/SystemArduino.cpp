@@ -35,11 +35,13 @@ extern "C" int fnc_getchar() {
     char c;
     int  res = uart_read_bytes(fnc_uart_port, &c, 1, 0);
     if (res == 1) {
+#ifdef LED_DEBUG
         if (c == '\r' || c == '\n') {
             ledcolor(0);
         } else {
             ledcolor(c & 7);
         }
+#endif
         update_rx_time();
 #ifdef ECHO_FNC_TO_DEBUG
         dbg_write(c);
