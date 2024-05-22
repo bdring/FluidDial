@@ -7,6 +7,8 @@
 
 extern void base_display();
 
+extern const char* git_info;
+
 void setup() {
     init_system();
 
@@ -14,7 +16,7 @@ void setup() {
 
     delay_ms(1000);  // view the logo and wait for the debug port to connect
 
-    dbg_println("FluidNC Pendant v0.4");
+    dbg_printf("FluidNC Pendant %s\n", git_info);
 
     fnc_realtime(StatusReport);  // Kick FluidNC into action
 
