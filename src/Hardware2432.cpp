@@ -7,6 +7,7 @@
 #include <LGFX_AUTODETECT.hpp>
 #include "Hardware2432.hpp"
 #include "Drawing.h"
+#include "NVS.h"
 
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
@@ -60,7 +61,11 @@ void  set_layout(int n) {
     sprite_offset = layout->_spritePosition;
 }
 
-void init_hardware() {
+nvs_handle_t hw_nvs;
+void         init_hardware() {
+    hw_nvs = nvs_init("hardware");
+    nvs_get_i32(hw_nvs, "layout", &layout_num);
+
     display.init();
     set_layout(layout_num);
 
@@ -86,7 +91,7 @@ void drawButton(int n) {
 
 void base_display() {
     display.clear();
-    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+    display.drawPngFile(LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, 240, 240, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
 
     // On-screen buttons
     for (int i = 0; i < 3; i++) {
@@ -102,6 +107,7 @@ void next_layout(int delta) {
         layout_num += 8;
     }
     set_layout(layout_num);
+    nvs_set_i32(hw_nvs, "layout", layout_num);
     base_display();
 }
 
