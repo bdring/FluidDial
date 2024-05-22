@@ -3,26 +3,15 @@
 
 // System interface routines for the Arduino framework
 
-#ifdef ARDUINO
 #    include "System.h"
 #    include "FluidNCModel.h"
 
 #    include <Esp.h>  // ESP.restart()
 
-M5GFX&             display = M5Dial.Display;
-M5Canvas           canvas(&M5Dial.Display);
-m5::Speaker_Class& speaker    = M5Dial.Speaker;
-m5::Touch_Class&   touch      = M5Dial.Touch;
-m5::Button_Class&  dialButton = M5Dial.BtnA;
-Stream&            debugPort  = USBSerial;
-
 #    include <driver/uart.h>
 #    include "hal/uart_hal.h"
 
-uart_port_t fnc_uart_num = uart_port_t(1);
-
-m5::Button_Class greenButton;
-m5::Button_Class redButton;
+uart_port_t fnc_uart_port;
 
 // We use the ESP-IDF UART driver instead of the Arduino
 // HardwareSerial driver so we can use software (XON/XOFF)
@@ -30,13 +19,26 @@ m5::Button_Class redButton;
 // hardware implementation of XON/XOFF, but Arduino does not.
 
 extern "C" void fnc_putchar(uint8_t c) {
-    uart_write_bytes(fnc_uart_num, (const char*)&c, 1);
+    uart_write_bytes(fnc_uart_port, (const char*)&c, 1);
+#    ifdef ECHO_FNC_TO_DEBUG
+        dbg_write(c);
+#    endif
 }
 
+void ledcolor (int n) {
+    digitalWrite(4, !(n&1));
+    digitalWrite(16, !(n&2));
+    digitalWrite(17, !(n&4));
+}    
 extern "C" int fnc_getchar() {
     char c;
-    int  res = uart_read_bytes(fnc_uart_num, &c, 1, 0);
+    int  res = uart_read_bytes(fnc_uart_port, &c, 1, 0);
     if (res == 1) {
+        if (c == '\r' || c == '\n') {
+            ledcolor(0);
+        } else {
+            ledcolor(c&7);
+        }
         update_rx_time();
 #    ifdef ECHO_FNC_TO_DEBUG
         dbg_write(c);
@@ -47,16 +49,16 @@ extern "C" int fnc_getchar() {
 }
 
 extern "C" void poll_extra() {
+#    ifdef DEBUG_TO_USB
     if (debugPort.available()) {
         char c = debugPort.read();
         if (c == 0x12) {  // CTRL-R
-#    ifdef ARDUINO
             ESP.restart();
             while (1) {}
-#    endif
         }
         fnc_putchar(c);  // So you can type commands to FluidNC
     }
+#endif
 }
 
 void drawPngFile(const char* filename, int x, int y) {
@@ -74,31 +76,21 @@ void drawPngFile(const char* filename, int x, int y) {
 #        define FNC_BAUD 115200
 #    endif
 
-void init_system() {
-    auto cfg = M5.config();
-    // Don't enable the encoder because M5's encoder driver is flaky
-    M5Dial.begin(cfg, false, false);
+extern void init_hardware();
 
-    // Turn on the power hold pin
-    lgfx::gpio::command(lgfx::gpio::command_mode_output, GPIO_NUM_46);
-    lgfx::gpio::command(lgfx::gpio::command_write_high, GPIO_NUM_46);
-
-    // This must be done after M5Dial.begin which sets the PortA pins
-    // to I2C mode.  We need to override that to use them for serial.
-    // The baud rate is irrelevant because USBSerial emulates a UART
-    // API but the data never travels over an actual physical UART
-    // link with a defined baud rate.  The data instead travels over
-    // a USB link at the USB data rate.  You can set the baud rate
-    // at the other end to anything you want and it will still work.
-    USBSerial.begin();
-
-    uart_set_pin(fnc_uart_num, FNC_TX_PIN, FNC_RX_PIN, -1, -1);
+void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
+    fnc_uart_port = (uart_port_t)uart_num;
     int baudrate = FNC_BAUD;
-    uart_driver_delete(fnc_uart_num);
+    uart_driver_delete(fnc_uart_port);
+    uart_set_pin(fnc_uart_port, (gpio_num_t)tx_pin, (gpio_num_t)rx_pin, -1, -1);
     uart_config_t conf;
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    conf.source_clk = UART_SCLK_APB;  // ESP32, ESP32S2
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
     // UART_SCLK_XTAL is independent of the APB frequency
     conf.source_clk = UART_SCLK_XTAL;  // ESP32C3, ESP32S3
-    // conf.source_clk = UART_SCLK_APB;  // ESP32, ESP32S2
+#endif
     conf.baud_rate = baudrate;
 
     conf.data_bits           = UART_DATA_8_BITS;
@@ -106,27 +98,19 @@ void init_system() {
     conf.stop_bits           = UART_STOP_BITS_1;
     conf.flow_ctrl           = UART_HW_FLOWCTRL_DISABLE;
     conf.rx_flow_ctrl_thresh = 0;
-    if (uart_param_config(fnc_uart_num, &conf) != ESP_OK) {
+    if (uart_param_config(fnc_uart_port, &conf) != ESP_OK) {
         dbg_println("UART config failed");
         while (1) {}
         return;
     };
-    uart_driver_install(fnc_uart_num, 256, 0, 0, NULL, ESP_INTR_FLAG_IRAM);
-    uart_set_sw_flow_ctrl(fnc_uart_num, true, 64, 120);
+    uart_driver_install(fnc_uart_port, 256, 0, 0, NULL, ESP_INTR_FLAG_IRAM);
+    uart_set_sw_flow_ctrl(fnc_uart_port, true, 64, 120);
     uint32_t baud;
-    uart_get_baudrate(fnc_uart_num, &baud);
-    printf("Baud %d\n", baud);
+    uart_get_baudrate(fnc_uart_port, &baud);
+}
 
-    // Setup external GPIOs as buttons
-    lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);
-    lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, GREEN_BUTTON_PIN);
-
-    greenButton.setDebounceThresh(5);
-    redButton.setDebounceThresh(5);
-
-    touch.setFlickThresh(30);
-
-    init_encoder();  // Use our own encoder driver
+void init_system() {
+    init_hardware();
 
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
         dbg_println("LittleFS Mount Failed");
@@ -134,27 +118,21 @@ void init_system() {
     }
 
     // Make an offscreen canvas that can be copied to the screen all at once
-    canvas.createSprite(display.width(), display.height());
+    void* spr = canvas.setColorDepth(8);
+    canvas.createSprite(240, 240); // display.width(), display.height());
 
     // Draw the logo screen
     display.clear();
     display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-
-    speaker.setVolume(255);
+    base_display();
 }
 void resetFlowControl() {
     fnc_putchar(0x11);
-    uart_ll_force_xon(fnc_uart_num);
+    uart_ll_force_xon(fnc_uart_port);
 }
 
-void update_events() {
-    M5Dial.update();
-
-    auto ms = m5gfx::millis();
-
-    // The red and green buttons are active low
-    redButton.setRawState(ms, !m5gfx::gpio_in(RED_BUTTON_PIN));
-    greenButton.setRawState(ms, !m5gfx::gpio_in(GREEN_BUTTON_PIN));
+extern "C" int milliseconds() {
+    return millis();
 }
 
 void delay_ms(uint32_t ms) {
@@ -176,4 +154,3 @@ void dbg_print(const char* s) {
     }
 #    endif
 }
-#endif

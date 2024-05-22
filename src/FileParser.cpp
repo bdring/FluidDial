@@ -96,7 +96,7 @@ public:
 #ifdef DEBUG_FILE_LIST
         int ix = 0;
         for (auto const& vi : fileVector) {
-            USBSerial.printf("[%d] type: %s:\"%s\", size: %d\r\n", ix++, (vi.isDir()) ? "file" : "dir ", vi.fileName.c_str(), vi.fileSize);
+            dbg_printf("[%d] type: %s:\"%s\", size: %d\r\n", ix++, (vi.isDir()) ? "file" : "dir ", vi.fileName.c_str(), vi.fileSize);
         }
 #endif
         init_listener();
@@ -156,7 +156,6 @@ public:
         } else {
             return;
         }
-        printf("filename %s\n", _filename.c_str());
         macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
     }
 
@@ -224,7 +223,6 @@ public:
             } else {
                 return;
             }
-            printf("filename %s\n", _filename.c_str());
             macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
             return;
         }
@@ -309,7 +307,6 @@ public:
             } else {
                 return;
             }
-            printf("filename %s\n", _filename.c_str());
             macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
             return;
         }

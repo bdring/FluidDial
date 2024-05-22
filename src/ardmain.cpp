@@ -5,11 +5,13 @@
 #include "FileParser.h"
 #include "Scene.h"
 
+extern void base_display();
 void setup() {
     init_system();
 
     delay_ms(1000);  // view the logo and wait for the debug port to connect
 
+    base_display();
     fnc_realtime(StatusReport);  // Kick FluidNC into action
 
     dbg_println("FluidNC Pendant v0.4");

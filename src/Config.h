@@ -1,10 +1,10 @@
 #pragma once
 
+// Instead of editing this file, consider adding -D lines in platformio.ini
+
 // System Interface
 
-#define DEBUG_TO_USB
-#define ECHO_FNC_TO_DEBUG
-#define USB_BAUD 9600 
+// #define ECHO_FNC_TO_DEBUG
 
 // #define UART_ON_PORT_B // Not recommended, see comment in System.h
 

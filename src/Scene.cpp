@@ -8,6 +8,7 @@
 #    include <sys/stat.h>
 #    include <sys/types.h>
 #endif
+#include <vector>
 
 extern Scene homingScene;
 extern Scene statusScene;
@@ -52,61 +53,95 @@ bool touchIsCenter() {
     // Convert from screen coordinates to 0,0 in the center
     Point ctr = Point { touchX, touchY }.from_display();
 
-    int center_radius = display.width() / 6;
+    int center_radius = display_short_side() / 6;
 
     return (ctr.x * ctr.x + ctr.y * ctr.y) < (center_radius * center_radius);
 }
-// This handles touches that are outside the round area of the M5Dial screen.
-// It is used for the PC emulation version, where the display is rectangular.
-// Touches (mouse clicks) outside of the round dial screen part are used
-// for emulating dial encoder motions and red/green/dial button presses.
-bool outside_touch_handled(int x, int y, const m5::touch_detail_t& t) {
-    x -= display.width() / 2;
-    y -= display.height() / 2;
-    int magsq = x * x + y * y;
-    if (magsq > (120 * 120)) {
-        if (y < 0) {
-            if (t.state == m5::touch_state_t::touch) {
-                int tangent = y * 100 / x;
-                if (tangent < 0) {
-                    tangent = -tangent;
-                }
-                int delta = 4;
-                if (tangent > 172) {  // tan(60)*100
-                    delta = 1;
-                } else if (tangent > 100) {  // tan(45)*100
-                    delta = 2;
-                } else if (tangent > 58) {  // tan(30)*100
-                    delta = 3;
-                }
-                if (t.state == m5::touch_state_t::touch) {
-                    current_scene->onEncoder((x > 0) ? delta : -delta);
-                }
+
+void dispatch_button(bool pressed, int button) {
+    switch (button) {
+        case 0:
+            if (pressed) {
+                current_scene->onRedButtonPress();
+            } else {
+                current_scene->onRedButtonRelease();
             }
-        } else {
-            if (x <= -90) {
-                if (t.state == m5::touch_state_t::touch) {
-                    current_scene->onRedButtonPress();
-                } else if (t.state == m5::touch_state_t::none) {
-                    current_scene->onRedButtonRelease();
+            break;
+        case 1:
+            if (pressed) {
+                current_scene->onDialButtonPress();
+            } else {
+                current_scene->onDialButtonRelease();
+            }
+            break;
+        case 2:
+            if (pressed) {
+                current_scene->onGreenButtonPress();
+            } else {
+                current_scene->onGreenButtonRelease();
+            }
+            break;
+        default:
+            break;
+    }   
+}
+void dispatch_touch() {
+    static m5::touch_state_t last_touch_state = {};
+
+    auto t = touch.getDetail();
+    if (t.state != last_touch_state) {
+        last_touch_state = t.state;
+        touchX           = t.x - sprite_offset.x;
+        touchY           = t.y - sprite_offset.y;
+        int delta;
+        if (screen_encoder(t.x, t.y, delta) && t.state == m5::touch_state_t::touch) {
+            current_scene->onEncoder(delta);
+            return;
+        }
+        int button;
+        if (screen_button_touched(t.x, t.y, button)) {
+            if (t.state == m5::touch_state_t::touch) {
+                dispatch_button(true, button);
+            } else if (t.state == m5::touch_state_t::none) {
+                dispatch_button(false, button);
+            }
+            return;
+        }
+        if (touchX < 0) {
+            return;
+        }
+        if (t.state == m5::touch_state_t::touch) {
+            current_scene->onTouchPress();
+        } else if (t.state == m5::touch_state_t::none) {
+            current_scene->onTouchRelease();
+        }
+        if (t.wasClicked()) {
+            current_scene->onTouchClick();
+        } else if (t.wasHold()) {
+            current_scene->onTouchHold();
+        } else if (t.state == m5::touch_state_t::flick_end) {
+            touchDeltaX = t.distanceX();
+            touchDeltaY = t.distanceY();
+
+            int absX = abs(touchDeltaX);
+            int absY = abs(touchDeltaY);
+            if (absY > 60 && absX < (absY * 2)) {
+                if (touchDeltaY > 0) {
+                    current_scene->onDownFlick();
+                } else {
+                    current_scene->onUpFlick();
                 }
-            } else if (x >= 90) {
-                if (t.state == m5::touch_state_t::touch) {
-                    current_scene->onGreenButtonPress();
-                } else if (t.state == m5::touch_state_t::none) {
-                    current_scene->onGreenButtonRelease();
+            } else if (absX > 60 && absY < (absX * 2)) {
+                if (touchDeltaX > 0) {
+                    current_scene->onRightFlick();
+                } else {
+                    current_scene->onLeftFlick();
                 }
             } else {
-                if (t.state == m5::touch_state_t::touch) {
-                    current_scene->onDialButtonPress();
-                } else if (t.state == m5::touch_state_t::none) {
-                    current_scene->onDialButtonRelease();
-                }
+                current_scene->onTouchFlick();
             }
         }
-        return true;
     }
-    return false;
 }
 
 void dispatch_events() {
@@ -124,63 +159,13 @@ void dispatch_events() {
         }
     }
 
-    if (dialButton.wasPressed()) {
-        current_scene->onDialButtonPress();
-    } else if (dialButton.wasReleased()) {
-        current_scene->onDialButtonRelease();
-    }
-    if (redButton.wasPressed()) {
-        current_scene->onRedButtonPress();
-    } else if (redButton.wasReleased()) {
-        current_scene->onRedButtonRelease();
-    }
-    if (greenButton.wasPressed()) {
-        current_scene->onGreenButtonPress();
-    } else if (greenButton.wasReleased()) {
-        current_scene->onGreenButtonRelease();
+    bool pressed;
+    int button;
+    if (switch_button_touched(pressed, button)) {
+        dispatch_button(pressed, button);
     }
 
-    static m5::touch_state_t last_touch_state = {};
-
-    auto this_touch = touch.getDetail();
-    if (this_touch.state != last_touch_state) {
-        last_touch_state = this_touch.state;
-        touchX           = this_touch.x;
-        touchY           = this_touch.y;
-        if (!outside_touch_handled(this_touch.x, this_touch.y, this_touch)) {
-            if (this_touch.state == m5::touch_state_t::touch) {
-                current_scene->onTouchPress();
-            } else if (this_touch.state == m5::touch_state_t::none) {
-                current_scene->onTouchRelease();
-            }
-            if (this_touch.wasClicked()) {
-                current_scene->onTouchClick();
-            } else if (this_touch.wasHold()) {
-                current_scene->onTouchHold();
-            } else if (this_touch.state == m5::touch_state_t::flick_end) {
-                touchDeltaX = this_touch.distanceX();
-                touchDeltaY = this_touch.distanceY();
-
-                int absX = abs(touchDeltaX);
-                int absY = abs(touchDeltaY);
-                if (absY > 60 && absX < (absY * 2)) {
-                    if (touchDeltaY > 0) {
-                        current_scene->onDownFlick();
-                    } else {
-                        current_scene->onUpFlick();
-                    }
-                } else if (absX > 60 && absY < (absX * 2)) {
-                    if (touchDeltaX > 0) {
-                        current_scene->onRightFlick();
-                    } else {
-                        current_scene->onLeftFlick();
-                    }
-                } else {
-                    current_scene->onTouchFlick();
-                }
-            }
-        }
-    }
+    dispatch_touch();
 
     if (!fnc_is_connected()) {
         if (state != Disconnected) {
@@ -290,11 +275,7 @@ int Scene::scale_encoder(int delta) {
 }
 
 void Scene::background() {
-#ifdef ARDUINO
-    drawBackground(BLACK);
-#else
-    drawPngBackground("PCBackground.png");
-#endif
+    system_background();
 }
 
 void act_on_state_change() {
