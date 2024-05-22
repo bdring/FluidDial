@@ -5,6 +5,7 @@
 
 #include "System.h"
 #include "FluidNCModel.h"
+#include "NVS.h"
 
 #include <Esp.h>  // ESP.restart()
 
@@ -148,4 +149,10 @@ void dbg_print(const char* s) {
         debugPort.print(s);
     }
 #endif
+}
+
+nvs_handle_t nvs_init(const char* name) {
+    nvs_handle_t handle;
+    esp_err_t    err = nvs_open(name, NVS_READWRITE, &handle);
+    return err == ESP_OK ? handle : 0;
 }

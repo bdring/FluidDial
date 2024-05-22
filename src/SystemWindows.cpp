@@ -11,9 +11,11 @@
 #include "FluidNCModel.h"
 #include "M5GFX.h"
 #include "Drawing.h"
+#include "NVS.h"
 
 #include <windows.h>
 #include <commctrl.h>
+#include <direct.h>
 
 LGFX_Device& display = M5.Display;
 LGFX_Sprite  canvas(&M5.Display);
@@ -397,4 +399,52 @@ void deep_sleep() {}
 
 int16_t get_encoder() {
     return 0;
+}
+
+static FILE* prefFile(const char* handle, const char* pname, const char* mode) {
+    static char fname[60];
+    snprintf(fname, 60, "%s/%s", handle, pname);
+
+    return fopen(fname, mode);
+}
+
+void nvs_get_str(nvs_handle_t handle, const char* name, char* value, int* len) {
+    FILE* fd = prefFile(handle, name, "rb");
+    if (fd) {
+        *len = fread(value, 1, *len - 1, fd);
+        fclose(fd);
+    } else {
+        *len = 0;
+    }
+    value[*len] = '\0';
+}
+void nvs_set_str(nvs_handle_t handle, const char* name, const char* value) {
+    FILE* fd = prefFile(handle, name, "wb");
+    if (fd) {
+        fwrite(value, 1, strlen(value), fd);
+        fclose(fd);
+    }
+}
+
+void nvs_get_i32(nvs_handle_t handle, const char* name, int32_t* value) {
+    char strval[20];
+    int  len = 20;
+    nvs_get_str(handle, name, strval, &len);
+    if (*strval) {
+        *value = atoi(strval);
+    }
+}
+void nvs_set_i32(nvs_handle_t handle, const char* name, int32_t value) {
+    char valstr[20];
+    snprintf(valstr, 20, "%d", value);
+    nvs_set_str(handle, name, valstr);
+}
+
+nvs_handle_t nvs_init(const char* name) {
+    char dname[50];
+    _mkdir("prefs");
+    snprintf(dname, 50, "prefs/%s", name);
+    _mkdir(dname);
+
+    return strdup(dname);
 }
