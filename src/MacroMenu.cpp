@@ -38,7 +38,7 @@ void MacroItem::show(const Point& where) {
 
 class MacroMenu : public Menu {
 private:
-    bool        _need_macros = true;
+    bool        _reading = true;
     std::string _error_string;
 
 public:
@@ -46,13 +46,16 @@ public:
 
     const std::string& selected_name() { return _items[_selected]->name(); }
 
-    void onRedButtonPress() {
-        _need_macros = true;
+    void refreshMacros() {
+        removeAllItems();
+        _reading = true;
         request_macros();
     }
+
+    void onRedButtonPress() { refreshMacros(); }
     void onFilesList() {
         _error_string.clear();
-        _need_macros = 0;
+        _reading = false;
         if (num_items()) {
             _selected = 0;
             _items[_selected]->highlight();
@@ -62,12 +65,13 @@ public:
 
     void onError(const char* errstr) {
         _error_string = errstr;
+        _reading      = false;
         reDisplay();
     }
 
     void onEntry(void* arg) override {
-        if (_need_macros) {
-            request_macros();
+        if (num_items() == 0) {
+            refreshMacros();
         }
     }
 
@@ -85,6 +89,9 @@ public:
             invoke();
         }
     }
+
+    void onTouchClick() { onGreenButtonPress(); }
+
     void reDisplay() override {
         menuBackground();
         if (num_items() == 0) {
@@ -94,7 +101,7 @@ public:
             if (_error_string.length()) {
                 text(_error_string, 120, 120, WHITE, SMALL, middle_center);
             } else {
-                text(_need_macros ? "Reading Macros" : "No Macros", { 0, 0 }, WHITE, SMALL, middle_center);
+                text(_reading ? "Reading Macros" : "No Macros", { 0, 0 }, WHITE, SMALL, middle_center);
             }
         } else {
             if (_selected > 1) {
@@ -126,7 +133,7 @@ public:
             }
         }
 
-        drawButtonLegends(_need_macros ? "" : "Refresh", grnLabel, orangeLabel);
+        drawButtonLegends(_reading ? "" : "Refresh", grnLabel, orangeLabel);
     }
 
     void rotate(int delta) override {
