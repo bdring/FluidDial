@@ -21,10 +21,6 @@ m5::Button_Class  redButton;
 bool round_display = true;
 
 void init_hardware() {
-    USBSerial.begin();
-    USBSerial.println("Hello");
-    delay_ms(4000);
-
     auto cfg = M5.config();
 
     // Don't enable the encoder because M5's encoder driver is flaky
@@ -33,13 +29,6 @@ void init_hardware() {
     // Turn on the power hold pin
     lgfx::gpio::command(lgfx::gpio::command_mode_output, GPIO_NUM_46);
     lgfx::gpio::command(lgfx::gpio::command_write_high, GPIO_NUM_46);
-
-    // Setup external GPIOs as buttons
-    lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);
-    lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, GREEN_BUTTON_PIN);
-
-    greenButton.setDebounceThresh(5);
-    redButton.setDebounceThresh(5);
 
     // This must be done after M5Dial.begin which sets the PortA pins
     // to I2C mode.  We need to override that to use them for serial.
@@ -50,13 +39,19 @@ void init_hardware() {
     // at the other end to anything you want and it will still work.
     USBSerial.begin();
 
-    dbg_println("Serial");
+    init_fnc_uart(FNC_UART_NUM, FNC_TX_PIN, FNC_RX_PIN);
+
+    // Setup external GPIOs as buttons
+    lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);
+    lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, GREEN_BUTTON_PIN);
+
+    greenButton.setDebounceThresh(5);
+    redButton.setDebounceThresh(5);
 
     init_encoder(ENC_A, ENC_B);
-    init_fnc_uart(FNC_UART_NUM, FNC_TX_PIN, FNC_RX_PIN);
+
     speaker.setVolume(255);
 
-    dbg_println("fnc on");
     touch.setFlickThresh(30);
 }
 
@@ -64,6 +59,7 @@ Point sprite_offset { 0, 0 };
 
 void base_display() {
     display.clear();
+    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
 }
 
 void next_layout(int delta) {}

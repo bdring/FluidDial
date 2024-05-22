@@ -85,6 +85,7 @@ void drawButton(int n) {
 
 void base_display() {
     display.clear();
+    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
 
     // On-screen buttons
     for (int i = 0; i < 3; i++) {
