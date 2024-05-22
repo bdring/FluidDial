@@ -193,10 +193,10 @@ int serial_write(HANDLE handle, LPCVOID buffer, DWORD len) {
 }
 
 HANDLE serial_open_com(char* portname) {  // Open COM port
-    wchar_t      wcomname[10];
-    DCB          dcb;
-    HANDLE       hComm;
-    COMMTIMEOUTS timeouts;
+    wchar_twcomname[10];
+    DCBdcb;
+    HANDLEhComm;
+    COMMTIMEOUTStimeouts;
 
     // swprintf() is a pain because it comes in two versions,
     // with and without the length parameter.  snwprintf() works

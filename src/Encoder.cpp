@@ -1,8 +1,8 @@
 
 #include "Encoder.h"
-#    include "sdkconfig.h"
-#    include "driver/pcnt.h"
-#    include "driver/gpio.h"
+#include "sdkconfig.h"
+#include "driver/pcnt.h"
+#include "driver/gpio.h"
 
 /* clang-format: off */
 void init_encoder(int a_pin, int b_pin) {

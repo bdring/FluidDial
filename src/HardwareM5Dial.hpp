@@ -1,18 +1,17 @@
-constexpr static const int ENC_A = GPIO_NUM_40;
-constexpr static const int ENC_B = GPIO_NUM_41;
+constexpr static const int ENC_A           = GPIO_NUM_40;
+constexpr static const int ENC_B           = GPIO_NUM_41;
 constexpr static const int DIAL_BUTTON_PIN = GPIO_NUM_42;
 
-#    include "M5Dial.h"
+#include "M5Dial.h"
 
-
-constexpr static const int FNC_UART_NUM     = 1;
-#    ifdef UART_ON_PORT_B
+constexpr static const int FNC_UART_NUM = 1;
+#ifdef UART_ON_PORT_B
 constexpr static const int RED_BUTTON_PIN   = GPIO_NUM_13;
 constexpr static const int GREEN_BUTTON_PIN = GPIO_NUM_15;
 constexpr static const int FNC_RX_PIN       = GPIO_NUM_1;
 constexpr static const int FNC_TX_PIN       = GPIO_NUM_2;
 
-#    else  // UART is on PORT A
+#else  // UART is on PORT A
 // This pin assignment avoids a problem whereby touch will not work
 // if the pendant is powered independently of the FluidNC controller
 // and the pendant is power-cycled while the FluidNC controller is on.

@@ -9,37 +9,37 @@
 #ifdef ARDUINO
 #    include <Arduino.h>
 #    include <LittleFS.h>
-constexpr static const int UPDATE_RATE_MS  = 30;  // minimum refresh rate in milliseconds
-extern Stream& debugPort;
-void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
-#endif // ARDUINO
+constexpr static const int UPDATE_RATE_MS = 30;  // minimum refresh rate in milliseconds
+extern Stream&             debugPort;
+void                       init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
+#endif  // ARDUINO
 
 #ifdef USE_LOVYANGFX
-#include "LovyanGFX.h"
-#include "Touch_Class.hpp"
+#    include "LovyanGFX.h"
+#    include "Touch_Class.hpp"
 
-#define WHITE TFT_WHITE
-#define BLACK TFT_BLACK
-#define RED TFT_RED
-#define YELLOW TFT_YELLOW
-#define BLUE TFT_BLUE
-#define LIGHTGREY TFT_LIGHTGREY
-#define DARKGREY TFT_DARKGREY
-#define GREEN TFT_GREEN
-#define NAVY TFT_NAVY
-#define CYAN TFT_CYAN
-#define ORANGE TFT_ORANGE
-#define BROWN TFT_BROWN
-#define MAROON TFT_MAROON
-#endif // USE_LOVYANGFX
+#    define WHITE TFT_WHITE
+#    define BLACK TFT_BLACK
+#    define RED TFT_RED
+#    define YELLOW TFT_YELLOW
+#    define BLUE TFT_BLUE
+#    define LIGHTGREY TFT_LIGHTGREY
+#    define DARKGREY TFT_DARKGREY
+#    define GREEN TFT_GREEN
+#    define NAVY TFT_NAVY
+#    define CYAN TFT_CYAN
+#    define ORANGE TFT_ORANGE
+#    define BROWN TFT_BROWN
+#    define MAROON TFT_MAROON
+#endif  // USE_LOVYANGFX
 
 #ifdef USE_M5
 #    include "M5Unified.h"
-#endif // USE_M5
+#endif  // USE_M5
 
-extern LGFX_Device&            display;
-extern LGFX_Sprite canvas;
-extern m5::Touch_Class&   touch;
+extern LGFX_Device&     display;
+extern LGFX_Sprite      canvas;
+extern m5::Touch_Class& touch;
 
 void drawPngFile(const char* filename, int x, int y);
 
