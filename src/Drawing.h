@@ -87,3 +87,5 @@ void drawPngBackground(const char* filename);
 void refreshDisplay();
 
 void drawError();
+
+extern Point sprite_offset;

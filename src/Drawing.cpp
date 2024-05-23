@@ -41,8 +41,8 @@ void drawRect(int x, int y, int width, int height, int radius, int bgcolor) {
     canvas.fillRoundRect(x, y, width, height, radius, bgcolor);
 }
 void drawRect(Point xy, int width, int height, int radius, int bgcolor) {
-    Point offsetxy = { width / 2, -height / 2 };
-    Point dispxy   = (xy - offsetxy).to_display();
+    Point offsetxy = { width / 2, -height / 2 };    // { 30, -30}
+    Point dispxy   = (xy - offsetxy).to_display();  // {i
     drawRect(dispxy.x, dispxy.y, width, height, radius, bgcolor);
 }
 void drawRect(Point xy, Point wh, int radius, int bgcolor) {
@@ -57,8 +57,9 @@ void drawOutlinedRect(Point xy, int width, int height, int bgcolor, int outlinec
     Point dispxy = xy.to_display();
     drawOutlinedRect(dispxy.x, dispxy.y, width, height, bgcolor, outlinecolor);
 }
-
 void drawPngFile(const char* filename, Point xy) {
+    //    drawPngFile(filename, xo(xy.x), yo(xy.y));
+    //    drawPngFile(filename, xy.x - 40, xy.y);
     drawPngFile(filename, xy.x, xy.y);
 }
 void drawPngBackground(const char* filename) {
@@ -107,7 +108,7 @@ void drawStatus() {
 
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
-        canvas.fillRoundRect((display.width() - width) / 2, y, width, height, 5, bgColor);
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
     }
     int fgColor = stateFGColors[state];
     if (state == Alarm) {
@@ -124,7 +125,7 @@ void drawStatusTiny(int y) {
 
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
-        canvas.fillRoundRect((display.width() - width) / 2, y, width, height, 5, bgColor);
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
     }
     centered_text(my_state_string, y + height / 2 + 3, stateFGColors[state], TINY);
 }
@@ -135,7 +136,7 @@ void drawStatusSmall(int y) {
 
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
-        canvas.fillRoundRect((display.width() - width) / 2, y, width, height, 5, bgColor);
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
     }
     centered_text(my_state_string, y + height / 2 + 3, stateFGColors[state], SMALL);
 }
@@ -165,10 +166,14 @@ void Stripe::draw(const char* center, bool highlighted) {
 #define PUSH_BUTTON_LINE 212
 #define DIAL_BUTTON_LINE 228
 
+static int side_button_line() {
+    return round_display ? PUSH_BUTTON_LINE : DIAL_BUTTON_LINE;
+}
+
 // This shows on the display what the button currently do.
 void drawButtonLegends(const char* red, const char* green, const char* orange) {
-    text(red, 80, PUSH_BUTTON_LINE, RED);
-    text(green, 190, PUSH_BUTTON_LINE, GREEN, TINY, middle_right);
+    text(red, round_display ? 50 : 10, side_button_line(), RED, TINY, middle_left);
+    text(green, display_short_side() - (round_display ? 50 : 10), side_button_line(), GREEN, TINY, middle_right);
     centered_text(orange, DIAL_BUTTON_LINE, ORANGE);
 }
 
@@ -252,7 +257,7 @@ void drawMenuTitle(const char* name) {
 
 void refreshDisplay() {
     display.startWrite();
-    canvas.pushSprite(0, 0);
+    canvas.pushSprite(sprite_offset.x, sprite_offset.y);
     display.endWrite();
 }
 

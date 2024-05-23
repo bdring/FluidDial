@@ -4,68 +4,44 @@
 #pragma once
 
 #include "Config.h"
+#include "Encoder.h"
 
 #ifdef ARDUINO
 #    include <Arduino.h>
 #    include <LittleFS.h>
+constexpr static const int UPDATE_RATE_MS = 30;  // minimum refresh rate in milliseconds
+extern Stream&             debugPort;
+void                       init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
+#endif  // ARDUINO
 
-#    include "M5Dial.h"
-#    include "Encoder.h"
+#ifdef USE_LOVYANGFX
+#    include "LovyanGFX.h"
+#    include "Touch_Class.hpp"
 
-#    ifdef UART_ON_PORT_B
-constexpr static const int RED_BUTTON_PIN   = GPIO_NUM_13;
-constexpr static const int GREEN_BUTTON_PIN = GPIO_NUM_15;
-constexpr static const int FNC_RX_PIN       = GPIO_NUM_1;
-constexpr static const int FNC_TX_PIN       = GPIO_NUM_2;
+#    define WHITE TFT_WHITE
+#    define BLACK TFT_BLACK
+#    define RED TFT_RED
+#    define YELLOW TFT_YELLOW
+#    define BLUE TFT_BLUE
+#    define LIGHTGREY TFT_LIGHTGREY
+#    define DARKGREY TFT_DARKGREY
+#    define GREEN TFT_GREEN
+#    define NAVY TFT_NAVY
+#    define CYAN TFT_CYAN
+#    define ORANGE TFT_ORANGE
+#    define BROWN TFT_BROWN
+#    define MAROON TFT_MAROON
+#endif  // USE_LOVYANGFX
 
-#    else  // UART is on PORT A
-// This pin assignment avoids a problem whereby touch will not work
-// if the pendant is powered independently of the FluidNC controller
-// and the pendant is power-cycled while the FluidNC controller is on.
-// The problem is caused by back-powering of the 3V3 rail through the
-// M5Stamp's Rx pin.  When RX is on GPIO1, 3V3 from the FluidNC Tx line
-// causes the M5Stamp 3V3 rail to float at 1.35V, which in turn prevents
-// the touch chip from starting properly after full power is applied.
-// The touch function then does not work.
-// When RX is on GPIO15, the back-powering drives the 3V3 rail only to
-// 0.3V and everything starts correctly.
-constexpr static const int RED_BUTTON_PIN   = GPIO_NUM_1;
-constexpr static const int GREEN_BUTTON_PIN = GPIO_NUM_2;
-constexpr static const int FNC_RX_PIN       = GPIO_NUM_15;
-constexpr static const int FNC_TX_PIN       = GPIO_NUM_13;
-
-#    endif
-
-constexpr static const int DIAL_BUTTON_PIN = GPIO_NUM_42;
-constexpr static const int UPDATE_RATE_MS  = 30;  // minimum refresh rate in milliseconds
-
-extern Stream& debugPort;
-
-extern m5::Button_Class greenButton;
-extern m5::Button_Class redButton;
-#else
+#ifdef USE_M5
 #    include "M5Unified.h"
-#    include "Encoder.h"
-extern m5::Button_Class& greenButton;
-extern m5::Button_Class& redButton;
-#endif
+#endif  // USE_M5
 
-#ifdef WINDOWSxx
-#    include "LGFX_SDL.hpp"
-extern LGFX        display;
-extern LGFX_Sprite canvas;
-#else
-extern M5GFX&            display;
-extern M5Canvas          canvas;
-#endif
-extern m5::Speaker_Class& speaker;
-extern m5::Touch_Class&   touch;
-
-extern m5::Button_Class& dialButton;
+extern LGFX_Device&     display;
+extern LGFX_Sprite      canvas;
+extern m5::Touch_Class& touch;
 
 void drawPngFile(const char* filename, int x, int y);
-
-const char* M5TouchStateName(m5::touch_state_t state_num);
 
 void init_system();
 
@@ -82,3 +58,21 @@ void update_events();
 void delay_ms(uint32_t ms);
 
 void resetFlowControl();
+
+extern bool round_display;
+
+void system_background();
+
+bool screen_encoder(int x, int y, int& delta);
+bool screen_button_touched(int x, int y, int& button);
+bool switch_button_touched(bool& pressed, int& button);
+
+void deep_sleep(int us);
+
+inline int display_short_side() {
+    return (display.width() < display.height()) ? display.width() : display.height();
+}
+
+void base_display();
+void set_layout(int n);
+void next_layout(int delta);

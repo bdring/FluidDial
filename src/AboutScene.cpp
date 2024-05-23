@@ -11,7 +11,7 @@ extern const char* git_info;  // auto generated version.cpp
 class AboutScene : public Scene {
 private:
 public:
-    AboutScene() : Scene("About") {}
+    AboutScene() : Scene("About", 4) {}
 
     void onEntry(void* arg) {
         send_line("$G");
@@ -30,7 +30,10 @@ public:
         }
     }
 
-    void onEncoder(int delta) {}
+    void onEncoder(int delta) {
+        next_layout(delta);
+        reDisplay();
+    }
     void onStateChange(state_t old_state) { reDisplay(); }
     void reDisplay() {
         background();

@@ -32,7 +32,8 @@ void text(const std::string& msg, Point xy, int color, fontnum_t fontnum, int da
 }
 
 void centered_text(const char* msg, int y, int color, fontnum_t fontnum) {
-    text(msg, display.width() / 2, y, color, fontnum);
+    //    text(msg, display_short_side() / 2, y, color, fontnum);
+    text(msg, canvas.width() / 2, y, color, fontnum);
 }
 
 void auto_text(const std::string& txt, int x, int y, int w, int color, fontnum_t fontnum, int datum, bool tryfonts, bool trimleft) {

@@ -48,7 +48,6 @@ extern Scene wmbFileSelectScene;
 extern Scene fileSelectScene;
 #endif
 
-
 Scene& jogScene = multiJogScene;
 
 extern Scene controlScene;

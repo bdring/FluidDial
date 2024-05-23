@@ -252,7 +252,7 @@ public:
         int x = ctr.x;
         int y = ctr.y;
 
-        int center_radius = display.width() / 6;
+        int center_radius = display_short_side() / 6;
 
         // Sense touches at top, bottom, left, and right
         if (std::abs(y) > std::abs(x)) {

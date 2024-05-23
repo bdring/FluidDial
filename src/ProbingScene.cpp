@@ -115,7 +115,7 @@ public:
         if (state == Idle) {
             int    x      = 40;
             int    y      = 62;
-            int    width  = display.width() - (x * 2);
+            int    width  = display_short_side() - (x * 2);
             int    height = 25;
             int    pitch  = 27;  // for spacing of buttons
             Stripe button(x, y, width, height, TINY);
@@ -145,7 +145,7 @@ public:
                 LED led(120, 190, 10, 5);
                 led.draw(myProbeSwitch);
 
-                int width = display.width() - x * 2;
+                int width = display_short_side() - x * 2;
                 DRO dro(x, y, width, height);
                 dro.draw(0, _axis == 0);
                 dro.draw(1, _axis == 1);

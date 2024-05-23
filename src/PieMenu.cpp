@@ -19,7 +19,7 @@ void PieMenu::calculatePositions() {
         angle -= dtheta;
     }
 
-    int layout_radius = display.width() / 2 - _item_radius - 3;
+    int layout_radius = display_short_side() / 2 - _item_radius - 3;
     angle             = 90;
     for (size_t i = 0; i < num_items(); i++) {
         int x, y;
@@ -39,7 +39,7 @@ int PieMenu::touchedItem(int x, int y) {
     x = ctr.x;
     y = ctr.y;
 
-    int dead_radius = display.width() / 2 - _item_radius * 2;
+    int dead_radius = display_short_side() / 2 - _item_radius * 2;
 
     if ((x * x + y * y) < (dead_radius * dead_radius)) {
         return -1;  // In middle dead zone
@@ -70,8 +70,8 @@ int PieMenu::touchedItem(int x, int y) {
 }
 void PieMenu::menuBackground() {
     background();
-    text(selectedItem()->name(), { 0, -8 }, WHITE, SMALL);
-    drawStatusSmall(80);
+    text(selectedItem()->name(), { 0, -15 }, WHITE, SMALL);
+    drawStatusSmall(90);
 }
 
 void PieMenu::onTouchFlick() {
