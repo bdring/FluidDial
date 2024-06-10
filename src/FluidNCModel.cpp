@@ -53,8 +53,8 @@ std::map<const char *, state_t, cmp_str>  state_map = {
     { "Run", Cycle },
     { "Jog", Jog },
     { "Home", Homing },
-    { "Door:0", SafetyDoor },
-    { "Door:1", SafetyDoor },
+    { "Door:0", DoorClosed },
+    { "Door:1", DoorOpen },
     { "Check", CheckMode },
     { "Sleep", GrblSleep },
 };

@@ -80,7 +80,7 @@ public:
             }
         } else if (state == Cycle) {
             fnc_realtime(FeedHold);
-        } else if (state == Hold) {
+        } else if (state == Hold || state == DoorClosed) {
             fnc_realtime(CycleStart);
         }
     }
@@ -177,7 +177,7 @@ public:
             redLabel = "E-Stop";
             if (state == Cycle) {
                 grnLabel = "Hold";
-            } else if (state == Hold) {
+            } else if (state == Hold || state == DoorClosed) {
                 grnLabel = "Resume";
             }
         }

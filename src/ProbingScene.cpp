@@ -24,17 +24,17 @@ public:
 
     void onGreenButtonPress() {
         // G38.2 G91 F80 Z-20 P8.00
-        if (state == Idle) {
-            send_linef("G38.2G91F%d%c%dP%s", _rate, axisNumToChar(_axis), _travel, e4_to_cstr(_offset, 2));
-            return;
-        }
-        if (state == Cycle) {
-            fnc_realtime(FeedHold);
-            return;
-        }
-        if (state == Hold) {
-            fnc_realtime(CycleStart);
-            return;
+        switch (state) {
+            case Idle:
+                send_linef("G38.2G91F%d%c%dP%s", _rate, axisNumToChar(_axis), _travel, e4_to_cstr(_offset, 2));
+                break;
+            case Cycle:
+                fnc_realtime(FeedHold);
+                break;
+            case Hold:
+            case DoorClosed:
+                fnc_realtime(CycleStart);
+                break;
         }
     }
 
@@ -48,7 +48,7 @@ public:
             int retract = _travel < 0 ? _retract : -_retract;
             send_linef("$J=G91F1000%c%d", axisNumToChar(_axis), retract);
             return;
-        } else if (state == Hold) {
+        } else if (state == Hold || state == DoorClosed) {
             fnc_realtime(Reset);
         }
     }
@@ -157,6 +157,7 @@ public:
                         grnLabel = "Hold";
                         break;
                     case Hold:
+                    case DoorClosed:
                         redLabel = "Reset";
                         grnLabel = "Resume";
                         break;
