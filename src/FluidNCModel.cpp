@@ -19,12 +19,13 @@ int                n_axes             = 3;
 pos_t              myAxes[6]          = { 0 };
 bool               myLimitSwitches[6] = { false };
 bool               myProbeSwitch      = false;
-const char*        myFile             = "";   // running SD filename
-file_percent_t     myPercent          = 0.0;  // percent conplete of SD file
-override_percent_t myFro              = 100;  // Feed rate override
-override_percent_t mySro              = 100;  // Spindle Override
-uint32_t           myFeed             = 0;
-uint32_t           mySpeed            = 0;
+const char*        myFile             = "";  // running SD filename
+const char*        myCtrlPins;
+file_percent_t     myPercent = 0.0;  // percent conplete of SD file
+override_percent_t myFro     = 100;  // Feed rate override
+override_percent_t mySro     = 100;  // Spindle Override
+uint32_t           myFeed    = 0;
+uint32_t           mySpeed   = 0;
 
 std::string myModes = "no data";
 
@@ -126,6 +127,11 @@ extern "C" void show_feed_spindle(uint32_t feedrate, uint32_t spindle_speed) {
 extern "C" void show_limits(bool probe, const bool* limits, size_t n_axis) {
     myProbeSwitch = probe;
     memcpy(myLimitSwitches, limits, n_axis * sizeof(*limits));
+}
+
+extern "C" void show_control_pins(const char* pins) {
+    //dbg_printf("show_control_pins:%s\r\n", pins);
+    myCtrlPins = pins;
 }
 
 #ifdef E4_POS_T

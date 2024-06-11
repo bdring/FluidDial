@@ -31,6 +31,7 @@ extern int                n_axes;
 extern pos_t              myAxes[6];
 extern bool               myLimitSwitches[6];
 extern bool               myProbeSwitch;
+extern const char*        myCtrlPins;
 extern const char*        myFile;
 extern file_percent_t     myPercent;
 extern override_percent_t myFro;
