@@ -20,12 +20,12 @@ pos_t              myAxes[6]          = { 0 };
 bool               myLimitSwitches[6] = { false };
 bool               myProbeSwitch      = false;
 const char*        myFile             = "";  // running SD filename
-const char*        myCtrlPins;
-file_percent_t     myPercent = 0.0;  // percent conplete of SD file
-override_percent_t myFro     = 100;  // Feed rate override
-override_percent_t mySro     = 100;  // Spindle Override
-uint32_t           myFeed    = 0;
-uint32_t           mySpeed   = 0;
+const char*        myCtrlPins         = "";
+file_percent_t     myPercent          = 0.0;  // percent conplete of SD file
+override_percent_t myFro              = 100;  // Feed rate override
+override_percent_t mySro              = 100;  // Spindle Override
+uint32_t           myFeed             = 0;
+uint32_t           mySpeed            = 0;
 
 std::string myModes = "no data";
 
