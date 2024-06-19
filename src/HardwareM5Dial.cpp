@@ -105,7 +105,7 @@ bool switch_button_touched(bool& pressed, int& button) {
 bool screen_encoder(int x, int y, int& delta) {
     return false;
 }
-bool screen_button_touched(int x, int y, int& button) {
+bool screen_button_touched(bool pressed, int x, int y, int& button) {
     return false;
 }
 
