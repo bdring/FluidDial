@@ -16,8 +16,9 @@ class FileSelectScene : public Scene {
 private:
     int              _selected_file = 0;
     std::vector<int> prevSelect;
-    std::string      dirName  = "/sd";
-    int              dirLevel = 0;
+    std::string      dirName         = "/sd";
+    int              dirLevel        = 0;
+    bool             _selecting_file = false;
 
     const char* format_size(size_t size) {
         const int   buflen = 30;
@@ -48,7 +49,6 @@ public:
 
     void onDialButtonPress() { pop_scene(); }
 
-    // XXX this should probably be a touch release on the file display
     void onGreenButtonPress() {
         if (state != Idle) {
             return;
@@ -90,8 +90,13 @@ public:
         ackBeep();
     }
 
-    void onTouchClick() { onGreenButtonPress(); }
-
+    void onTouchPress() { _selecting_file = true; }
+    void onTouchRelease() {
+        if (_selecting_file) {
+            _selecting_file = false;
+            onGreenButtonPress();
+        }
+    }
     void onFilesList() override {
         _selected_file = prevSelect.back();
         reDisplay();
@@ -275,6 +280,8 @@ public:
         showFiles(0);
     }
 
-    void reDisplay() { showFiles(0); }
+    void reDisplay() {
+        showFiles(0);
+    }
 };
 FileSelectScene fileSelectScene;

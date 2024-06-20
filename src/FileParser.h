@@ -27,9 +27,7 @@ extern std::vector<Macro*> macros;
 
 extern void request_macros();
 
-extern std::vector<std::string> fileLines;
-
-extern void request_file_preview(const char* name);
+extern void request_file_preview(const char* name, int firstline, int lastline);
 
 extern std::string current_filename;
 extern std::string wifi_mode, wifi_ip, wifi_connected, wifi_ssid;

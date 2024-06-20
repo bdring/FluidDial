@@ -21,8 +21,8 @@ public:
 
         refreshDisplay();
     }
-    void onRedButtonRelease() { pop_scene(nullptr); }
-    void onGreenButtonRelease() { pop_scene((void*)"Confirmed"); }
-    void onDialButtonRelease() { pop_scene(nullptr); }
+    void onRedButtonPress() { pop_scene(nullptr); }
+    void onGreenButtonPress() { pop_scene((void*)"Confirmed"); }
+    void onDialButtonPress() { pop_scene(nullptr); }
 };
 ConfirmScene confirmScene;

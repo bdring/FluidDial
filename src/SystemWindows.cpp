@@ -249,7 +249,8 @@ HANDLE serial_open_com(char* portname) {  // Open COM port
 extern char* comname;
 
 HANDLE hFNC;
-void   init_system() {
+
+void init_system() {
     lgfx::Panel_sdl::setup();
 
     auto cfg = M5.config();
@@ -346,7 +347,7 @@ bool screen_encoder(int x, int y, int& delta) {
     return true;
 }
 
-bool screen_button_touched(int x, int y, int& button) {
+bool screen_button_touched(bool pressed, int x, int y, int& button) {
     if (!outside_of_circle(x, y)) {
         return false;
     }

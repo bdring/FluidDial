@@ -99,7 +99,7 @@ void dispatch_touch() {
             return;
         }
         int button;
-        if (screen_button_touched(t.x, t.y, button)) {
+        if (screen_button_touched(t.state == m5::touch_state_t::touch, t.x, t.y, button)) {
             if (t.state == m5::touch_state_t::touch) {
                 dispatch_button(true, button);
             } else if (t.state == m5::touch_state_t::none) {
