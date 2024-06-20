@@ -73,6 +73,7 @@ public:
             case Cycle:
             case Homing:
             case Hold:
+            case DoorClosed:
                 fnc_realtime(Reset);
                 break;
         }
@@ -89,6 +90,7 @@ public:
                 fnc_realtime(FeedHold);
                 break;
             case Hold:
+            case DoorClosed:
                 fnc_realtime(CycleStart);
                 break;
             case Alarm:
@@ -192,6 +194,7 @@ public:
                 yellowLabel = "Rst Ovr";
                 break;
             case Hold:
+            case DoorClosed:
                 redLabel    = "Quit";
                 grnLabel    = "Resume";
                 yellowLabel = "Rst Ovr";

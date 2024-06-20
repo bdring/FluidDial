@@ -19,7 +19,8 @@ int                n_axes             = 3;
 pos_t              myAxes[6]          = { 0 };
 bool               myLimitSwitches[6] = { false };
 bool               myProbeSwitch      = false;
-const char*        myFile             = "";   // running SD filename
+const char*        myFile             = "";  // running SD filename
+const char*        myCtrlPins         = "";
 file_percent_t     myPercent          = 0.0;  // percent conplete of SD file
 override_percent_t myFro              = 100;  // Feed rate override
 override_percent_t mySro              = 100;  // Spindle Override
@@ -53,8 +54,8 @@ std::map<const char *, state_t, cmp_str>  state_map = {
     { "Run", Cycle },
     { "Jog", Jog },
     { "Home", Homing },
-    { "Door:0", SafetyDoor },
-    { "Door:1", SafetyDoor },
+    { "Door:0", DoorClosed },
+    { "Door:1", DoorOpen },
     { "Check", CheckMode },
     { "Sleep", GrblSleep },
 };
@@ -126,6 +127,11 @@ extern "C" void show_feed_spindle(uint32_t feedrate, uint32_t spindle_speed) {
 extern "C" void show_limits(bool probe, const bool* limits, size_t n_axis) {
     myProbeSwitch = probe;
     memcpy(myLimitSwitches, limits, n_axis * sizeof(*limits));
+}
+
+extern "C" void show_control_pins(const char* pins) {
+    //dbg_printf("show_control_pins:%s\r\n", pins);
+    myCtrlPins = pins;
 }
 
 #ifdef E4_POS_T

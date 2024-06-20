@@ -80,12 +80,12 @@ public:
             }
         } else if (state == Cycle) {
             fnc_realtime(FeedHold);
-        } else if (state == Hold) {
+        } else if (state == Hold || state == DoorClosed) {
             fnc_realtime(CycleStart);
         }
     }
     void onRedButtonPress() override {
-        if (state == Homing) {
+        if (state == Homing || state == Alarm) {
             fnc_realtime(Reset);
         }
     }
@@ -156,6 +156,9 @@ public:
             if (state == Homing) {
                 redLabel = "E-Stop";
             } else {
+                if (state == Alarm && (strchr(myCtrlPins, 'D') == NULL)) {  // You can reset alarms if door is not active
+                    redLabel = "Reset";
+                }
                 if (_axis_to_home == -1) {
                     for (int axis = 0; axis < HOMING_N_AXIS; ++axis) {
                         if (can_home(axis)) {
@@ -177,7 +180,7 @@ public:
             redLabel = "E-Stop";
             if (state == Cycle) {
                 grnLabel = "Hold";
-            } else if (state == Hold) {
+            } else if (state == Hold || state == DoorClosed) {
                 grnLabel = "Resume";
             }
         }

@@ -114,7 +114,6 @@ void base_display() {
     display.clear();
     display.drawPngFile(
         LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-
     // On-screen buttons
     for (int i = 0; i < 3; i++) {
         drawButton(i);
@@ -144,6 +143,7 @@ bool switch_button_touched(bool& pressed, int& button) {
 bool screen_encoder(int x, int y, int& delta) {
     return false;
 }
+
 bool in_rect(int x, int y, Point xy, Point wh) {
     return x >= xy.x && x < (xy.x + wh.x) && y >= xy.y && y < (xy.y + wh.y);
 }
@@ -185,6 +185,7 @@ bool screen_button_touched(bool pressed, int x, int y, int& button) {
 void update_events() {
     auto ms = lgfx::millis();
     if (touch.isEnabled()) {
+
         if (touch_debounce) {
             if ((ms - touch_timeout) < 0) {
                 return;

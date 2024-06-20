@@ -6,18 +6,19 @@
 
 // Same states as FluidNC except for the last one
 enum state_t {
-    Idle = 0,      // Must be zero.
-    Alarm,         // In alarm state. Locks out all g-code processes. Allows settings access.
-    CheckMode,     // G-code check mode. Locks out planner and motion only.
-    Homing,        // Performing homing cycle
-    Cycle,         // Cycle is running or motions are being executed.
-    Hold,          // Active feed hold
-    Jog,           // Jogging mode.
-    SafetyDoor,    // Safety door is ajar. Feed holds and de-energizes system.
-    GrblSleep,     // Sleep state.
-    ConfigAlarm,   // You can't do anything but fix your config file.
-    Critical,      // You can't do anything but reset with CTRL-x or the reset button
-    Disconnected,  // We can't talk to FluidNC
+    Idle = 0,            // Must be zero.
+    Alarm,               // In alarm state. Locks out all g-code processes. Allows settings access.
+    CheckMode,           // G-code check mode. Locks out planner and motion only.
+    Homing,              // Performing homing cycle
+    Cycle,               // Cycle is running or motions are being executed.
+    Hold,                // Active feed hold
+    Jog,                 // Jogging mode.
+    DoorOpen,
+    DoorClosed,
+    GrblSleep,  // Sleep state.
+    ConfigAlarm,         // You can't do anything but fix your config file.
+    Critical,            // You can't do anything but reset with CTRL-x or the reset button
+    Disconnected,        // We can't talk to FluidNC
 };
 
 // Variables and functions to model the state of the FluidNC controller
@@ -30,6 +31,7 @@ extern int                n_axes;
 extern pos_t              myAxes[6];
 extern bool               myLimitSwitches[6];
 extern bool               myProbeSwitch;
+extern const char*        myCtrlPins;
 extern const char*        myFile;
 extern file_percent_t     myPercent;
 extern override_percent_t myFro;
