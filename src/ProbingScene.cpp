@@ -35,14 +35,16 @@ public:
             case DoorClosed:
                 fnc_realtime(CycleStart);
                 break;
+            case Alarm:
+                send_line("$X"); // unlock
+                break;
         }
     }
 
     void onRedButtonPress() {
         // G38.2 G91 F80 Z-20 P8.00
         if (state == Cycle || state == Alarm) {
-            fnc_realtime(Reset);
-            //send_line("$X");
+            fnc_realtime(Reset);            
             return;
         } else if (state == Idle) {
             int retract = _travel < 0 ? _retract : -_retract;
@@ -137,6 +139,7 @@ public:
                 //centered_text("Invalid State", 105, WHITE, MEDIUM);
                 //centered_text("For Probing", 145, WHITE, MEDIUM);
                 redLabel = "Reset";
+                grnLabel = "Unlock";
             } else {
                 int x      = 14;
                 int height = 35;
@@ -160,9 +163,6 @@ public:
                     case DoorClosed:
                         redLabel = "Reset";
                         grnLabel = "Resume";
-                        break;
-                    case Alarm:
-                        redLabel = "Reset";
                         break;
                 }
             }
