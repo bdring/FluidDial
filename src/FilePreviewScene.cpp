@@ -4,6 +4,7 @@
 #include <string>
 #include "Scene.h"
 #include "FileParser.h"
+#include <map>
 
 extern Scene menuScene;
 extern Scene statusScene;
@@ -12,30 +13,56 @@ class FilePreviewScene : public Scene {
     std::string _error_string;
     std::string _filename;
     bool        _needlines;
+    int         _firstline = 0;
+
+    std::map<int, std::string> _lines;
+
+    static const int _nlines = 7;
 
 public:
-    FilePreviewScene() : Scene("Preview") {}
+    FilePreviewScene() : Scene("Preview", 4) {}
+    void get_lines() {
+        _needlines = true;
+        request_file_preview(_filename.c_str(), _firstline, _nlines);
+    }
+
     void onEntry(void* arg) {
         if (arg) {
             char* fname = (char*)arg;
             _filename   = fname;
-            _needlines  = true;
-            request_file_preview(fname);
+            get_lines();
         } else {
             _needlines = false;
         }
     }
-    void onFileLines() {
+    void onFileLines(int firstline, const std::vector<std::string>& lines) {
         _error_string.clear();
         _needlines = false;
+        _lines.clear();
+        for (auto const& line : lines) {
+            _lines[firstline++] = line;
+        }
         reDisplay();
     }
     void onError(const char* errstr) {
         _error_string = errstr;
         reDisplay();
     }
+    void scroll(int updown) {
+        if (updown == 0) {
+            return;
+        }
+        int fl = _firstline;
+        fl += updown;
+        if (fl >= 0) {
+            _firstline = fl;
+            get_lines();
+        }
+    }
 
     void onDialButtonPress() { pop_scene(); }
+
+    void onEncoder(int delta) override { scroll(delta); }
 
     void onRedButtonPress() {
         if (state == Idle) {
@@ -70,9 +97,9 @@ public:
             if (_needlines == false) {
                 int y  = 48;
                 int tl = 0;
-                if (fileLines.size()) {
-                    for (auto const& line : fileLines) {
-                        text(line.c_str(), 25, y + tl * 22, WHITE, TINY, top_left);
+                if (_lines.size()) {
+                    for (auto const& entry : _lines) {
+                        text(entry.second.c_str(), 25, y + tl * 22, WHITE, TINY, top_left);
                         ++tl;
                     }
                 } else {

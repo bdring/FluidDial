@@ -6,6 +6,7 @@
 #include "GrblParserC.h"
 #include "Drawing.h"
 #include "NVS.h"
+#include <vector>
 
 void pop_scene(void* arg = nullptr);
 
@@ -59,7 +60,7 @@ public:
     virtual void onEntry(void* arg = nullptr) {}
     virtual void onExit() {}
 
-    virtual void onFileLines() {}
+    virtual void onFileLines(int firstline, const std::vector<std::string>& lines) {}
     virtual void onFilesList() {}
 
     bool initPrefs();

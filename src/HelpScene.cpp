@@ -19,7 +19,7 @@ public:
         drawButtonLegends("", "", "Back");
         refreshDisplay();
     }
-    void onDialButtonRelease() { pop_scene(); }
+    void onDialButtonPress() { pop_scene(); }
     void onTouchClick() {
         if (touchIsCenter()) {
             pop_scene();

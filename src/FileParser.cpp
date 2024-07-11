@@ -41,6 +41,8 @@ static bool fileinfoCompare(const fileinfo& f1, const fileinfo& f2) {
     return false;
 }
 
+int fileFirstLine = 0;
+
 std::vector<std::string> fileLines;
 
 extern JsonListener* pInitialListener;
@@ -369,6 +371,7 @@ class FileLinesListener : public JsonListener {
 private:
     bool _in_array;
     bool _key_is_error;
+    bool _key_is_firstline = false;
 
 public:
     void whitespace(char c) override {}
@@ -388,16 +391,19 @@ public:
         if (macro_parser) {
             delete macro_parser;
             macro_parser = nullptr;
-        } else {
-            current_scene->onFileLines();
+            parser.setListener(pInitialListener);
         }
-        parser.setListener(pInitialListener);
         // init_listener();
     }
 
     void startObject() override {}
 
-    void key(const char* key) override {}
+    void key(const char* key) override {
+        if (strcmp(key, "firstline") == 0) {
+            _key_is_firstline = true;
+            return;
+        }
+    }
 
     void value(const char* value) override {
         if (macro_parser) {
@@ -407,9 +413,15 @@ public:
         if (_in_array) {
             fileLines.push_back(value);
         }
+        if (_key_is_firstline) {
+            fileFirstLine = atoi(value);
+        }
     }
 
-    void endObject() override {}
+    void endObject() override {
+        parser.setListener(pInitialListener);
+        current_scene->onFileLines(fileFirstLine, fileLines);
+    }
     void endDocument() override {}
 } fileLinesListener;
 
@@ -555,9 +567,9 @@ void init_file_list() {
     parser.reset();
 }
 
-void request_file_preview(const char* name) {
+void request_file_preview(const char* name, int firstline, int nlines) {
     reading_macros = false;
-    send_linef("$File/ShowSome=7,%s", name);
+    send_linef("$File/ShowSome=%d:%d,%s", firstline, firstline + nlines, name);
     // parser.reset();
 }
 

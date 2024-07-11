@@ -26,43 +26,62 @@ Stream& debugPort = Serial;
 
 bool round_display = false;
 
-const int n_buttons       = 3;
-int       button_colors[] = { RED, YELLOW, GREEN };
+const int n_buttons = 3;
+const int button_w  = 80;
+const int button_h  = 80;
+const int sprite_wh = 240;
+
+int button_colors[] = { RED, YELLOW, GREEN };
 class Layout {
+private:
+    int _rotation;
+
 public:
-    const char* _name;
-    int         _rotation;
-    Point       _spritePosition;
-    Point       _buttonPosition[3];
-    Layout(const char* name, int rotation, Point spritePosition, Point redPosition, Point yellowPosition, Point greenPosition) :
-        _name(name), _rotation(rotation), _spritePosition(spritePosition) {
-        _buttonPosition[0] = redPosition;
-        _buttonPosition[1] = yellowPosition;
-        _buttonPosition[2] = greenPosition;
+    Point spritePosition;
+    Point buttonPosition[3];
+    Layout(int rotation, Point spritePosition, Point firstButtonPosition) : _rotation(rotation), spritePosition(spritePosition) {
+        buttonPosition[0] = firstButtonPosition;
+        if (vertical_buttons()) {
+            int x             = buttonPosition[0].x;
+            buttonPosition[1] = { x, button_h };
+            buttonPosition[2] = { x, 2 * button_h };
+        } else {
+            int y             = buttonPosition[0].y;
+            buttonPosition[1] = { button_w, y };
+            buttonPosition[2] = { 2 * button_w, y };
+        }
     }
+    bool vertical_buttons() { return _rotation & 1; }
+    int  rotation() { return _rotation; }
 };
+
+// clang-format off
 Layout layouts[] = {
-    { "up", 0, { 0, 0 }, { 0, 240 }, { 80, 240 }, { 160, 240 } },     // Buttons above
-    { "up", 0, { 0, 80 }, { 0, 0 }, { 80, 0 }, { 160, 0 } },          // Buttons below
-    { "left", 1, { 0, 0 }, { 240, 0 }, { 240, 80 }, { 240, 160 } },   // Buttons right
-    { "left", 1, { 80, 0 }, { 0, 0 }, { 0, 80 }, { 0, 160 } },        // Buttons left
-    { "down", 2, { 0, 0 }, { 0, 240 }, { 80, 240 }, { 160, 240 } },   // Buttons below
-    { "down", 2, { 0, 80 }, { 0, 0 }, { 80, 0 }, { 160, 0 } },        // Buttons above
-    { "right", 3, { 80, 0 }, { 0, 0 }, { 0, 80 }, { 0, 160 } },       // Buttons left
-    { "right", 3, { 0, 0 }, { 240, 0 }, { 240, 80 }, { 240, 160 } },  // Buttons right
+// rotation  sprite_XY        button0_XY
+    { 0,     { 0, 0 },        { 0, sprite_wh } }, // Buttons above
+    { 0,     { 0, button_h }, { 0, 0 }         }, // Buttons below
+    { 1,     { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
+    { 1,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
+    { 2,     { 0, 0 },        { 0, sprite_wh } }, // Buttons below
+    { 2,     { 0, button_h }, { 0, 0 }         }, // Buttons above
+    { 3,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
+    { 3,     { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
 };
+// clang-format on
+
 Layout* layout;
 int     layout_num = 0;
 
 Point sprite_offset;
 void  set_layout(int n) {
-    layout = &layouts[n];
-    display.setRotation(layout->_rotation);
-    sprite_offset = layout->_spritePosition;
+     layout = &layouts[n];
+     display.setRotation(layout->rotation());
+     sprite_offset = layout->spritePosition;
 }
 
 nvs_handle_t hw_nvs;
-void         init_hardware() {
+
+void init_hardware() {
     hw_nvs = nvs_init("hardware");
     nvs_get_i32(hw_nvs, "layout", &layout_num);
 
@@ -87,14 +106,14 @@ void         init_hardware() {
 }
 
 void drawButton(int n) {
-    Point offset = layout->_buttonPosition[n];
+    Point offset = layout->buttonPosition[n];
     display.fillRoundRect(offset.x + 10, offset.y + 10, 60, 60, 10, button_colors[n]);
 }
 
 void base_display() {
     display.clear();
-    display.drawPngFile(LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, 240, 240, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-
+    display.drawPngFile(
+        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
     // On-screen buttons
     for (int i = 0; i < 3; i++) {
         drawButton(i);
@@ -124,16 +143,39 @@ bool switch_button_touched(bool& pressed, int& button) {
 bool screen_encoder(int x, int y, int& delta) {
     return false;
 }
-bool hit(int button_num, int x, int y) {
-    Point offset = layout->_buttonPosition[button_num];
-    int   px     = offset.x;
-    int   py     = offset.y;
-    return x >= px && x < (px + 80) && y >= py && y < (py + 80);
+
+bool in_rect(int x, int y, Point xy, Point wh) {
+    return x >= xy.x && x < (xy.x + wh.x) && y >= xy.y && y < (xy.y + wh.y);
 }
-bool screen_button_touched(int x, int y, int& button) {
+bool in_button_stripe(int x, int y) {
+    Point xy = layout->buttonPosition[0];
+    if (layout->vertical_buttons()) {
+        // Vertical button layout
+        return in_rect(x, y, xy, { button_w, sprite_wh });
+    }
+    // Horizontal button layout
+    return in_rect(x, y, xy, { sprite_wh, button_h });
+}
+bool hit(int button_num, int x, int y) {
+    return in_rect(x, y, layout->buttonPosition[button_num], { button_w, button_h });
+}
+struct button_debounce_t {
+    bool    debouncing;
+    bool    skipped;
+    int32_t timeout;
+} debounce[n_buttons] = { { false, false, 0 } };
+
+bool    touch_debounce = false;
+int32_t touch_timeout  = 0;
+
+bool screen_button_touched(bool pressed, int x, int y, int& button) {
     for (int i = 0; i < n_buttons; i++) {
         if (hit(i, x, y)) {
             button = i;
+            if (!pressed) {
+                touch_debounce = true;
+                touch_timeout  = milliseconds() + 100;
+            }
             return true;
         }
     }
@@ -143,6 +185,13 @@ bool screen_button_touched(int x, int y, int& button) {
 void update_events() {
     auto ms = lgfx::millis();
     if (touch.isEnabled()) {
+
+        if (touch_debounce) {
+            if ((ms - touch_timeout) < 0) {
+                return;
+            }
+            touch_debounce = false;
+        }
         touch.update(ms);
     }
 }
