@@ -1,4 +1,5 @@
 // Copyright (c) 2023 - Barton Dring
+// Copyright (c) 2024 - Mitch Bradley
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Scene.h"
@@ -123,42 +124,62 @@ public:
         drawButtonLegends(redLabel, grnLabel, "Back");
     }
 
-    struct {
-        int       _xb;
-        int       _xt;
-        int       _yb;  // y for box
-        int       _yt;  // y for text center
-        int       _w;
-        int       _h;
-        fontnum_t _f;    // text font
-        int       _bg;   // bg color
-        int       _txt;  // text color
-    } box[6] = {
-        //    _xb, _xt, _yb, _yt,  _w, _h, _f,      _bg,  _txt
-        { 0, 119, 22, 31, 156, 18, TINY, BLACK, WHITE },         // [0] "SD Files", "localFS", "etc...";
-        { 20, 120, 45, 59, 190, 23, SMALL, BLACK, WHITE },       // [1]file[0] fileName
-        { 5, 120, 77, 82, 210, 18, SMALL, LIGHTGREY, BLUE },     // [2]file[1] Info Line Top
-        { 0, 120, 78, 120, 225, 80, MEDIUM, LIGHTGREY, BLACK },  // [3]file[1] fileName
-        { 5, 120, 136, 139, 210, 18, TINY, LIGHTGREY, BLACK },   // [4]file[1] Info Line Bottom
-        { 20, 120, 168, 181, 200, 23, SMALL, BLACK, WHITE },     // [5]file[2] fileName
+    // The number of filenames that can be displayed at once.
+    // It should be odd.
+    static const int N_DISPLAYED_FILENAMES = 3;
+
+    // Height of the highlight box for the selected file.
+    // This must be large enough for the big filename
+    // font size plus the two info font sizes.
+    static const int big_height = 80;
+
+    // Y position of file type info above the big filename
+    // This depends on the font sizes of the big filename and
+    // the file type
+    static const int type_offset = 26;
+
+    // Y position of file size info below the big filename
+    // This depends on the font sizes of the big filename and
+    // the file size
+    static const int size_offset = -26;
+
+    // Separation between big filename + info and small filenames
+    // This depends on big_height and the small filename font size
+    int y_distance = 40;
+    int y_inc      = 18;
+
+    // Offsets the x position to account for the scroll indicator on the right
+    static const int big_width = 225;  // display_short_size() - scroll_width * 2
+
+    static const int x_offset = -7;  // - scroll_width
+
+    struct layout {
+        int _w;
     };
-    int box_fi[3] = { 1, 3, 5 };
+    // clang-format off
+    // The widths change because the display is circular so you have less
+    // space as the you go farther from the center.
+    struct layout fnlayouts[N_DISPLAYED_FILENAMES] = {
+        // _w,
+        {  190 }, // file[0] fileName
+        {  225 }, // file[1] fileName
+        {  200 }  // file[2] fileName
+    };
+    // clang-format on
 
     void onRightFlick() { activate_scene(&jogScene); }
 
-    void showFiles(int yo) {
+    void showFiles() {
         // canvas.createSprite(240, 240);
         // drawBackground(BLACK);
         background();
         drawMenuTitle(current_scene->name());
         std::string fName;
-        int         finfoT_color = BLUE;
 
         int fdIter = _selected_file - 1;  // first file in display list
 
-        for (int fx = 0; fx < 3; fx++, fdIter++) {
-            int  fi     = box_fi[fx];
-            auto middle = box[fi];
+        for (int display_slot = 0; display_slot < N_DISPLAYED_FILENAMES; display_slot++, fdIter++) {
+            auto fnlayout = fnlayouts[display_slot];
 
 #ifdef WRAP_FILE_LIST
             if (fileVector.size() > 2) {
@@ -179,18 +200,19 @@ public:
             if (fileVector.size()) {
                 fName = fileVector[fdIter].fileName;
             }
-            if (yo == 0 && middle._bg != BLACK) {
-                canvas.fillRoundRect(middle._xb, yo + middle._yb, middle._w, middle._h, middle._h / 2, middle._bg);
-            }
-            int middle_txt = middle._txt;
-            if (fx == 1) {
+            int middle_slot = (N_DISPLAYED_FILENAMES - 1) / 2;
+            int offset      = middle_slot - display_slot;
+            if (offset == 0) {
+                int tcolor = BLACK;
+                drawRect(Point(x_offset, 0), big_width, big_height, big_height * 45 / 100, LIGHTGREY);
+
                 std::string fInfoT = "";  // file info top line
                 std::string fInfoB = "";  // File info bottom line
                 int         ext    = fName.rfind('.');
                 if (fileVector.size()) {
                     if (fileVector[_selected_file].isDir()) {
-                        fInfoB     = "Folder";
-                        middle_txt = BLUE;
+                        fInfoB = "Folder";
+                        tcolor = BLUE;
                     } else {
                         if (ext > 0) {
                             fInfoT = fName.substr(ext, fName.length());
@@ -201,45 +223,73 @@ public:
                     }
                 }
 
-                // progressbar
-                if (yo == 0 && (fileVector.size() > 3)) {  // three or less are all displayed
-                    for (int i = 0; i < 6; i++) {
-                        canvas.drawArc(120, 120, 118 - i, 115 - i, -50, 50, DARKGREY);
+                // Scroll indicator showing the position of the displayed files
+                // in the larger list of files.
+                // If there are at most three files, all are displayed, without
+                // a scroll indicator.
+                if (fileVector.size() > 3) {
+                    int width  = 8;
+                    int radius = width / 2;
+                    if (round_display) {
+                        for (int i = 0; i < width; i++) {
+                            canvas.drawArc(120, 120, 119 - i, 115 - i, -50, 50, DARKGREY);
+                        }
+
+                        int x, y;
+                        int arc_degrees = 100;
+                        int divisor     = fileVector.size() - 1;
+                        int increment   = arc_degrees / divisor;
+                        int start_angle = (arc_degrees / 2);
+                        int angle       = start_angle - (_selected_file * arc_degrees) / divisor;
+                        r_degrees_to_xy(114, angle, &x, &y);
+                        drawFilledCircle(Point(x - 1, y), radius + 2, LIGHTGREY);
+                    } else {
+                        int x            = display_short_side() - width;
+                        int height       = display_short_side() - 30;
+                        int inner_height = height - width;
+                        int middle       = inner_height / 2;
+                        int divisor      = fileVector.size() - 1;
+                        int y            = width + inner_height * _selected_file / divisor;
+                        drawRect(x - radius, radius, width + 2, height, radius, DARKGREY);
+                        drawFilledCircle(x, y, radius + 1, LIGHTGREY);
                     }
-
-                    int x, y;
-                    int arc_degrees = 100;
-                    int divisor     = fileVector.size() - 1;
-                    int increment   = arc_degrees / divisor;
-                    int start_angle = (arc_degrees / 2);
-                    int angle       = start_angle - (_selected_file * arc_degrees) / divisor;
-                    r_degrees_to_xy(114, angle, &x, &y);
-                    canvas.fillCircle(120 + x, 120 - y, 5, LIGHTGREY);
                 }
 
-                if (yo == 0) {
-                    auto top    = box[fi - 1];
-                    auto bottom = box[fi + 1];
-                    canvas.fillRoundRect(middle._xb, yo + middle._yb, middle._w, middle._h, middle._h / 2, middle._bg);
-                    text(fInfoT.c_str(), top._xt, yo + top._yt, finfoT_color, top._f, top_center);
-                    text(fInfoB.c_str(), bottom._xt, yo + bottom._yt, bottom._txt, bottom._f, top_center);
-                }
-            }  // if (fx == 1)
+                text(fInfoT.c_str(), Point(x_offset, type_offset), BLUE, SMALL, middle_center);
+                text(fInfoB.c_str(), Point(x_offset, size_offset), BLACK, TINY, middle_center);
 
-            if ((yo == 0) || (yo < 0 && yo + middle._yt > 45) || (yo > 0 && yo + middle._yt + middle._h < 202)) {
-                auto_text(fName, middle._xt, yo + middle._yt, middle._w, (yo) ? WHITE : middle_txt, middle._f, middle_center);
-            }
-            if (fx == 1) {
+                auto_text(fName, Point(x_offset, 0), fnlayout._w, tcolor, MEDIUM, middle_center);
+
 #ifdef WRAP_FILE_LIST
-                if (fileVector.size() > 2) {
+                if (fileVector.size() >= N_DISPLAYED_FILENAMES) {
                     continue;
                 }
 #endif
                 if (fdIter >= (int)(fileVector.size() - 1)) {
                     break;
                 }
+            } else {
+                int y_offset = offset * y_inc;
+                y_offset += (offset > 0) ? y_distance : -y_distance;
+                printf("y_offset %d\n", y_offset);
+                int width = big_width;
+                if (round_display) {
+                    // If the display is round, we need to reduce the width available
+                    // for filename display when we are off-center.
+                    // This is a one-term approximation for
+                    //   delta_width = 2 * half_width * (1 - cos(arcsin(y_offset/half_width)))
+                    // The first term of arcsin(x) is x and the first term of cos(x) is 1-x*x/2
+                    // so 2*h*(1 - cos(arcsin(y/h))
+                    // ~= 2*h**(1 - (1 - y*y/2*h*h))
+                    // = 2*h*(y*y/2*h*h)
+                    // = y*y/h
+                    int half_width  = width / 2;
+                    int delta_width = y_offset * y_offset / half_width;
+                    width -= delta_width;
+                }
+                auto_text(fName, Point(x_offset, y_offset), width, WHITE, SMALL, middle_center);
             }
-        }  // for(fx)
+        }  // for(display_slot)
         buttonLegends();
         drawStatusSmall(21);
         refreshDisplay();
@@ -265,23 +315,12 @@ public:
         }
 #endif
 
-        const int yinc   = updown * 10;
-        const int ylimit = 60;
-        int       yo     = yinc;
-
-#ifdef SMOOTH_SCROLL
-        while (abs(yo) < ylimit) {
-            showFiles(yo);
-            delay_ms(10);
-            yo -= yinc;
-        }
-#endif
         _selected_file = nextSelect;
-        showFiles(0);
+        showFiles();
     }
 
     void reDisplay() {
-        showFiles(0);
+        showFiles();
     }
 };
 FileSelectScene fileSelectScene;
