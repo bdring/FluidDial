@@ -75,3 +75,7 @@ void auto_text(const std::string& txt, int x, int y, int w, int color, fontnum_t
 
     text(s, x, y, color, fontnum, datum);
 }
+void auto_text(const std::string& txt, Point xy, int w, int color, fontnum_t fontnum, int datum, bool tryfonts, bool trimleft) {
+    Point dispxy = xy.to_display();
+    auto_text(txt, dispxy.x, dispxy.y, w, color, fontnum, datum, tryfonts, trimleft);
+}

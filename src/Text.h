@@ -26,6 +26,15 @@ void auto_text(const std::string& txt,
                bool               tryfonts = true,
                bool               trimleft = false);
 
+void auto_text(const std::string& txt,
+               Point              xy,
+               int                w,
+               int                color,
+               fontnum_t          fontnum  = MEDIUM,
+               int                datum    = middle_center,
+               bool               tryfonts = true,
+               bool               trimleft = false);
+
 void text(const char* msg, int x, int y, int color, fontnum_t fontnum = TINY, int datum = middle_center);
 void text(const std::string& msg, int x, int y, int color, fontnum_t fontnum = TINY, int datum = middle_center);
 
