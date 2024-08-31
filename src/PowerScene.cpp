@@ -32,7 +32,9 @@ public:
         esp_restart();
 #endif
     }
-    void onDialButtonPress() { pop_scene(); }
+    void onDialButtonPress() {
+        pop_scene();
+    }
     void reDisplay() {
         background();
 #ifdef ARDUINO
@@ -40,9 +42,9 @@ public:
 #else
         const char* greenLegend = "";
 #endif
-        text("Brightness:", 122, 90, LIGHTGREY, TINY, bottom_right);
-        text(intToCStr(_brightness), 126, 90, GREEN, TINY, bottom_left);
-        drawButtonLegends("Sleep", greenLegend, "Back");
+        text("Brightness:", { 2, -30 }, LIGHTGREY, TINY, bottom_right);
+        text(intToCStr(_brightness), { 6, -30 }, GREEN, TINY, bottom_left);
+        buttonLegends("Sleep", greenLegend, "Back");
         refreshDisplay();
     }
 

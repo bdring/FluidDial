@@ -98,8 +98,8 @@ public:
 
     friend bool operator==(Point const& a, Point const& b) { return a.x == b.x && a.y == b.y; }
 
-    Point to_display() const;
-    Point from_display() const;
+    //    Point to_display() const;
+    //    Point from_display() const;
 
     Point() : x(0), y(0) {}
 

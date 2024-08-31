@@ -17,7 +17,7 @@ void MacroItem::invoke(void* arg) {
         // doFileScreen(_name);
     }
 }
-void MacroItem::show(const Point& where) {
+void MacroItem::show(Area* area) {
     int color = WHITE;
 
     std::string extra(_filename);
@@ -28,11 +28,11 @@ void MacroItem::show(const Point& where) {
     }
 
     if (_highlighted) {
-        drawRect(where, Point { 200, 50 }, 15, color);
-        text(name(), where + Point { 0, 6 }, BLACK, MEDIUM, middle_center);
-        text(extra, where - Point { 0, 16 }, BLACK, TINY, middle_center);
+        area->drawRect(_position, Point { 200, 50 }, 15, color);
+        area->text(name(), _position + Point { 0, 6 }, BLACK, MEDIUM, middle_center);
+        area->text(extra, _position - Point { 0, 16 }, BLACK, TINY, middle_center);
     } else {
-        text(name(), where, WHITE, SMALL, middle_center);
+        area->text(name(), _position, WHITE, SMALL, middle_center);
     }
 }
 
@@ -92,37 +92,7 @@ public:
 
     void onTouchClick() { onGreenButtonPress(); }
 
-    void reDisplay() override {
-        menuBackground();
-        if (num_items() == 0) {
-            // Point where { 0, 0 };
-            // Point wh { 200, 45 };
-            // drawRect(where, wh, 20, YELLOW);
-            if (_error_string.length()) {
-                text(_error_string, 120, 120, WHITE, SMALL, middle_center);
-            } else {
-                text(_reading ? "Reading Macros" : "No Macros", { 0, 0 }, WHITE, SMALL, middle_center);
-            }
-        } else {
-            if (_selected > 1) {
-                _items[_selected - 2]->show({ 0, 80 });
-            }
-            if (_selected > 0) {
-                _items[_selected - 1]->show({ 0, 45 });
-            }
-            _items[_selected]->show({ 0, 0 });
-            if (_selected < num_items() - 1) {
-                _items[_selected + 1]->show({ 0, -45 });
-            }
-            if (_selected < num_items() - 2) {
-                _items[_selected + 2]->show({ 0, -80 });
-            }
-        }
-        buttonLegends();
-        refreshDisplay();
-    }
-
-    void buttonLegends() {
+    void myButtonLegends() {
         const char* orangeLabel = "";
         const char* grnLabel    = "";
 
@@ -133,7 +103,37 @@ public:
             }
         }
 
-        drawButtonLegends(_reading ? "" : "Refresh", grnLabel, orangeLabel);
+        buttonLegends(_reading ? "" : "Refresh", grnLabel, orangeLabel);
+    }
+
+    void reDisplay() override {
+        menuBackground();
+        if (num_items() == 0) {
+            // Point where { 0, 0 };
+            // Point wh { 200, 45 };
+            // drawRect(where, wh, 20, YELLOW);
+            if (_error_string.length()) {
+                text(_error_string, { 0, 0 }, WHITE, SMALL, middle_center);
+            } else {
+                text(_reading ? "Reading Macros" : "No Macros", { 0, 0 }, WHITE, SMALL, middle_center);
+            }
+        } else {
+            if (_selected > 1) {
+                _items[_selected - 2]->show(area(), { 0, 80 });
+            }
+            if (_selected > 0) {
+                _items[_selected - 1]->show(area(), { 0, 45 });
+            }
+            _items[_selected]->show(area(), { 0, 0 });
+            if (_selected < num_items() - 1) {
+                _items[_selected + 1]->show(area(), { 0, -45 });
+            }
+            if (_selected < num_items() - 2) {
+                _items[_selected + 2]->show(area(), { 0, -80 });
+            }
+        }
+        myButtonLegends();
+        refreshDisplay();
     }
 
     void rotate(int delta) override {
@@ -177,11 +177,11 @@ public:
                 int dx, dy;
                 r_degrees_to_xy(110, theta, &dx, &dy);
 
-                drawFilledCircle({ dx, dy }, 8, WHITE);
+                area()->drawFilledCircle({ dx, dy }, 8, WHITE);
             }
         }
         if (state != Idle) {
-            drawStatus();
+            status();
         }
 
         text("Macros", { 0, 100 }, YELLOW, SMALL);

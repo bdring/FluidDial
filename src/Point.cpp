@@ -4,11 +4,11 @@
 #include "Point.h"
 #include "System.h"
 
+#if 0
 Point Point::to_display() const {
-    int center = display_short_side() / 2;
-    return { center + x, center - y };
+    return { scene_area->w() / 2 + x, scene_area->h() / 2 - y };
 }
 Point Point::from_display() const {
-    int center = display_short_side() / 2;
-    return { x - center, center - y };
+    return { x - scene_area->w() / 2, scene_area->h() / 2 - y };
 }
+#endif

@@ -57,9 +57,9 @@ public:
 
     void reDisplay() {
         background();
-        drawPngBackground("/jogbg.png");
-        drawMenuTitle(current_scene->name());
-        drawStatus();
+        area()->drawPngBackground("/jogbg.png");
+        title();
+        status();
 
         if (state != Jog && _cancelling) {
             _cancelling = false;
@@ -67,7 +67,7 @@ public:
         if (_cancelling || _cancel_held) {
             centered_text("Jog Canceled", 120, RED, MEDIUM);
         } else {
-            DRO dro(16, 68, 210, 32);
+            DRO dro(area(), 16, 68, 210, 32);
             for (size_t axis = 0; axis < num_axes; axis++) {
                 dro.draw(axis, _dist_index[axis], selected(axis));
             }
@@ -82,7 +82,7 @@ public:
                         dialLegend += axisNumToChar(axis);
                     }
                 }
-                drawButtonLegends("Jog-", "Jog+", dialLegend.c_str());
+                buttonLegends("Jog-", "Jog+", dialLegend.c_str());
             }
         }
         refreshDisplay();
@@ -247,12 +247,12 @@ public:
         }
 
         // Convert from screen coordinates to 0,0 in the center
-        Point ctr = Point { touchX, touchY }.from_display();
+        Point ctr = area()->from_display(Point { touchX, touchY });
 
         int x = ctr.x;
         int y = ctr.y;
 
-        int center_radius = display_short_side() / 6;
+        int center_radius = area()->w() / 6;
 
         // Sense touches at top, bottom, left, and right
         if (std::abs(y) > std::abs(x)) {
@@ -288,9 +288,13 @@ public:
 #endif
     }
 
-    void onRightFlick() override { activate_scene(&fileSelectScene); }
+    void onRightFlick() override {
+        activate_scene(&fileSelectScene);
+    }
 
-    void onDialButtonPress() { zero_axes(); }
+    void onDialButtonPress() {
+        zero_axes();
+    }
 
     void start_mpg_jog(int delta) {
         // e.g. $J=G91F1000X-10000
@@ -344,13 +348,17 @@ public:
             start_button_jog(false);
         }
     }
-    void onGreenButtonRelease() { cancel_jog(); }
+    void onGreenButtonRelease() {
+        cancel_jog();
+    }
     void onRedButtonPress() {
         if (state == Idle) {
             start_button_jog(true);
         }
     }
-    void onRedButtonRelease() { cancel_jog(); }
+    void onRedButtonRelease() {
+        cancel_jog();
+    }
 
     void onEncoder(int delta) {
         if (delta != 0) {
@@ -358,8 +366,16 @@ public:
         }
     }
 
-    void onDROChange() { reDisplay(); }
-    void onLimitsChange() { reDisplay(); }
-    void onAlarm() { reDisplay(); }
-    void onExit() { cancel_jog(); }
+    void onDROChange() {
+        reDisplay();
+    }
+    void onLimitsChange() {
+        reDisplay();
+    }
+    void onAlarm() {
+        reDisplay();
+    }
+    void onExit() {
+        cancel_jog();
+    }
 } multiJogScene;

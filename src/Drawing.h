@@ -16,7 +16,8 @@ private:
     const int _text_inset = 5;
 
 protected:
-    int _y;
+    Area* _area;
+    int   _y;
 
     int text_left_x() { return _x + _text_inset; }
     int text_center_x() { return _x + _width / 2; }
@@ -25,7 +26,7 @@ protected:
     int widget_left_x() { return _x; }
 
 public:
-    Stripe(int x, int y, int width, int height, fontnum_t font);
+    Stripe(Area* area, int x, int y, int width, int height, fontnum_t font);
     void draw(const char* left, const char* right, bool highlighted, int left_color = WHITE);
     void draw(char left, const char* right, bool highlighted, int left_color = WHITE);
     void draw(const char* center, bool highlighted);
@@ -35,57 +36,26 @@ public:
 };
 class LED {
 private:
+    Area* _area;
+
     int _x;
     int _y;
     int _radius;
     int _gap;
 
 public:
-    LED(int x, int y, int radius, int gap) : _x(x), _y(y), _radius(radius), _gap(gap) {}
+    LED(Area* area, int x, int y, int radius, int gap) : _area(area), _x(x), _y(y), _radius(radius), _gap(gap) {}
     void draw(bool highlighted);
 };
 
 class DRO : public Stripe {
+private:
+    void putDigit(int& n, int x, int y, int color);
+    void fancyNumber(pos_t n, int n_decimals, int hl_digit, int x, int y, int text_color, int hl_text_color);
+
 public:
-    DRO(int x, int y, int width, int height) : Stripe(x, y, width, height, MEDIUM_MONO) {}
+    DRO(Area* area, int x, int y, int width, int height) : Stripe(area, x, y, width, height, MEDIUM_MONO) {}
     void draw(int axis, bool highlight);
     void draw(int axis, int hl_digit, bool highlight);
     void drawHoming(int axis, bool highlight, bool homed);
 };
-
-// draw stuff
-// Routines that take Point as an argument work in a coordinate
-// space where 0,0 is at the center of the display and +Y is up
-
-void drawBackground(int color);
-void drawStatus();
-void drawStatusTiny(int y);
-void drawStatusSmall(int y);
-
-void drawFilledCircle(int x, int y, int radius, int fillcolor);
-void drawFilledCircle(Point xy, int radius, int fillcolor);
-
-void drawCircle(int x, int y, int radius, int thickness, int outlinecolor);
-void drawCircle(Point xy, int radius, int thickness, int outlinecolor);
-
-void drawOutlinedCircle(int x, int y, int radius, int fillcolor, int outlinecolor);
-void drawOutlinedCircle(Point xy, int radius, int fillcolor, int outlinecolor);
-
-void drawRect(int x, int y, int width, int height, int radius, int bgcolor);
-void drawRect(Point xy, int width, int height, int radius, int bgcolor);
-void drawRect(Point xy, Point wh, int radius, int bgcolor);
-
-void drawOutlinedRect(int x, int y, int width, int height, int bgcolor, int outlinecolor);
-void drawOutlinedRect(Point xy, int width, int height, int bgcolor, int outlinecolor);
-
-void drawButtonLegends(const char* red, const char* green, const char* orange);
-void drawMenuTitle(const char* name);
-
-void drawPngFile(const char* filename, Point xy);
-void drawPngBackground(const char* filename);
-
-void refreshDisplay();
-
-void drawError();
-
-extern Point sprite_offset;

@@ -33,12 +33,13 @@ void                       init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 #    define MAROON TFT_MAROON
 #endif  // USE_LOVYANGFX
 
+#include "Area.h"
+
 #ifdef USE_M5
 #    include "M5Unified.h"
 #endif  // USE_M5
 
 extern LGFX_Device&     display;
-extern LGFX_Sprite      canvas;
 extern m5::Touch_Class& touch;
 
 void drawPngFile(const char* filename, int x, int y);
@@ -61,7 +62,7 @@ void resetFlowControl();
 
 extern bool round_display;
 
-void system_background();
+void system_background(Area*);
 
 bool screen_encoder(int x, int y, int& delta);
 bool screen_button_touched(bool pressed, int x, int y, int& button);

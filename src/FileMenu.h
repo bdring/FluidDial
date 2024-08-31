@@ -6,7 +6,7 @@
 class FileItem : public Item {
 private:
 public:
-    FileItem(const char* name) : Item(name) {}
+    FileItem(const char* name) : Item(name, nullptr) {}
     void invoke(void* arg) override {
         // doFileScreen(_name);
     }
@@ -32,7 +32,7 @@ public:
     void onGreenButtonPress() override;
     void reDisplay() override;
 
-    void buttonLegends();
+    void myButtonLegends();
     void rotate(int delta) override;
     int  touchedItem(int x, int y) override;
 

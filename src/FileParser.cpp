@@ -15,6 +15,13 @@
 
 extern Menu macroMenu;
 
+void addMacroItem(const std::string& name, const std::string& filename) {
+    macroMenu.addItem(new MacroItem { name.c_str(), filename });
+}
+void removeMacroItems() {
+    macroMenu.removeAllItems();
+}
+
 fileinfo              fileInfo;
 std::vector<fileinfo> fileVector;
 
@@ -119,7 +126,7 @@ public:
     void whitespace(char c) override {}
 
     void startDocument() override {}
-    void startArray() override { macroMenu.removeAllItems(); }
+    void startArray() override { removeMacroItems(); }
     void startObject() override {
         _name.clear();
         _target.clear();
@@ -157,7 +164,8 @@ public:
         } else {
             return;
         }
-        macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
+        addMacroItem(_name, _filename);
+        // macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
     }
 
     void endDocument() override {
@@ -180,7 +188,7 @@ public:
     void whitespace(char c) override {}
 
     void startDocument() override {}
-    void startArray() override { macroMenu.removeAllItems(); }
+    void startArray() override { removeMacroItems(); }
     void startObject() override {
         if (++_level = 2) {
             _name.clear();
@@ -224,7 +232,8 @@ public:
             } else {
                 return;
             }
-            macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
+            addMacroItem(_name, _filename);
+            // macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
             return;
         }
     }
@@ -250,7 +259,7 @@ public:
     void startDocument() override {}
     void startArray() override {
         if (_in_macros_section) {
-            macroMenu.removeAllItems();
+            removeMacroItems();
         }
     }
     void endArray() override {
@@ -308,7 +317,8 @@ public:
             } else {
                 return;
             }
-            macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
+            addMacroItem(_name, _filename);
+            // macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
             return;
         }
         if (_level == 0) {

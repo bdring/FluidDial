@@ -132,10 +132,10 @@ public:
 
     void reDisplay() {
         background();
-        drawMenuTitle(current_scene->name());
-        drawStatus();
+        title();
+        status();
 
-        DRO dro(16, 68, 210, 32);
+        DRO dro(area(), 16, 68, 210, 32);
         dro.draw(0, -1, true);
         dro.draw(1, -1, true);
         dro.draw(2, -1, true);
@@ -145,10 +145,10 @@ public:
             int width  = 192;
             int height = 10;
             if (myPercent > 0) {
-                drawRect(20, y, width, height, 5, LIGHTGREY);
+                area()->drawRect(20, y, width, height, 5, LIGHTGREY);
                 width = (width * myPercent) / 100;
                 if (width > 0) {
-                    drawRect(20, y, width, height, 5, GREEN);
+                    area()->drawRect(20, y, width, height, 5, GREEN);
                 }
             }
             // Feed override
@@ -205,7 +205,7 @@ public:
             case Idle:
                 break;
         }
-        drawButtonLegends(redLabel, grnLabel, yellowLabel);
+        buttonLegends(redLabel, grnLabel, yellowLabel);
 
         refreshDisplay();
     }

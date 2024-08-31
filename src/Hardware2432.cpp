@@ -8,6 +8,7 @@
 #include "Hardware2432.hpp"
 #include "Drawing.h"
 #include "NVS.h"
+#include "Scene.h"
 
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
@@ -18,7 +19,6 @@ m5::Touch_Class& touch = xtouch;
 // m5::Button_Class&  dialButton = M5.BtnB;
 LGFX         xdisplay;
 LGFX_Device& display = xdisplay;
-LGFX_Sprite  canvas(&xdisplay);
 
 #ifdef DEBUG_TO_USB
 Stream& debugPort = Serial;
@@ -30,6 +30,8 @@ const int n_buttons = 3;
 const int button_w  = 80;
 const int button_h  = 80;
 const int sprite_wh = 240;
+
+Area xscene_area(&xdisplay, 8, 0, 0, sprite_wh, sprite_wh);
 
 int button_colors[] = { RED, YELLOW, GREEN };
 class Layout {
@@ -72,11 +74,10 @@ Layout layouts[] = {
 Layout* layout;
 int     layout_num = 0;
 
-Point sprite_offset;
-void  set_layout(int n) {
-     layout = &layouts[n];
-     display.setRotation(layout->rotation());
-     sprite_offset = layout->spritePosition;
+void set_layout(int n) {
+    layout = &layouts[n];
+    display.setRotation(layout->rotation());
+    scene_area->set_xy(layout->spritePosition);
 }
 
 nvs_handle_t hw_nvs;
@@ -86,6 +87,7 @@ void init_hardware() {
     nvs_get_i32(hw_nvs, "layout", &layout_num);
 
     display.init();
+    scene_area = &xscene_area;
     set_layout(layout_num);
 
     touch.begin(&display);
@@ -113,7 +115,7 @@ void drawButton(int n) {
 void base_display() {
     display.clear();
     display.drawPngFile(
-        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+        LittleFS, "/fluid_dial.png", scene_area->x(), scene_area->y(), scene_area->w(), scene_area->h(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
     // On-screen buttons
     for (int i = 0; i < 3; i++) {
         drawButton(i);
@@ -132,8 +134,8 @@ void next_layout(int delta) {
     base_display();
 }
 
-void system_background() {
-    drawBackground(BLACK);
+void system_background(Area* area) {
+    area->drawBackground(BLACK);
 }
 
 bool switch_button_touched(bool& pressed, int& button) {
@@ -185,7 +187,6 @@ bool screen_button_touched(bool pressed, int x, int y, int& button) {
 void update_events() {
     auto ms = lgfx::millis();
     if (touch.isEnabled()) {
-
         if (touch_debounce) {
             if ((ms - touch_timeout) < 0) {
                 return;

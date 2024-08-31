@@ -37,7 +37,7 @@ public:
     void onStateChange(state_t old_state) { reDisplay(); }
     void reDisplay() {
         background();
-        drawStatus();
+        status();
 
         const int key_x     = 118;
         const int val_x     = 122;
@@ -71,9 +71,9 @@ public:
             }
         }
 
-        drawMenuTitle(current_scene->name());
-        drawButtonLegends("", "", "Menu");
-        drawError();  // if there is one
+        title();
+        buttonLegends("", "", "Menu");
+        showError();  // if there is one
         refreshDisplay();
     }
 };

@@ -88,7 +88,7 @@ public:
 
     void reDisplay() {
         background();
-        drawMenuTitle(name());
+        title();
 
         const char* grnLabel = "";
         const char* redLabel = "";
@@ -99,16 +99,16 @@ public:
                 int tl = 0;
                 if (_lines.size()) {
                     for (auto const& entry : _lines) {
-                        text(entry.second.c_str(), 25, y + tl * 22, WHITE, TINY, top_left);
+                        text(entry.second, 25, y + tl * 22, WHITE, TINY, top_left);
                         ++tl;
                     }
                 } else {
-                    text("Empty File", 120, 120, WHITE, SMALL, middle_center);
+                    text("Empty File", { 0, 0 }, WHITE, SMALL, middle_center);
                 }
             } else if (_error_string.length()) {
-                text(_error_string, 120, 120, WHITE, SMALL, middle_center);
+                text(_error_string, { 0, 0 }, WHITE, SMALL, middle_center);
             } else {
-                text("Reading File", 120, 120, WHITE, TINY, middle_center);
+                text("Reading File", { 0, 0 }, WHITE, TINY, middle_center);
             }
             grnLabel = "Run";
             redLabel = "Back";
@@ -117,8 +117,8 @@ public:
             centered_text("File Preview", 145, WHITE, SMALL);
         }
 
-        drawButtonLegends(redLabel, grnLabel, "Back");
-        drawStatusSmall(21);
+        buttonLegends(redLabel, grnLabel, "Back");
+        statusSmall(21);
         refreshDisplay();
     }
 };

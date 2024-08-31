@@ -43,9 +43,9 @@ void FileItem::show(const Point& where) {
     if (_highlighted) {
         Point wh { 200, 45 };
         drawRect(where, wh, 20, color);
-        text(s.c_str(), where, BLACK, TINY, middle_center);
+        text(s, where, BLACK, TINY, middle_center);
     } else {
-        text(s.c_str(), where, WHITE, TINY, middle_center);
+        text(s, where, WHITE, TINY, middle_center);
     }
 }
 
@@ -102,24 +102,24 @@ void FileMenu::reDisplay() {
         text("No Files", where, BLACK, MEDIUM, middle_center);
     } else {
         if (_selected > 1) {
-            _items[_selected - 2]->show({ 0, 70 });
+            _items[_selected - 2]->show(area(), { 0, 70 });
         }
         if (_selected > 0) {
-            _items[_selected - 1]->show({ 0, 40 });
+            _items[_selected - 1]->show(area(), { 0, 40 });
         }
         dbg_println(selected_name());
-        _items[_selected]->show({ 0, 0 });
+        _items[_selected]->show(area(), { 0, 0 });
         if (_selected < num_items() - 1) {
-            _items[_selected + 1]->show({ 0, -40 });
+            _items[_selected + 1]->show(area(), { 0, -40 });
         }
         if (_selected < num_items() - 2) {
-            _items[_selected + 2]->show({ 0, -70 });
+            _items[_selected + 2]->show(area(), { 0, -70 });
         }
     }
-    buttonLegends();
+    myButtonLegends();
     refreshDisplay();
 }
-void FileMenu::buttonLegends() {
+void FileMenu::myButtonLegends() {
     const char* grnLabel = "";
     const char* redLabel = "";
 
@@ -131,7 +131,7 @@ void FileMenu::buttonLegends() {
         }
     }
 
-    drawButtonLegends(redLabel, grnLabel, "Back");
+    buttonLegends(redLabel, grnLabel, "Back");
 }
 
 void FileMenu::rotate(int delta) {
@@ -161,7 +161,7 @@ int FileMenu::touchedItem(int x, int y) {
 
 void FileMenu::menuBackground() {
     background();
-    drawPngBackground("/filesbg.png");
+    area()->drawPngBackground("/filesbg.png");
 
     text(dirName, { 0, 100 }, YELLOW, MEDIUM);
 
@@ -173,7 +173,7 @@ void FileMenu::menuBackground() {
         int dx, dy;
         r_degrees_to_xy(110, theta, &dx, &dy);
 
-        drawFilledCircle({ dx, dy }, 8, WHITE);
+        area()->drawFilledCircle({ dx, dy }, 8, WHITE);
     }
 }
 

@@ -3,12 +3,14 @@
 
 #include "Scene.h"
 #include "System.h"
+#include "alarm.h"
 
 #ifndef ARDUINO
 #    include <sys/stat.h>
 #    include <sys/types.h>
 #endif
 #include <vector>
+#include <map>
 
 extern Scene homingScene;
 extern Scene statusScene;
@@ -49,11 +51,11 @@ Scene* parent_scene() {
     return scene_stack.size() ? scene_stack.back() : nullptr;
 }
 
-bool touchIsCenter() {
+bool Scene::touchIsCenter() {
     // Convert from screen coordinates to 0,0 in the center
-    Point ctr = Point { touchX, touchY }.from_display();
+    Point ctr = area()->from_display(Point { touchX, touchY });
 
-    int center_radius = display_short_side() / 6;
+    int center_radius = area()->w() / 6;
 
     return (ctr.x * ctr.x + ctr.y * ctr.y) < (center_radius * center_radius);
 }
@@ -85,17 +87,20 @@ void dispatch_button(bool pressed, int button) {
             break;
     }
 }
+bool auxiliary_touch(int x, int y);
+
 void dispatch_touch() {
     static m5::touch_state_t last_touch_state = {};
 
     auto t = touch.getDetail();
     if (t.state != last_touch_state) {
         last_touch_state = t.state;
-        touchX           = t.x - sprite_offset.x;
-        touchY           = t.y - sprite_offset.y;
         int delta;
         if (screen_encoder(t.x, t.y, delta) && t.state == m5::touch_state_t::touch) {
             current_scene->onEncoder(delta);
+            return;
+        }
+        if (t.state == m5::touch_state_t::touch && auxiliary_touch(t.x, t.y)) {
             return;
         }
         int button;
@@ -107,6 +112,8 @@ void dispatch_touch() {
             }
             return;
         }
+        touchX = t.x - scene_area->x();
+        touchY = t.y - scene_area->y();
         if (touchX < 0) {
             return;
         }
@@ -177,9 +184,10 @@ void dispatch_events() {
         if (state != Disconnected) {
             set_disconnected_state();
             extern Scene menuScene;
-            activate_at_top_level(&menuScene);
+            //            activate_at_top_level(&menuScene);
         }
     }
+
     if (action) {
         action();
         action = nullptr;
@@ -243,9 +251,120 @@ int Scene::scale_encoder(int delta) {
 }
 
 void Scene::background() {
-    system_background();
+    system_background(area());
 }
 
 void act_on_state_change() {
     current_scene->onStateChange(previous_state);
 }
+
+#define PUSH_BUTTON_LINE 212
+#define DIAL_BUTTON_LINE 228
+
+static int side_button_line() {
+    return round_display ? PUSH_BUTTON_LINE : DIAL_BUTTON_LINE;
+}
+
+void Scene::title() {
+    centered_text(name(), 12, WHITE);
+}
+
+// This shows on the display what the button currently do.
+void Scene::buttonLegends(const char* red, const char* green, const char* orange) {
+    text(red, round_display ? 50 : 10, side_button_line(), RED, TINY, middle_left);
+    text(green, area()->w() - (round_display ? 50 : 10), side_button_line(), GREEN, TINY, middle_right);
+    centered_text(orange, DIAL_BUTTON_LINE, ORANGE);
+}
+
+void Scene::showError() {
+    if (lastError) {
+        if ((milliseconds() - errorExpire) < 0) {
+            area()->drawFilledCircle(Point { 0, 0 }, 95, RED);
+            area()->drawCircle(Point { 0, 0 }, 95, 5, WHITE);
+            centered_text("Error", { 0, -25 }, WHITE, MEDIUM);
+            centered_text(decode_error_number(lastError), { 0, 10 }, WHITE, TINY);
+        } else {
+            lastError = 0;
+        }
+    }
+}
+
+// clang-format off
+// We use 1 to mean no background
+// 1 is visually indistinguishable from black so losing that value is unimportant
+#define NO_BG 1
+
+std::map<state_t, int> stateBGColors = {
+    { Idle,         NO_BG },
+    { Alarm,        RED },
+    { CheckMode,    WHITE },
+    { Homing,       NO_BG },
+    { Cycle,        NO_BG },
+    { Hold,         YELLOW },
+    { Jog,          NO_BG },
+    { DoorOpen,     RED },
+    { DoorClosed,   YELLOW },
+    { GrblSleep,    WHITE },
+    { ConfigAlarm,  WHITE },
+    { Critical,     WHITE },
+    { Disconnected, RED },
+};
+std::map<state_t, int> stateFGColors = {
+    { Idle,         LIGHTGREY },
+    { Alarm,        BLACK },
+    { CheckMode,    BLACK },
+    { Homing,       CYAN },
+    { Cycle,        GREEN },
+    { Hold,         BLACK },
+    { Jog,          CYAN },
+    { DoorOpen,     BLACK },
+    { DoorClosed,   BLACK },
+    { GrblSleep,    BLACK },
+    { ConfigAlarm,  BLACK },
+    { Critical,     BLACK },
+    { Disconnected, BLACK },
+};
+// clang-format on
+
+void Scene::status() {
+    static constexpr int x      = 100;
+    static constexpr int y      = 24;
+    static constexpr int width  = 140;
+    static constexpr int height = 36;
+
+    int bgColor = stateBGColors[state];
+    if (bgColor != 1) {
+        area()->drawRect((area()->w() - width) / 2, y, width, height, 5, bgColor);
+    }
+    int fgColor = stateFGColors[state];
+    if (state == Alarm) {
+        centered_text(my_state_string, y + height / 2 - 4, fgColor, SMALL);
+        centered_text(alarm_name_short[lastAlarm], y + height / 2 + 12, fgColor);
+    } else {
+        centered_text(my_state_string, y + height / 2 + 3, fgColor, MEDIUM);
+    }
+}
+
+void Scene::statusTiny(int y) {
+    static constexpr int width  = 90;
+    static constexpr int height = 20;
+
+    int bgColor = stateBGColors[state];
+    if (bgColor != 1) {
+        area()->drawRect((area()->w() - width) / 2, y, width, height, 5, bgColor);
+    }
+    centered_text(my_state_string, y + height / 2 + 3, stateFGColors[state], TINY);
+}
+
+void Scene::statusSmall(int y) {
+    static constexpr int width  = 90;
+    static constexpr int height = 25;
+
+    int bgColor = stateBGColors[state];
+    if (bgColor != 1) {
+        area()->drawRect((area()->w() - width) / 2, y, width, height, 5, bgColor);
+    }
+    centered_text(my_state_string, y + height / 2 + 3, stateFGColors[state], SMALL);
+}
+
+Area* scene_area;

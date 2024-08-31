@@ -7,21 +7,22 @@
 
 void do_nothing(void* foo) {}
 
-void RoundButton::show(const Point& where) {
-    drawOutlinedCircle(where, _radius, _highlighted ? _hl_fill_color : _fill_color, _highlighted ? _hl_outline_color : _outline_color);
-    text(name().substr(0, 1), where, _highlighted ? MAROON : WHITE, MEDIUM);
+void RoundButton::show(Area* area) {
+    area->drawOutlinedCircle(
+        _position, _radius, _highlighted ? _hl_fill_color : _fill_color, _highlighted ? _hl_outline_color : _outline_color);
+    area->text(name().substr(0, 1), _position, _highlighted ? MAROON : WHITE, MEDIUM);
 }
-void ImageButton::show(const Point& where) {
+void ImageButton::show(Area* area) {
     if (_highlighted) {
-        drawFilledCircle(where, _radius + 3, _disabled ? DARKGREY : _outline_color);
+        area->drawFilledCircle(_position, _radius + 3, _disabled ? DARKGREY : _outline_color);
     } else {
-        drawFilledCircle(where, _radius - 2, _disabled ? DARKGREY : LIGHTGREY);
+        area->drawFilledCircle(_position, _radius - 2, _disabled ? DARKGREY : LIGHTGREY);
     }
-    drawPngFile(_filename, where);
+    area->drawPngFile(_filename, _position);
 }
-void RectangularButton::show(const Point& where) {
-    drawOutlinedRect(where, _width, _height, _highlighted ? BLUE : _outline_color, _bg_color);
-    text(_text, where, _text_color, SMALL);
+void RectangularButton::show(Area* area) {
+    area->drawOutlinedRect(_position, _width, _height, _highlighted ? BLUE : _outline_color, _bg_color);
+    area->text(_text, _position, _text_color, SMALL);
 }
 
 void Menu::removeAllItems() {
@@ -29,7 +30,6 @@ void Menu::removeAllItems() {
         delete item;
     }
     _items.clear();
-    _positions.clear();
     _num_items = 0;
 }
 

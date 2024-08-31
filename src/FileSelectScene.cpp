@@ -110,7 +110,7 @@ public:
         // now just need to know what to do with messages
     }
 
-    void buttonLegends() {
+    void myButtonLegends() {
         const char* grnLabel = "";
         const char* redLabel = "";
 
@@ -121,7 +121,7 @@ public:
             }
         }
 
-        drawButtonLegends(redLabel, grnLabel, "Back");
+        buttonLegends(redLabel, grnLabel, "Back");
     }
 
     // The number of filenames that can be displayed at once.
@@ -149,7 +149,7 @@ public:
     int y_inc      = 18;
 
     // Offsets the x position to account for the scroll indicator on the right
-    static const int big_width = 225;  // display_short_size() - scroll_width * 2
+    static const int big_width = 225;  // area()->w() - scroll_width * 2
 
     static const int x_offset = -7;  // - scroll_width
 
@@ -170,10 +170,8 @@ public:
     void onRightFlick() { activate_scene(&jogScene); }
 
     void showFiles() {
-        // canvas.createSprite(240, 240);
-        // drawBackground(BLACK);
         background();
-        drawMenuTitle(current_scene->name());
+        title();
         std::string fName;
 
         int fdIter = _selected_file - 1;  // first file in display list
@@ -204,7 +202,7 @@ public:
             int offset      = middle_slot - display_slot;
             if (offset == 0) {
                 int tcolor = BLACK;
-                drawRect(Point(x_offset, 0), big_width, big_height, big_height * 45 / 100, LIGHTGREY);
+                drawRect(Point(x_offset, 0), Point(big_width, big_height), big_height * 45 / 100, LIGHTGREY);
 
                 std::string fInfoT = "";  // file info top line
                 std::string fInfoB = "";  // File info bottom line
@@ -232,7 +230,7 @@ public:
                     int radius = width / 2;
                     if (round_display) {
                         for (int i = 0; i < width; i++) {
-                            canvas.drawArc(120, 120, 119 - i, 115 - i, -50, 50, DARKGREY);
+                            area()->drawArc(Point { 0, 0 }, 119 - i, 115 - i, -50, 50, DARKGREY);
                         }
 
                         int x, y;
@@ -242,21 +240,21 @@ public:
                         int start_angle = (arc_degrees / 2);
                         int angle       = start_angle - (_selected_file * arc_degrees) / divisor;
                         r_degrees_to_xy(114, angle, &x, &y);
-                        drawFilledCircle(Point(x - 1, y), radius + 2, LIGHTGREY);
+                        area()->drawFilledCircle(Point(x - 1, y), radius + 2, LIGHTGREY);
                     } else {
-                        int x            = display_short_side() - width;
-                        int height       = display_short_side() - 30;
+                        int x            = area()->w() - width;
+                        int height       = area()->h() - 30;
                         int inner_height = height - width;
                         int middle       = inner_height / 2;
                         int divisor      = fileVector.size() - 1;
                         int y            = width + inner_height * _selected_file / divisor;
-                        drawRect(x - radius, radius, width + 2, height, radius, DARKGREY);
-                        drawFilledCircle(x, y, radius + 1, LIGHTGREY);
+                        area()->drawRect(x - radius, radius, width + 2, height, radius, DARKGREY);
+                        area()->drawFilledCircle(x, y, radius + 1, LIGHTGREY);
                     }
                 }
 
-                text(fInfoT.c_str(), Point(x_offset, type_offset), BLUE, SMALL, middle_center);
-                text(fInfoB.c_str(), Point(x_offset, size_offset), BLACK, TINY, middle_center);
+                text(fInfoT, Point(x_offset, type_offset), BLUE, SMALL, middle_center);
+                text(fInfoB, Point(x_offset, size_offset), BLACK, TINY, middle_center);
 
                 auto_text(fName, Point(x_offset, 0), fnlayout._w, tcolor, MEDIUM, middle_center);
 
@@ -271,7 +269,6 @@ public:
             } else {
                 int y_offset = offset * y_inc;
                 y_offset += (offset > 0) ? y_distance : -y_distance;
-                printf("y_offset %d\n", y_offset);
                 int width = big_width;
                 if (round_display) {
                     // If the display is round, we need to reduce the width available
@@ -290,8 +287,8 @@ public:
                 auto_text(fName, Point(x_offset, y_offset), width, WHITE, SMALL, middle_center);
             }
         }  // for(display_slot)
-        buttonLegends();
-        drawStatusSmall(21);
+        myButtonLegends();
+        statusSmall(21);
         refreshDisplay();
     }
 

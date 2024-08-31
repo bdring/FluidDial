@@ -9,38 +9,71 @@
 
 #include "System.h"
 #include "FluidNCModel.h"
-#include "M5GFX.h"
 #include "Drawing.h"
 #include "NVS.h"
-#include "Scene.h"
+#include "Area.h"
+#include "VMenu.h"
+
+#define LGFX_AUTODETECT
+#include <LovyanGFX.h>
+#include <LGFX_AUTODETECT.hpp>
 
 #include <windows.h>
 #include <commctrl.h>
 #include <direct.h>
 
-LGFX_Device& display = M5.Display;
+m5::Touch_Class  xtouch;
+m5::Touch_Class& touch = xtouch;
+LGFX             xdisplay(800, 480, 1);
+LGFX_Device&     display = xdisplay;
 
-Area xscene_area((LovyanGFX*)&display, 16, 0, 0, 240, 240);
+bool round_display = false;
 
-m5::Speaker_Class& speaker     = M5.Speaker;
-m5::Touch_Class&   touch       = M5.Touch;
-m5::Button_Class&  dialButton  = M5.BtnB;
-m5::Button_Class&  greenButton = M5.BtnC;
-m5::Button_Class&  redButton   = M5.BtnA;
+const int n_buttons    = 3;
+const int button_w     = 160;
+const int button_h     = 160;
+const int button_inset = 20;
+const int scene_wh     = 240;
+const int scene_inset  = 80;
 
-bool round_display = true;
+const int stripe_w = 800 - 240;
+
+#if 0
+Area xscene_area(&xdisplay, 16, scene_inset, 0, scene_wh, scene_wh);
+
+Area vmenu_area(&xdisplay, 16, 0, 0, 70, 480);
+
+//LGFX_Sprite button_sprite(xdisplay);
+// Area        button_area(&button_sprite, scene_inset + scene_wh, 0, button_w, scene_wh);
+#else
+// clang-format off
+Area        xscene_area0(&xdisplay, 16, scene_inset,         0, scene_wh, scene_wh);
+Area        xscene_area1(&xdisplay, 16, scene_inset + 240,   0, scene_wh, scene_wh);
+Area        xscene_area2(&xdisplay, 16, scene_inset + 480,   0, scene_wh, scene_wh);
+Area        xscene_area3(&xdisplay, 16, scene_inset,       240, scene_wh, scene_wh);
+Area        xscene_area4(&xdisplay, 16, scene_inset + 240, 240, scene_wh, scene_wh);
+Area        xscene_area5(&xdisplay, 16, scene_inset + 480, 240, scene_wh, scene_wh);
+
+Area vmenu_area(&xdisplay, 16, 0, 0, 70, 480);
+// clang-format on
+#endif
+
+constexpr const int button_x = 800 - button_w;
+
+Area button_areas[3] = {
+    { nullptr, 0, button_x, 0 * button_h, button_w, button_h },
+    { nullptr, 0, button_x, 1 * button_h, button_w, button_h },
+    { nullptr, 0, button_x, 2 * button_h, button_w, button_h },
+};
+
+int button_colors[] = { RED, YELLOW, GREEN };
 
 void system_background(Area* area) {
-    area->drawPngFile("PCBackground.png", 0, 0);
-}
-
-void update_events() {
-    lgfx::Panel_sdl::loop();
-    M5.update();
+    area->drawOutlinedRect(0, 0, area->w(), area->h(), BLACK, WHITE);
 }
 
 extern "C" int milliseconds() {
-    return m5gfx::millis();
+    return lgfx::millis();
 }
 
 void delay_ms(uint32_t ms) {
@@ -52,7 +85,7 @@ void Area::drawPngFile(const char* filename, int x, int y) {
     fn += filename;
     // When datum is middle_center, the origin is the center of the area and the
     // +Y direction is down.
-    _sprite->drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
+    sprite()->drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
 #define TIOCM_LE 0x001
@@ -252,12 +285,18 @@ extern char* comname;
 
 HANDLE hFNC;
 
+nvs_handle_t hw_nvs;
+
 void init_system() {
     lgfx::Panel_sdl::setup();
 
-    auto cfg = M5.config();
-    M5.begin(cfg);
+    hw_nvs = nvs_init("hardware");
 
+    scene_area = &xscene_area0;
+
+    display.init();
+
+    touch.begin(&display);
     hFNC = serial_open_com(comname);
     if (hFNC == INVALID_HANDLE_VALUE) {
         dbg_printf("Can't open %s\n", comname);
@@ -267,21 +306,29 @@ void init_system() {
         serial_set_baud(hFNC, 115200);
     }
 
-    scene_area = &xscene_area;
-
     // Draw the logo screen
     display.clear();
-    speaker.setVolume(255);
 }
 
-Point sprite_offset { 0, 0 };
+void drawButton(int n) {
+#if 0
+    Area& button = button_areas[n];
+    int   w      = button.w() - 2 * button_inset;
+    int   h      = button.h() - 2 * button_inset;
+    display.fillRoundRect(button.x() + button_inset, button.y() + button_inset, w, h, button_inset, button_colors[n]);
+    printf("Button %d x %d y %d\n", n, button.x(), button.y());
+#endif
+}
 
 void base_display() {
     display.clear();
+    // On-screen buttons
+    for (int i = 0; i < n_buttons; i++) {
+        drawButton(i);
+    }
 }
 
-void next_layout(int delta) {}
-
+void next_layout(int n) {}
 void resetFlowControl() {}
 
 extern "C" void fnc_putchar(uint8_t c) {
@@ -320,88 +367,65 @@ static bool outside_of_circle(int& x, int& y) {
     int magsq = x * x + y * y;
     return magsq > (120 * 120);
 }
+
 bool screen_encoder(int x, int y, int& delta) {
-    if (!outside_of_circle(x, y)) {
-        return false;
-    }
-    if (y >= 0) {
-        // The encoder area is the top half of the screen so
-        // if we are in the bottom half, return 0.
-        return false;
-    }
-
-    int tangent = y * 100 / x;
-    if (tangent < 0) {
-        tangent = -tangent;
-    }
-    delta = 4;
-    if (tangent > 172) {  // tan(60)*100
-        delta = 1;
-    } else if (tangent > 100) {  // tan(45)*100
-        delta = 2;
-    } else if (tangent > 58) {  // tan(30)*100
-        delta = 3;
-    }
-    if (x < 0) {
-        delta = -delta;
-    }
-    return true;
-}
-
-bool screen_button_touched(bool pressed, int x, int y, int& button) {
-    if (!outside_of_circle(x, y)) {
-        return false;
-    }
-    if (x <= -90) {
-        button = 0;
-    } else if (x >= 90) {
-        button = 2;
-    } else {
-        button = 1;
-    }
-    return true;
+    return false;
 }
 
 bool switch_button_touched(bool& pressed, int& button) {
-    if (redButton.wasPressed()) {
-        button  = 0;
-        pressed = true;
-        return true;
-    }
-    if (redButton.wasReleased()) {
-        button  = 0;
-        pressed = false;
-        return true;
-    }
-    if (dialButton.wasPressed()) {
-        button  = 1;
-        pressed = true;
-        return true;
-    }
-    if (dialButton.wasReleased()) {
-        button  = 1;
-        pressed = false;
-        return true;
-    }
-    if (greenButton.wasPressed()) {
-        button  = 2;
-        pressed = true;
-        return true;
-    }
-    if (greenButton.wasReleased()) {
-        button  = 2;
-        pressed = false;
-        return true;
+    return false;
+}
+
+bool hit(int button_num, int x, int y) {
+    Point local;
+    return button_areas[button_num].is_inside(Point(x, y), local);
+}
+
+struct button_debounce_t {
+    bool    debouncing;
+    bool    skipped;
+    int32_t timeout;
+} debounce[n_buttons] = { { false, false, 0 } };
+
+bool    touch_debounce = false;
+int32_t touch_timeout  = 0;
+
+extern VMenu vmenu;
+
+bool auxiliary_touch(int x, int y) {
+    return vmenu.is_touched(x, y);
+}
+
+bool screen_button_touched(bool pressed, int x, int y, int& button) {
+    for (int i = 0; i < n_buttons; i++) {
+        if (hit(i, x, y)) {
+            button = i;
+            if (!pressed) {
+                touch_debounce = true;
+                touch_timeout  = milliseconds() + 100;
+            }
+            printf("Screen button hit %d\n", i);
+            return true;
+        }
     }
     return false;
 }
 
-bool auxiliary_touch(int x, int y) {
-    return false;
+void update_events() {
+    lgfx::Panel_sdl::loop();
+    auto ms = lgfx::millis();
+    if (touch.isEnabled()) {
+        if (touch_debounce) {
+            if ((ms - touch_timeout) < 0) {
+                return;
+            }
+            touch_debounce = false;
+        }
+        touch.update(ms);
+    }
 }
-void ackBeep() {
-    speaker.tone(1800, 50);
-}
+
+void ackBeep() {}
 
 void deep_sleep() {}
 

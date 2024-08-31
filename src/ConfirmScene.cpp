@@ -14,10 +14,11 @@ public:
     void onEntry(void* arg) { _msg = (const char*)arg; }
     void reDisplay() {
         background();
-        canvas.fillRoundRect(10, 90, 220, 60, 15, YELLOW);
-        centered_text(_msg.c_str(), 120, BLACK, MEDIUM);
+        Point center { 0, 0 };
+        drawRect(center, Point { 220, 60 }, 15, YELLOW);
+        centered_text(_msg, center, BLACK, MEDIUM);
 
-        drawButtonLegends("No", "Yes", "Back");
+        buttonLegends("No", "Yes", "Back");
 
         refreshDisplay();
     }

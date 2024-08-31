@@ -19,7 +19,7 @@ void PieMenu::calculatePositions() {
         angle -= dtheta;
     }
 
-    int layout_radius = display_short_side() / 2 - _item_radius - 3;
+    int layout_radius = area()->w() / 2 - _item_radius - 3;
     angle             = 90;
     for (size_t i = 0; i < num_items(); i++) {
         int x, y;
@@ -32,14 +32,14 @@ void PieMenu::calculatePositions() {
 
 int PieMenu::touchedItem(int x, int y) {
     // Convert from screen coordinates to 0,0 in the center
-    Point ctr = Point { x, y }.from_display();
+    Point ctr = area()->from_display(Point { x, y });
 
     fnc_realtime(StatusReport);  // used to update if status is out of sync
 
     x = ctr.x;
     y = ctr.y;
 
-    int dead_radius = display_short_side() / 2 - _item_radius * 2;
+    int dead_radius = area()->w() / 2 - _item_radius * 2;
 
     if ((x * x + y * y) < (dead_radius * dead_radius)) {
         return -1;  // In middle dead zone
@@ -71,7 +71,7 @@ int PieMenu::touchedItem(int x, int y) {
 void PieMenu::menuBackground() {
     background();
     text(selectedItem()->name(), { 0, -15 }, WHITE, SMALL);
-    drawStatusSmall(90);
+    statusSmall(90);
 }
 
 void PieMenu::onTouchFlick() {

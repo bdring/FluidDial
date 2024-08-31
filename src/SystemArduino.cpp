@@ -6,6 +6,7 @@
 #include "System.h"
 #include "FluidNCModel.h"
 #include "NVS.h"
+#include "Scene.h"
 
 #include <Esp.h>  // ESP.restart()
 
@@ -64,12 +65,12 @@ extern "C" void poll_extra() {
 #endif
 }
 
-void drawPngFile(const char* filename, int x, int y) {
-    // When datum is middle_center, the origin is the center of the canvas and the
+void Area::drawPngFile(const char* filename, int x, int y) {
+    // When datum is middle_center, the origin is the center of the area and the
     // +Y direction is down.
     std::string fn { "/" };
     fn += filename;
-    canvas.drawPngFile(LittleFS, fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
+    _sprite->drawPngFile(LittleFS, fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
 #define FORMAT_LITTLEFS_IF_FAILED true
@@ -78,6 +79,10 @@ void drawPngFile(const char* filename, int x, int y) {
 #ifndef FNC_BAUD
 #    define FNC_BAUD 115200
 #endif
+
+bool auxiliary_touch(int x, int y) {
+    return false;
+}
 
 extern void init_hardware();
 
@@ -119,10 +124,6 @@ void init_system() {
         dbg_println("LittleFS Mount Failed");
         return;
     }
-
-    // Make an offscreen canvas that can be copied to the screen all at once
-    void* spr = canvas.setColorDepth(8);
-    canvas.createSprite(240, 240);  // display.width(), display.height());
 }
 void resetFlowControl() {
     fnc_putchar(0x11);

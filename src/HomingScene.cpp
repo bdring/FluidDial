@@ -70,7 +70,9 @@ public:
         }
 #endif
     }
-    void onDialButtonPress() override { pop_scene(); }
+    void onDialButtonPress() override {
+        pop_scene();
+    }
     void onGreenButtonPress() override {
         if (state == Idle || state == Alarm) {
             if (_axis_to_home != -1) {
@@ -111,12 +113,14 @@ public:
         increment_axis_to_home();
         reDisplay();
     }
-    void onDROChange() { reDisplay(); }  // also covers any status change
+    void onDROChange() {
+        reDisplay();
+    }  // also covers any status change
 
     void reDisplay() {
         background();
-        drawMenuTitle(current_scene->name());
-        drawStatus();
+        title();
+        status();
 
         const char* redLabel    = "";
         std::string grnLabel    = "";
@@ -124,13 +128,13 @@ public:
         std::string green       = "Home ";
 
         if (false && state == Homing) {
-            DRO dro(16, 68, 210, 32);
+            DRO dro(area(), 16, 68, 210, 32);
             for (size_t axis = 0; axis < HOMING_N_AXIS; axis++) {
                 dro.draw(axis, -1, true);
             }
 
         } else if (state == Idle || state == Homing || state == Alarm) {
-            DRO dro(16, 68, 210, 32);
+            DRO dro(area(), 16, 68, 210, 32);
             for (int axis = 0; axis < HOMING_N_AXIS; ++axis) {
                 dro.drawHoming(axis, is_homing(axis), is_homed(axis));
             }
@@ -141,13 +145,13 @@ public:
             int width  = display.width() - (x * 2);
             int height = 32;
 
-            Stripe button(x, y, width, height, SMALL);
+            Stripe button(area(), x, y, width, height, SMALL);
             button.draw("Home All", _axis_to_home == -1);
             y = button.y();  // LEDs start with the Home X button
             button.draw("Home X", _axis_to_home == 0);
             button.draw("Home Y", _axis_to_home == 1);
             button.draw("Home Z", _axis_to_home == 2);
-            LED led(x - 16, y + height / 2, 10, button.gap());
+            LED led(area(), x - 16, y + height / 2, 10, button.gap());
             led.draw(myLimitSwitches[0]);
             led.draw(myLimitSwitches[1]);
             led.draw(myLimitSwitches[2]);
@@ -184,7 +188,7 @@ public:
                 grnLabel = "Resume";
             }
         }
-        drawButtonLegends(redLabel, grnLabel.c_str(), "Back");
+        buttonLegends(redLabel, grnLabel.c_str(), "Back");
 
         refreshDisplay();
     }

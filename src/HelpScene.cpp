@@ -10,13 +10,13 @@ public:
     void onEntry(void* arg) {
         const char** msg = arg ? static_cast<const char**>(arg) : null_help;
         const char*  line;
-        drawBackground(BROWN);
+        area()->drawBackground(BROWN);
         int pos = 20;
         for (; line = *msg, line; ++msg) {
             centered_text(line, pos, WHITE, TINY);
             pos += 28;
         }
-        drawButtonLegends("", "", "Back");
+        buttonLegends("", "", "Back");
         refreshDisplay();
     }
     void onDialButtonPress() { pop_scene(); }

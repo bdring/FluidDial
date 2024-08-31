@@ -8,8 +8,9 @@
 #include "Drawing.h"
 #include "HardwareM5Dial.hpp"
 
-LGFX_Device&       display = M5Dial.Display;
-LGFX_Sprite        canvas(&M5Dial.Display);
+LGFX_Device& display = M5Dial.Display;
+LGFX_Sprite  scene_sprite(&M5Dial.Display);
+
 m5::Speaker_Class& speaker   = M5Dial.Speaker;
 m5::Touch_Class&   touch     = M5Dial.Touch;
 Stream&            debugPort = USBSerial;
@@ -55,8 +56,6 @@ void init_hardware() {
     touch.setFlickThresh(30);
 }
 
-Point sprite_offset { 0, 0 };
-
 void base_display() {
     display.clear();
     display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
@@ -64,8 +63,8 @@ void base_display() {
 
 void next_layout(int delta) {}
 
-void system_background() {
-    canvas.fillSprite(TFT_BLACK);
+void system_background(Area* area) {
+    area->drawBackground(TFT_BLACK);
 }
 
 bool switch_button_touched(bool& pressed, int& button) {

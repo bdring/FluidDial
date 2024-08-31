@@ -10,5 +10,5 @@ private:
 public:
     MacroItem(const char* name, std::string filename) : Item(name), _filename(filename) {}
     void invoke(void* arg) override;
-    void show(const Point& where) override;
+    void show(Area*) override;
 };

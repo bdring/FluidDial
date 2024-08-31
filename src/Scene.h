@@ -15,6 +15,8 @@ extern int touchY;
 extern int touchDeltaX;
 extern int touchDeltaY;
 
+extern Area* scene_area;
+
 class Scene {
 private:
     const char* _name;
@@ -24,6 +26,8 @@ private:
     int _encoder_accum = 0;
     int _encoder_scale = 1;
 
+    Area* _area = nullptr;
+
 protected:
     const char** _help_text = nullptr;
 
@@ -32,6 +36,8 @@ public:
         _name(name), _help_text(help_text), _encoder_scale(encoder_scale) {}
 
     const char* name() { return _name; }
+    void        set_area(Area* area) { _area = area; }
+    Area*       area() { return _area ? _area : scene_area; }
 
     virtual void onRedButtonPress() {}
     virtual void onRedButtonRelease() {}
@@ -75,9 +81,42 @@ public:
     void getPref(const char* name, int axis, char* value, int maxlen);
 
     void background();
-};
 
-bool touchIsCenter();
+    void centered_text(const char* msg, int y, int color = WHITE, fontnum_t fontnum = TINY) {
+        area()->centered_text(msg, y, color, fontnum);
+    }
+
+    void centered_text(const std::string& msg, Point xy, int color = WHITE, fontnum_t fontnum = TINY) {
+        area()->centered_text(msg, xy, color, fontnum);
+    }
+    void text(const std::string& msg, int x, int y, int color, fontnum_t fontnum = TINY, int datum = middle_center) {
+        area()->text(msg, x, y, color, fontnum, datum);
+    }
+    void text(const std::string& msg, Point xy, int color, fontnum_t fontnum = TINY, int datum = middle_center) {
+        area()->text(msg, xy, color, fontnum, datum);
+    }
+    void auto_text(const std::string& txt,
+                   Point              xy,
+                   int                w,
+                   int                color,
+                   fontnum_t          fontnum  = MEDIUM,
+                   int                datum    = middle_center,
+                   bool               tryfonts = true,
+                   bool               trimleft = false) {
+        area()->auto_text(txt, xy, w, color, fontnum, datum, tryfonts, trimleft);
+    }
+    void drawRect(Point center, Point wh, int radius, int color) { area()->drawRect(center, wh, radius, color); }
+
+    void buttonLegends(const char* red, const char* green, const char* orange);
+    void title();
+    void showError();
+    void refreshDisplay() { area()->refreshDisplay(); }
+    void status();
+    void statusSmall(int y);
+    void statusTiny(int y);
+
+    bool touchIsCenter();
+};
 
 void   activate_at_top_level(Scene* scene, void* arg = nullptr);
 void   activate_scene(Scene* scene, void* arg = nullptr);

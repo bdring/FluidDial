@@ -14,8 +14,11 @@ typedef int color_t;
 typedef void (*callback_t)(void*);
 
 void do_nothing(void* arg);
+
 class Item {
 protected:
+    Point _position;
+
     std::string _name;
 
     bool       _highlighted = false;
@@ -29,10 +32,17 @@ public:
     Item(const char* name, Scene* scene) : _name(name), _callback(nullptr), _scene(scene) {}
     Item() : Item("") {}
 
+    void set_position(Point pos) { _position = pos; }
+
     // Virtual so we can delete derived classes via pointer
     virtual ~Item() {}
 
-    virtual void show(const Point& where) {};
+    virtual void show(Area*) {};
+
+    void show(Area* area, const Point& where) {
+        set_position(where);
+        show(area);
+    }
 
     virtual void invoke(void* arg = nullptr) {
         if (_disabled || _hidden) {
@@ -93,7 +103,7 @@ public:
         Item(name, scene),
         _radius(radius), _fill_color(fill_color), _hl_fill_color(hl_fill_color), _outline_color(outline_color),
         _hl_outline_color(hl_outline_color) {}
-    void show(const Point& where) override;
+    void show(Area*) override;
 };
 
 class ImageButton : public Item {
@@ -109,7 +119,7 @@ public:
     ImageButton(const char* name, Scene* scene, const char* filename, int radius, color_t outline_color = WHITE) :
         Item(name, scene), _filename(filename), _radius(radius), _outline_color(outline_color) {}
 
-    void show(const Point& where) override;
+    void show(Area*) override;
 };
 
 class RectangularButton : public Item {
@@ -135,22 +145,21 @@ public:
         Item(name, callback),
         _text(text), _width(width), _height(height), _radius(radius), _bg_color(bg_color), _text_color(text_color),
         _outline_color(outline_color) {}
-    void show(const Point& where) override;
+    void show(Area*) override;
 };
 
 class Menu : public Scene {
 private:
     void show_items() {
-        for (size_t i = 0; i < _items.size(); ++i) {
-            _items[i]->show(_positions[i]);
+        for (auto const& item : _items) {
+            item->show(area());
         }
-        _items[_selected]->show(_positions[_selected]);
+        _items[_selected]->show(area());
     }
 
     int _num_items = 0;
 
 public:
-    std::vector<Point> _positions;
     std::vector<Item*> _items;
 
     int _selected = 0;
@@ -159,14 +168,13 @@ public:
 
     Menu(const char* name, int num_items, const char** help_text = nullptr) : Scene(name, 4, help_text), _num_items(num_items) {
         _items.reserve(num_items);
-        _positions.reserve(num_items);
     }
 
     Item* selectedItem() { return _items[_selected]; }
 
     int num_items() { return _num_items; }
 
-    void reDisplay();
+    virtual void reDisplay();
 
     virtual void menuBackground() {}
     virtual int  touchedItem(int x, int y) { return -1; }
@@ -174,11 +182,11 @@ public:
 
     void onEncoder(int delta) override { rotate(delta); }
 
-    void setPosition(int item_num, Point position) { _positions[item_num] = position; }
+    void setPosition(int item_num, Point position) { _items[item_num]->set_position(position); }
     void setItem(int item_num, Item* item) { _items[item_num] = item; }
     void addItem(Item* item, Point position = { 0, 0 }) {
         _items.push_back(item);
-        _positions.push_back(position);
+        item->set_position(position);
         ++_num_items;
     }
     void removeAllItems();

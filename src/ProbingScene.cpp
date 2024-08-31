@@ -36,7 +36,7 @@ public:
                 fnc_realtime(CycleStart);
                 break;
             case Alarm:
-                send_line("$X"); // unlock
+                send_line("$X");  // unlock
                 break;
         }
     }
@@ -44,7 +44,7 @@ public:
     void onRedButtonPress() {
         // G38.2 G91 F80 Z-20 P8.00
         if (state == Cycle || state == Alarm) {
-            fnc_realtime(Reset);            
+            fnc_realtime(Reset);
             return;
         } else if (state == Idle) {
             int retract = _travel < 0 ? _retract : -_retract;
@@ -108,8 +108,8 @@ public:
 
     void reDisplay() {
         background();
-        drawMenuTitle(current_scene->name());
-        drawStatus();
+        title();
+        status();
 
         const char* grnLabel = "";
         const char* redLabel = "";
@@ -117,10 +117,10 @@ public:
         if (state == Idle) {
             int    x      = 40;
             int    y      = 62;
-            int    width  = display_short_side() - (x * 2);
+            int    width  = area()->w() - (x * 2);
             int    height = 25;
             int    pitch  = 27;  // for spacing of buttons
-            Stripe button(x, y, width, height, TINY);
+            Stripe button(area(), x, y, width, height, TINY);
             button.draw("Offset", e4_to_cstr(_offset, 2), selection == 0);
             button.draw("Max Travel", intToCStr(_travel), selection == 1);
             y = button.y();  // For LED
@@ -145,11 +145,11 @@ public:
                 int height = 35;
                 int y      = 82 - height / 2;
 
-                LED led(120, 190, 10, 5);
+                LED led(area(), 120, 190, 10, 5);
                 led.draw(myProbeSwitch);
 
-                int width = display_short_side() - x * 2;
-                DRO dro(x, y, width, height);
+                int width = area()->w() - x * 2;
+                DRO dro(area(), x, y, width, height);
                 dro.draw(0, _axis == 0);
                 dro.draw(1, _axis == 1);
                 dro.draw(2, _axis == 2);
@@ -168,8 +168,8 @@ public:
             }
         }
 
-        drawButtonLegends(redLabel, grnLabel, "Back");
-        drawError();  // only if one just happened
+        buttonLegends(redLabel, grnLabel, "Back");
+        showError();  // only if one just happened
         refreshDisplay();
     }
 };
