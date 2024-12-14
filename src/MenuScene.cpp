@@ -53,7 +53,6 @@ Scene& jogScene = multiJogScene;
 
 extern Scene controlScene;
 extern Scene aboutScene;
-extern Scene powerScene;
 
 IB statusButton("Status", &statusScene, "statustp.png");
 IB homingButton("Homing", &homingScene, "hometp.png");
