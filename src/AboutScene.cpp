@@ -10,17 +10,36 @@ extern const char* git_info;  // auto generated version.cpp
 
 class AboutScene : public Scene {
 private:
+    int _brightness = 255;
 public:
     AboutScene() : Scene("About", 4) {}
 
     void onEntry(void* arg) {
+        if (initPrefs()) {
+            getPref("brightness", &_brightness);
+        }
         send_line("$G");
         send_line("$I");
     }
 
     void onDialButtonPress() { activate_scene(&menuScene); }
-    void onGreenButtonPress() {}
-    void onRedButtonPress() {}
+    void onGreenButtonPress() {
+#ifdef ARDUINO
+        esp_restart();
+#endif
+    }
+    void onRedButtonPress() {
+        set_disconnected_state();
+#ifdef ARDUINO
+        centered_text("Use red button to wakeup", 118, RED, TINY);
+        refreshDisplay();
+        delay_ms(2000);
+
+        deep_sleep(0);
+#else
+        dbg_println("Sleep");
+#endif
+    }
 
     void onTouchClick() override {
         fnc_realtime(StatusReport);
@@ -31,7 +50,14 @@ public:
     }
 
     void onEncoder(int delta) {
-        next_layout(delta);
+        if (delta > 0 && _brightness < 255) {
+            display.setBrightness(++_brightness);
+            setPref("brightness", _brightness);
+        }
+        if (delta < 0 && _brightness > 0) {
+            display.setBrightness(--_brightness);
+            setPref("brightness", _brightness);
+        }
         reDisplay();
     }
     void onStateChange(state_t old_state) { reDisplay(); }
@@ -71,8 +97,18 @@ public:
             }
         }
 
+#ifdef ARDUINO
+        const char* greenLegend = "Restart";
+#else
+        const char* greenLegend = "";
+#endif
+
+        //drawOptionButton("Tool Menu", enable_tool_menu, 40, 135, 160);
+
         drawMenuTitle(current_scene->name());
-        drawButtonLegends("", "", "Menu");
+        text("Brightness:", 122, 150, LIGHTGREY, TINY, bottom_right);
+        text(intToCStr(_brightness), 126, 150, GREEN, TINY, bottom_left);
+        drawButtonLegends("Sleep", greenLegend, "Menu");
         drawError();  // if there is one
         refreshDisplay();
     }

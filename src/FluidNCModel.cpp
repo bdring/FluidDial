@@ -26,6 +26,7 @@ override_percent_t myFro              = 100;  // Feed rate override
 override_percent_t mySro              = 100;  // Spindle Override
 uint32_t           myFeed             = 0;
 uint32_t           mySpeed            = 0;
+uint32_t           mySelectedTool     = 0;
 
 std::string myModes = "no data";
 
@@ -274,8 +275,8 @@ extern "C" void show_gcode_modes(struct gcode_modes* modes) {
     if (strcmp(modes->flood, "On") == 0) {
         myModes += " Flood";
     }
-    //    myModes += " T";
-    //    myModes += modes->tool;
+
+    mySelectedTool = modes->tool;
     current_scene->reDisplay();
 }
 
