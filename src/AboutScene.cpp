@@ -79,6 +79,9 @@ public:
         text(intToCStr(FNC_BAUD), val_x, y, GREEN, TINY, bottom_left);
 #endif
 
+        text("Brightness:", key_x, y += y_spacing, LIGHTGREY, TINY, bottom_right);
+        text(intToCStr(_brightness), val_x, y, GREEN, TINY, bottom_left);
+
         if (wifi_ssid.length()) {
             std::string wifi_str = wifi_mode;
             if (wifi_mode == "No Wifi") {
@@ -106,8 +109,7 @@ public:
         //drawOptionButton("Tool Menu", enable_tool_menu, 40, 135, 160);
 
         drawMenuTitle(current_scene->name());
-        text("Brightness:", 122, 150, LIGHTGREY, TINY, bottom_right);
-        text(intToCStr(_brightness), 126, 150, GREEN, TINY, bottom_left);
+        
         drawButtonLegends("Sleep", greenLegend, "Menu");
         drawError();  // if there is one
         refreshDisplay();
