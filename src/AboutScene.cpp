@@ -79,8 +79,10 @@ void AboutScene::reDisplay() {
     text(intToCStr(FNC_BAUD), val_x, y, GREEN, TINY, bottom_left);
 #endif
 
+#ifdef USE_M5
     text("Brightness:", key_x, y += y_spacing, LIGHTGREY, TINY, bottom_right);
     text(intToCStr(_brightness), val_x, y, GREEN, TINY, bottom_left);
+#endif
 
     if (wifi_ssid.length()) {
         std::string wifi_str = wifi_mode;
