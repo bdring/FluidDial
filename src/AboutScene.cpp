@@ -9,6 +9,8 @@ extern Scene menuScene;
 
 extern const char* git_info;  // auto generated version.cpp
 
+static const int MIN_BRIGHTNESS = 8;
+
 void AboutScene::onEntry(void* arg) {
     // if (initPrefs()) {
     //     getPref("brightness", &_brightness);
@@ -52,7 +54,7 @@ void AboutScene::onEncoder(int delta) {
         display.setBrightness(++_brightness);
         setPref("brightness", _brightness);
     }
-    if (delta < 0 && _brightness > 0) {
+    if (delta < 0 && _brightness > MIN_BRIGHTNESS) {
         display.setBrightness(--_brightness);
         setPref("brightness", _brightness);
     }
@@ -79,7 +81,7 @@ void AboutScene::reDisplay() {
     text(intToCStr(FNC_BAUD), val_x, y, GREEN, TINY, bottom_left);
 #endif
 
-#ifdef USE_M5
+#ifndef DEBUG_TO_USB  // backlight shares a pin with this.
     text("Brightness:", key_x, y += y_spacing, LIGHTGREY, TINY, bottom_right);
     text(intToCStr(_brightness), val_x, y, GREEN, TINY, bottom_left);
 #endif
