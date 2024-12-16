@@ -4,13 +4,18 @@
 #include "System.h"
 #include "FileParser.h"
 #include "Scene.h"
+#include "AboutScene.h"
 
 extern void base_display();
 
 extern const char* git_info;
 
+extern AboutScene aboutScene;
+
 void setup() {
     init_system();
+
+    display.setBrightness(aboutScene.getBrightness());
 
     base_display();
 

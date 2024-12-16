@@ -39,6 +39,7 @@ extern Scene homingScene;
 //extern Scene joggingScene2;
 extern Scene multiJogScene;
 extern Scene probingScene;
+extern Scene toolchangeScene;
 extern Scene statusScene;
 extern Scene macroMenu;
 
@@ -52,22 +53,21 @@ Scene& jogScene = multiJogScene;
 
 extern Scene controlScene;
 extern Scene aboutScene;
-extern Scene powerScene;
 
 IB statusButton("Status", &statusScene, "statustp.png");
 IB homingButton("Homing", &homingScene, "hometp.png");
 IB jogButton("Jog", &jogScene, "jogtp.png");
 IB probeButton("Probe", &probingScene, "probetp.png");
+IB toolchangeButton("Tools", &toolchangeScene, "toolchangetp.png");
 
 #ifdef USE_WMB_FSS
 IB filesButton("Files", &wmbFileSelectScene, "filestp.png");
 #else
-IB           filesButton("Files", &fileSelectScene, "filestp.png");
+IB filesButton("Files", &fileSelectScene, "filestp.png");
 #endif
 
 IB controlButton("Macros", &macroMenu, "macrostp.png");
 IB setupButton("About", &aboutScene, "abouttp.png");
-IB powerButton("Power", &powerScene, "powertp.png");
 
 class MenuScene : public PieMenu {
 public:
@@ -77,20 +77,20 @@ public:
         homingButton.disable();
         jogButton.disable();
         probeButton.disable();
+        toolchangeButton.disable();
         filesButton.disable();
         controlButton.disable();
         setupButton.enable();
-        powerButton.enable();
     }
     void enableIcons() {
         statusButton.enable();
         homingButton.enable();
         jogButton.enable();
         probeButton.enable();
+        toolchangeButton.enable();
         filesButton.enable();
         controlButton.enable();
         setupButton.enable();
-        powerButton.enable();
     }
     void onEntry(void* arg) {
         PieMenu::onEntry(arg);
@@ -127,10 +127,10 @@ Scene* initMenus() {
     menuScene.addItem(&homingButton);
     menuScene.addItem(&jogButton);
     menuScene.addItem(&probeButton);
+    menuScene.addItem(&toolchangeButton);
     menuScene.addItem(&filesButton);
     menuScene.addItem(&controlButton);
     menuScene.addItem(&setupButton);
-    menuScene.addItem(&powerButton);
 
     return &menuScene;
 }

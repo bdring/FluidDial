@@ -21,7 +21,6 @@ private:
 public:
     StatusScene() : Scene("Status") {}
 
-    void onEntry(void* arg) { _entry = static_cast<const char*>(arg); }
     void onExit() override {}
 
     void onDialButtonPress() {
