@@ -74,9 +74,9 @@ int     layout_num = 0;
 
 Point sprite_offset;
 void  set_layout(int n) {
-     layout = &layouts[n];
-     display.setRotation(layout->rotation());
-     sprite_offset = layout->spritePosition;
+    layout = &layouts[n];
+    display.setRotation(layout->rotation());
+    sprite_offset = layout->spritePosition;
 }
 
 nvs_handle_t hw_nvs;
@@ -107,7 +107,17 @@ void init_hardware() {
 
 void drawButton(int n) {
     Point offset = layout->buttonPosition[n];
-    display.fillRoundRect(offset.x + 10, offset.y + 10, 60, 60, 10, button_colors[n]);
+    switch (n) {
+        case 0:
+            display.drawPngFile(LittleFS, "/red_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            break;
+        case 1:
+            display.drawPngFile(LittleFS, "/orange_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            break;
+        case 2:
+            display.drawPngFile(LittleFS, "/green_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            break;
+    }
 }
 
 void base_display() {
@@ -185,7 +195,6 @@ bool screen_button_touched(bool pressed, int x, int y, int& button) {
 void update_events() {
     auto ms = lgfx::millis();
     if (touch.isEnabled()) {
-
         if (touch_debounce) {
             if ((ms - touch_timeout) < 0) {
                 return;
