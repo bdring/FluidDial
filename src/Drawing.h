@@ -57,6 +57,9 @@ public:
 // Routines that take Point as an argument work in a coordinate
 // space where 0,0 is at the center of the display and +Y is up
 
+LGFX_Sprite* createPngBackground(const char* filename);
+
+void drawBackground(LGFX_Sprite* sprite);
 void drawBackground(int color);
 void drawStatus();
 void drawStatusTiny(int y);

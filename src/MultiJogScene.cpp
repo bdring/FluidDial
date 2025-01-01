@@ -22,14 +22,15 @@ static const char* jog_help_text[] = { "Jog Help",
 
 class MultiJogScene : public Scene {
 private:
-    int       _dist_index[3] = { 2, 2, 2 };
-    int       max_index() { return 6; }  // 10^3 = 1000;
-    int       min_index() { return 0; }  // 10^3 = 1000;
-    int       _selected_mask = 1 << 0;
-    const int num_axes       = 3;
-    bool      _cancelling    = false;
-    bool      _cancel_held   = false;
-    bool      _continuous    = false;
+    int          _dist_index[3] = { 2, 2, 2 };
+    int          max_index() { return 6; }  // 10^3 = 1000;
+    int          min_index() { return 0; }  // 10^3 = 1000;
+    int          _selected_mask = 1 << 0;
+    const int    num_axes       = 3;
+    bool         _cancelling    = false;
+    bool         _cancel_held   = false;
+    bool         _continuous    = false;
+    LGFX_Sprite* _bg_image      = nullptr;
 
 public:
     MultiJogScene() : Scene("Jog", 4, jog_help_text) {}
@@ -57,7 +58,7 @@ public:
 
     void reDisplay() {
         background();
-        drawPngBackground("/jogbg.png");
+        drawBackground(_bg_image);
         drawMenuTitle(current_scene->name());
         drawStatus();
 
@@ -102,6 +103,7 @@ public:
             zero_axes();
         }
         if (initPrefs()) {
+            _bg_image = createPngBackground("/jogbg.png");
             for (size_t axis = 0; axis < 3; axis++) {
                 getPref("DistanceDigit", axis, &_dist_index[axis]);
             }
@@ -288,9 +290,13 @@ public:
 #endif
     }
 
-    void onRightFlick() override { activate_scene(&fileSelectScene); }
+    void onRightFlick() override {
+        activate_scene(&fileSelectScene);
+    }
 
-    void onDialButtonPress() { zero_axes(); }
+    void onDialButtonPress() {
+        zero_axes();
+    }
 
     void start_mpg_jog(int delta) {
         // e.g. $J=G91F1000X-10000
@@ -344,13 +350,17 @@ public:
             start_button_jog(false);
         }
     }
-    void onGreenButtonRelease() { cancel_jog(); }
+    void onGreenButtonRelease() {
+        cancel_jog();
+    }
     void onRedButtonPress() {
         if (state == Idle) {
             start_button_jog(true);
         }
     }
-    void onRedButtonRelease() { cancel_jog(); }
+    void onRedButtonRelease() {
+        cancel_jog();
+    }
 
     void onEncoder(int delta) {
         if (delta != 0) {
@@ -358,8 +368,16 @@ public:
         }
     }
 
-    void onDROChange() { reDisplay(); }
-    void onLimitsChange() { reDisplay(); }
-    void onAlarm() { reDisplay(); }
-    void onExit() { cancel_jog(); }
+    void onDROChange() {
+        reDisplay();
+    }
+    void onLimitsChange() {
+        reDisplay();
+    }
+    void onAlarm() {
+        reDisplay();
+    }
+    void onExit() {
+        cancel_jog();
+    }
 } multiJogScene;

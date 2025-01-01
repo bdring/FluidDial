@@ -65,6 +65,15 @@ void drawPngFile(const char* filename, Point xy) {
 void drawPngBackground(const char* filename) {
     drawPngFile(filename, 0, 0);
 }
+void drawBackground(LGFX_Sprite* sprite) {
+    sprite->pushSprite(0, 0);
+}
+LGFX_Sprite* createPngBackground(const char* filename) {
+    static LGFX_Sprite* sprite;
+    sprite = new LGFX_Sprite(&display);
+    sprite->drawPngFile(LittleFS, filename, 0, 0, canvas.width(), canvas.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+    return sprite;
+}
 
 // We use 1 to mean no background
 // 1 is visually indistinguishable from black so losing that value is unimportant
