@@ -121,7 +121,7 @@ void init_system() {
     }
 
     // Make an offscreen canvas that can be copied to the screen all at once
-    void* spr = canvas.setColorDepth(8);
+    canvas.setColorDepth(8);
     canvas.createSprite(240, 240);  // display.width(), display.height());
 }
 void resetFlowControl() {
