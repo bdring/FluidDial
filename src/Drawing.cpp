@@ -70,7 +70,7 @@ void drawBackground(LGFX_Sprite* sprite) {
 }
 LGFX_Sprite* createPngBackground(const char* filename) {
     LGFX_Sprite* sprite = new LGFX_Sprite(&canvas);
-    sprite->setColorDepth(8);
+    sprite->setColorDepth(canvas.getColorDepth());
     sprite->createSprite(canvas.width(), canvas.height());
     sprite->drawPngFile(LittleFS, filename, 0, 0, canvas.width(), canvas.height(), 0, 0, 1.0f, 1.0f, datum_t::middle_center);
     return sprite;
