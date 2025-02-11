@@ -12,13 +12,14 @@
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
 
-// m5::Speaker_Class& speaker    = M5.Speaker;
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
-// m5::Button_Class&  dialButton = M5.BtnB;
+
 LGFX         xdisplay;
 LGFX_Device& display = xdisplay;
 LGFX_Sprite  canvas(&xdisplay);
+
+int dial_button_pin = -1;
 
 #ifdef DEBUG_TO_USB
 Stream& debugPort = Serial;
@@ -74,14 +75,17 @@ int     layout_num = 0;
 
 Point sprite_offset;
 void  set_layout(int n) {
-    layout = &layouts[n];
-    display.setRotation(layout->rotation());
-    sprite_offset = layout->spritePosition;
+     layout = &layouts[n];
+     display.setRotation(layout->rotation());
+     sprite_offset = layout->spritePosition;
 }
 
 nvs_handle_t hw_nvs;
 
 void init_hardware() {
+#ifdef DEBUG_TO_USB
+    Serial.begin(115200);
+#endif
     hw_nvs = nvs_init("hardware");
     nvs_get_i32(hw_nvs, "layout", &layout_num);
 
@@ -89,10 +93,29 @@ void init_hardware() {
     set_layout(layout_num);
 
     touch.begin(&display);
-#ifdef DEBUG_TO_USB
-    Serial.begin(115200);
-#endif
-    init_encoder(ENC_A, ENC_B);
+
+    int enc_a = -1, enc_b = -1;
+    dial_button_pin = -1;
+
+    lgfx::boards::board_t board_id = display.getBoard();
+    switch (board_id) {
+        case lgfx::boards::board_Guition_ESP32_2432W328:
+            enc_a           = GPIO_NUM_16;  // RGB LED Green
+            enc_b           = GPIO_NUM_17;  // RGB LED Blue
+            dial_button_pin = GPIO_NUM_4;   // RGB LED Red
+            pinMode(dial_button_pin, INPUT_PULLUP);
+            // backlight = GPIO_NUM_27;
+            break;
+        case lgfx::boards::board_Sunton_ESP32_2432S028:
+            enc_a = GPIO_NUM_22;
+            enc_b = GPIO_NUM_27;
+            // backlight = GPIO_NUM_21;
+            break;
+        default:
+            dbg_printf("Unknown board id %d\n", board_id);
+            break;
+    }
+    init_encoder(enc_a, enc_b);
     init_fnc_uart(FNC_UART_NUM, FNC_TX_PIN, FNC_RX_PIN);
 
     touch.setFlickThresh(10);
@@ -147,6 +170,14 @@ void system_background() {
 }
 
 bool switch_button_touched(bool& pressed, int& button) {
+    static int last_state = -1;
+    bool       state      = digitalRead(dial_button_pin);
+    if ((int)state != last_state) {
+        last_state = state;
+        button     = 1;
+        pressed    = !state;
+        return true;
+    }
     return false;
 }
 

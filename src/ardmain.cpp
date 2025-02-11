@@ -19,7 +19,7 @@ void setup() {
 
     base_display();
 
-    delay_ms(1000);  // view the logo and wait for the debug port to connect
+    delay_ms(2000);  // view the logo and wait for the debug port to connect
 
     dbg_printf("FluidNC Pendant %s\n", git_info);
 
