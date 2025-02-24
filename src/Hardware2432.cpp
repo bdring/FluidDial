@@ -100,7 +100,7 @@ void init_hardware() {
     lgfx::boards::board_t board_id = display.getBoard();
     switch (board_id) {
         case lgfx::boards::board_Guition_ESP32_2432W328:
-            enc_a           = GPIO_NUM_16;  // RGB LED Green
+            enc_a           = GPIO_NUM_22;
             enc_b           = GPIO_NUM_17;  // RGB LED Blue
             dial_button_pin = GPIO_NUM_4;   // RGB LED Red
             pinMode(dial_button_pin, INPUT_PULLUP);
@@ -109,22 +109,21 @@ void init_hardware() {
         case lgfx::boards::board_Sunton_ESP32_2432S028:
             enc_a = GPIO_NUM_22;
             enc_b = GPIO_NUM_27;
-            // backlight = GPIO_NUM_21;
             break;
         default:
             dbg_printf("Unknown board id %d\n", board_id);
             break;
     }
     init_encoder(enc_a, enc_b);
-    init_fnc_uart(FNC_UART_NUM, FNC_TX_PIN, FNC_RX_PIN);
+    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 
     touch.setFlickThresh(10);
 
 #ifdef LED_DEBUG
     // RGB LED pins
-    pinMode(4, OUTPUT);
-    pinMode(16, OUTPUT);
-    pinMode(17, OUTPUT);
+    pinMode(4, OUTPUT);   // Red
+    pinMode(16, OUTPUT);  // Green
+    pinMode(17, OUTPUT);  // Blue
 #endif
 }
 
