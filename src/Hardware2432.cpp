@@ -19,7 +19,9 @@ LGFX         xdisplay;
 LGFX_Device& display = xdisplay;
 LGFX_Sprite  canvas(&xdisplay);
 
-int dial_button_pin = -1;
+int red_button_pin   = -1;
+int dial_button_pin  = -1;
+int green_button_pin = -1;
 
 #ifdef DEBUG_TO_USB
 Stream& debugPort = Serial;
@@ -95,15 +97,29 @@ void init_hardware() {
     touch.begin(&display);
 
     int enc_a = -1, enc_b = -1;
-    dial_button_pin = -1;
+    red_button_pin   = -1;
+    dial_button_pin  = -1;
+    green_button_pin = -1;
 
     lgfx::boards::board_t board_id = display.getBoard();
     switch (board_id) {
         case lgfx::boards::board_Guition_ESP32_2432W328:
-            enc_a           = GPIO_NUM_22;
-            enc_b           = GPIO_NUM_17;  // RGB LED Blue
-            dial_button_pin = GPIO_NUM_4;   // RGB LED Red
+#ifdef CYD_BUTTONS
+            enc_a = GPIO_NUM_22;
+            enc_b = GPIO_NUM_21;
+            // rotary_button_pin = GPIO_NUM_35;
+            // pinMode(rotary_button_pin, INPUT);  // Pullup does not work on GPIO35
+
+            red_button_pin   = GPIO_NUM_4;   // RGB LED Red
+            dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
+            green_button_pin = GPIO_NUM_16;  // RGB LED Green
+            pinMode(red_button_pin, INPUT_PULLUP);
             pinMode(dial_button_pin, INPUT_PULLUP);
+            pinMode(green_button_pin, INPUT_PULLUP);
+#else
+            enc_a = GPIO_NUM_22;
+            enc_b = GPIO_NUM_17;  // RGB LED Blue
+#endif
             // backlight = GPIO_NUM_27;
             break;
         case lgfx::boards::board_Sunton_ESP32_2432S028:
@@ -169,13 +185,36 @@ void system_background() {
 }
 
 bool switch_button_touched(bool& pressed, int& button) {
-    static int last_state = -1;
-    bool       state      = digitalRead(dial_button_pin);
-    if ((int)state != last_state) {
-        last_state = state;
-        button     = 1;
-        pressed    = !state;
-        return true;
+    static int last_red   = -1;
+    static int last_green = -1;
+    static int last_dial  = -1;
+    bool       state;
+    if (red_button_pin != -1) {
+        state = digitalRead(red_button_pin);
+        if ((int)state != last_red) {
+            last_red = state;
+            button   = 0;
+            pressed  = !state;
+            return true;
+        }
+    }
+    if (dial_button_pin != -1) {
+        state = digitalRead(dial_button_pin);
+        if ((int)state != last_dial) {
+            last_dial = state;
+            button    = 1;
+            pressed   = !state;
+            return true;
+        }
+    }
+    if (green_button_pin != -1) {
+        state = digitalRead(green_button_pin);
+        if ((int)state != last_green) {
+            last_green = state;
+            button     = 2;
+            pressed    = !state;
+            return true;
+        }
     }
     return false;
 }

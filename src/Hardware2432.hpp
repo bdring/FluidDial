@@ -14,8 +14,8 @@ constexpr static const int FNC_UART_NUM      = 1;
 // and opens up GPIO pins that could be used for other
 // purposes, but you do not have debug output.
 
-constexpr static const int PND_RX_FNC_TX_PIN = GPIO_NUM_3;
-constexpr static const int PND_TX_FNC_RX_PIN = GPIO_NUM_1;
+constexpr static const int PND_RX_FNC_TX_PIN = GPIO_NUM_1;
+constexpr static const int PND_TX_FNC_RX_PIN = GPIO_NUM_3;
 constexpr static const int FNC_UART_NUM      = 0;
 #endif
 

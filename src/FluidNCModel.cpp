@@ -208,7 +208,9 @@ extern "C" void show_state(const char* state_string) {
     state_t new_state;
     if (decode_state_string(state_string, new_state) && state != new_state) {
         if (state == Disconnected) {
-            send_line("$G");  // Refresh GCode modes
+            fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off
+            send_line("$G");                     // Refresh GCode modes
+            send_line("$G");                     // Refresh GCode modes
             send_line("$RI=200");
             init_file_list();
             detect_homing_info();
