@@ -151,27 +151,29 @@ void schedule_action(ActionHandler _action) {
 }
 
 void dispatch_events() {
-    update_events();
+    if (!ui_locked()) {
+        update_events();
 
-    static int16_t oldEncoder   = 0;
-    int16_t        newEncoder   = get_encoder();
-    int16_t        encoderDelta = newEncoder - oldEncoder;
-    if (encoderDelta) {
-        oldEncoder = newEncoder;
+        static int16_t oldEncoder   = 0;
+        int16_t        newEncoder   = get_encoder();
+        int16_t        encoderDelta = newEncoder - oldEncoder;
+        if (encoderDelta) {
+            oldEncoder = newEncoder;
 
-        int16_t scaledDelta = current_scene->scale_encoder(encoderDelta);
-        if (scaledDelta) {
-            current_scene->onEncoder(scaledDelta);
+            int16_t scaledDelta = current_scene->scale_encoder(encoderDelta);
+            if (scaledDelta) {
+                current_scene->onEncoder(scaledDelta);
+            }
         }
-    }
 
-    bool pressed;
-    int  button;
-    if (switch_button_touched(pressed, button)) {
-        dispatch_button(pressed, button);
-    }
+        bool pressed;
+        int  button;
+        if (switch_button_touched(pressed, button)) {
+            dispatch_button(pressed, button);
+        }
 
-    dispatch_touch();
+        dispatch_touch();
+    }
 
     if (!fnc_is_connected()) {
         if (state != Disconnected) {

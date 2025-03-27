@@ -123,6 +123,10 @@ void ackBeep() {
     speaker.tone(1800, 50);
 }
 
+bool ui_locked() {
+    return false;
+}
+
 #include <driver/rtc_io.h>
 // The M5 Library is broken with respect to deep sleep on M5 Dial
 // so we have to do it ourselves.  The problem is that the WAKE

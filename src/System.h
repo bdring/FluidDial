@@ -76,3 +76,5 @@ inline int display_short_side() {
 void base_display();
 void set_layout(int n);
 void next_layout(int delta);
+
+bool ui_locked();

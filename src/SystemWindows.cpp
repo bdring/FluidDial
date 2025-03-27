@@ -452,3 +452,7 @@ nvs_handle_t nvs_init(const char* name) {
 
     return strdup(dname);
 }
+
+bool ui_locked() {
+    return false;
+}

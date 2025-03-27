@@ -19,6 +19,11 @@ LGFX         xdisplay;
 LGFX_Device& display = xdisplay;
 LGFX_Sprite  canvas(&xdisplay);
 
+LGFX_Sprite buttons(&xdisplay);
+#ifdef LOCKOUT_PIN
+LGFX_Sprite locked_buttons(&xdisplay);
+#endif
+
 int red_button_pin   = -1;
 int dial_button_pin  = -1;
 int green_button_pin = -1;
@@ -29,10 +34,12 @@ Stream& debugPort = Serial;
 
 bool round_display = false;
 
-const int n_buttons = 3;
-const int button_w  = 80;
-const int button_h  = 80;
-const int sprite_wh = 240;
+const int n_buttons      = 3;
+const int button_w       = 80;
+const int button_h       = 80;
+const int button_half_wh = button_w / 2;
+const int sprite_wh      = 240;
+Point     button_wh(button_w, button_h);
 
 int button_colors[] = { RED, YELLOW, GREEN };
 class Layout {
@@ -40,11 +47,24 @@ private:
     int _rotation;
 
 public:
+    Point buttonsXY;
+    Point buttonsWidth;
+    Point buttonsHeight;
+    Point buttonsWH;
     Point spritePosition;
+#if 0
     Point buttonPosition[3];
-    Layout(int rotation, Point spritePosition, Point firstButtonPosition) : _rotation(rotation), spritePosition(spritePosition) {
-        buttonPosition[0] = firstButtonPosition;
-        if (vertical_buttons()) {
+#endif
+    Layout(int rotation, Point spritePosition, Point firstButtonPosition) :
+        _rotation(rotation), spritePosition(spritePosition), buttonsXY(firstButtonPosition) {
+        if (_rotation & 1) {  // Vertical
+            buttonsWH = { button_w, sprite_wh };
+        } else {
+            buttonsWH = { sprite_wh, button_h };
+        }
+#if 0
+        buttonPosition[0] = buttonsXY;
+        if (_rotation & 1) { // Vertical
             int x             = buttonPosition[0].x;
             buttonPosition[1] = { x, button_h };
             buttonPosition[2] = { x, 2 * button_h };
@@ -53,9 +73,15 @@ public:
             buttonPosition[1] = { button_w, y };
             buttonPosition[2] = { 2 * button_w, y };
         }
+#endif
     }
-    bool vertical_buttons() { return _rotation & 1; }
-    int  rotation() { return _rotation; }
+    Point buttonOffset(int n) {
+        return (_rotation & 1) ? Point(0, n * button_h) : Point(n * button_w, 0);
+    }
+
+    int rotation() {
+        return _rotation;
+    }
 };
 
 // clang-format off
@@ -104,6 +130,10 @@ void init_hardware() {
     lgfx::boards::board_t board_id = display.getBoard();
     switch (board_id) {
         case lgfx::boards::board_Guition_ESP32_2432W328:
+#ifdef LOCKOUT_PIN
+            pinMode(LOCKOUT_PIN, INPUT);
+#endif
+
 #ifdef CYD_BUTTONS
             enc_a = GPIO_NUM_22;
             enc_b = GPIO_NUM_21;
@@ -143,18 +173,60 @@ void init_hardware() {
 #endif
 }
 
-void drawButton(int n) {
-    Point offset = layout->buttonPosition[n];
+void initButton(int n) {
+    Point offset = layout->buttonOffset(n);
+    buttons.fillRect(offset.x, offset.y, 80, 80, BLACK);
+    const int   radius = 28;
+    const char* filename;
+    int         color;
     switch (n) {
         case 0:
-            display.drawPngFile(LittleFS, "/red_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            color    = RED;
+            filename = "/red_button.png";
             break;
         case 1:
-            display.drawPngFile(LittleFS, "/orange_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            color    = YELLOW;
+            filename = "/orange_button.png";
             break;
         case 2:
-            display.drawPngFile(LittleFS, "/green_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            color    = GREEN;
+            filename = "/green_button.png";
             break;
+    }
+    buttons.fillCircle(offset.x + button_half_wh, offset.y + button_half_wh, radius, color);
+    // If the image file exists the image will overwrite the circle
+    buttons.drawPngFile(LittleFS, filename, offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+}
+
+void redrawButtons(LGFX_Sprite& sprite) {
+    display.startWrite();
+    Point position = layout->buttonsXY;
+    sprite.pushSprite(position.x, position.y);
+    display.endWrite();
+}
+
+#ifdef LOCKOUT_PIN
+void initLockedButtons() {
+    locked_buttons.setColorDepth(display.getColorDepth());
+    locked_buttons.createSprite(layout->buttonsWH.x, layout->buttonsWH.y);
+
+    locked_buttons.fillRect(0, 0, layout->buttonsWH.x, layout->buttonsWH.y, BLACK);
+
+    const int radius = 28;
+    for (int i = 0; i < 3; i++) {
+        Point offset = layout->buttonOffset(i);
+        locked_buttons.fillCircle(offset.x + button_half_wh, offset.y + button_half_wh, radius, DARKGREY);
+    }
+}
+#endif
+
+static void initButtons() {
+    buttons.setColorDepth(display.getColorDepth());
+    buttons.createSprite(layout->buttonsWH.x, layout->buttonsWH.y);
+
+    // On-screen buttons
+    for (int i = 0; i < 3; i++) {
+        initButton(i);
     }
 }
 
@@ -162,10 +234,12 @@ void base_display() {
     display.clear();
     display.drawPngFile(
         LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
-    // On-screen buttons
-    for (int i = 0; i < 3; i++) {
-        drawButton(i);
-    }
+
+    initButtons();
+#ifdef LOCKOUT_PIN
+    initLockedButtons();
+#endif
+    redrawButtons(buttons);
 }
 void next_layout(int delta) {
     layout_num += delta;
@@ -223,21 +297,6 @@ bool screen_encoder(int x, int y, int& delta) {
     return false;
 }
 
-bool in_rect(int x, int y, Point xy, Point wh) {
-    return x >= xy.x && x < (xy.x + wh.x) && y >= xy.y && y < (xy.y + wh.y);
-}
-bool in_button_stripe(int x, int y) {
-    Point xy = layout->buttonPosition[0];
-    if (layout->vertical_buttons()) {
-        // Vertical button layout
-        return in_rect(x, y, xy, { button_w, sprite_wh });
-    }
-    // Horizontal button layout
-    return in_rect(x, y, xy, { sprite_wh, button_h });
-}
-bool hit(int button_num, int x, int y) {
-    return in_rect(x, y, layout->buttonPosition[button_num], { button_w, button_h });
-}
 struct button_debounce_t {
     bool    debouncing;
     bool    skipped;
@@ -247,9 +306,34 @@ struct button_debounce_t {
 bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
 
+bool ui_locked() {
+#ifdef LOCKOUT_PIN
+    static int last_lock = -1;
+    bool       state     = digitalRead(LOCKOUT_PIN);
+    if ((int)state != last_lock) {
+        last_lock = state;
+        redrawButtons(state ? locked_buttons : buttons);
+    }
+    return state;
+#else
+    return false;
+#endif
+}
+
+bool in_rect(Point test, Point xy, Point wh) {
+    return test.x >= xy.x && test.x < (xy.x + wh.x) && test.y >= xy.y && test.y < (xy.y + wh.y);
+}
+bool in_button_stripe(Point xy) {
+    return in_rect(xy, layout->buttonsXY, layout->buttonsWH);
+}
 bool screen_button_touched(bool pressed, int x, int y, int& button) {
+    Point xy(x, y);
+    if (!in_button_stripe(xy)) {
+        return false;
+    }
+    xy -= layout->buttonsXY;
     for (int i = 0; i < n_buttons; i++) {
-        if (hit(i, x, y)) {
+        if (in_rect(xy, layout->buttonOffset(i), button_wh)) {
             button = i;
             if (!pressed) {
                 touch_debounce = true;
