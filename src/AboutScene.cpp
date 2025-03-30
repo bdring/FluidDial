@@ -12,12 +12,12 @@ extern const char* git_info;  // auto generated version.cpp
 static const int MIN_BRIGHTNESS = 8;
 
 void AboutScene::onEntry(void* arg) {
-    // if (initPrefs()) {
-    //     getPref("brightness", &_brightness);
-    // }
     getBrightness();
-    send_line("$G");
-    send_line("$I");
+
+    if (state != Disconnected) {
+        send_line("$G");
+        send_line("$I");
+    }
 }
 
 void AboutScene::onDialButtonPress() {
@@ -75,6 +75,7 @@ void AboutScene::reDisplay() {
     std::string version_str = "Ver ";
     version_str += git_info;
     centered_text(version_str.c_str(), y, LIGHTGREY, TINY);
+    refreshDisplay();
     y += 10;
 #ifdef FNC_BAUD  // FNC_BAUD might not be defined for Windows
     text("FNC baud:", key_x, y += y_spacing, LIGHTGREY, TINY, bottom_right);
