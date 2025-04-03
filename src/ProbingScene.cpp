@@ -98,7 +98,8 @@ public:
     }
     void onEntry(void* arg) override {
         if (initPrefs()) {
-            getPref("Offset", &_offset);
+            static_assert(sizeof(e4_t) == sizeof(int));
+            getPref("Offset", reinterpret_cast<int *>(&_offset));
             getPref("Travel", &_travel);
             getPref("Rate", &_rate);
             getPref("Retract", &_retract);
