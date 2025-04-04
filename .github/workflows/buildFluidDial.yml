@@ -22,7 +22,7 @@ jobs:
         run: pip install --upgrade platformio
 
       - name: Build PlatformIO Project
-        run: pio run && pio run -t buildfs
+        run: pio run && pio run -t buildfs && pio run -t build_merged
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
