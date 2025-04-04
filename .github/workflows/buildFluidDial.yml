@@ -22,10 +22,10 @@ jobs:
         run: pip install --upgrade platformio
 
       - name: Build PlatformIO Project
-        run: cd FluidDial && pio run && pio run -t buildfs
-      - name: Upload Windows bundle
+        run: pio run && pio run -t buildfs
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
           name: FluidDial
-          path: FluidDial/.pio/build/*/*.bin
+          path: .pio/build/*/*.bin
 
