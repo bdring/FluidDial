@@ -33,8 +33,6 @@ else:
 git_info = rev
 git_url = url
 
-print("Version is", git_info)
-
 provisional = "src/version.cxx"
 final = "src/version.cpp"
 with open(provisional, "w") as fp:
