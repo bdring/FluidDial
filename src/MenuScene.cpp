@@ -120,6 +120,19 @@ public:
         }
         reDisplay();
     }
+#ifdef I2C_BUTTONS    
+    void onOtherButtonPress() {      
+        extern m5::Button_Class& setXButton;
+        extern m5::Button_Class& setYButton;
+        extern m5::Button_Class& setZButton;
+        // handling other physical buttons for this scene
+        if ((setXButton.wasPressed() || setYButton.wasPressed() || setZButton.wasPressed())
+        &&  (state == Idle)) {
+            push_scene(&jogScene);
+            return;
+        }
+    }
+#endif
 } menuScene;
 
 Scene* initMenus() {

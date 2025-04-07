@@ -62,16 +62,16 @@ void dispatch_button(bool pressed, int button) {
     switch (button) {
         case 0:
             if (pressed) {
-                current_scene->onRedButtonPress();
+                current_scene->onDialButtonPress();
             } else {
-                current_scene->onRedButtonRelease();
+                current_scene->onDialButtonRelease();
             }
             break;
         case 1:
             if (pressed) {
-                current_scene->onDialButtonPress();
+                current_scene->onRedButtonPress();
             } else {
-                current_scene->onDialButtonRelease();
+                current_scene->onRedButtonRelease();
             }
             break;
         case 2:
@@ -82,6 +82,7 @@ void dispatch_button(bool pressed, int button) {
             }
             break;
         default:
+            current_scene->onOtherButtonPress();
             break;
     }
 }
