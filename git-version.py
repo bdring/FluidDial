@@ -52,19 +52,3 @@ else:
     # so we can just leave the old version.cpp in place and get
     # rid of version.cxx
     os.remove(provisional)
-
-Import("env")
-
-#print()
-cmd = '$PYTHONEXE $UPLOADER --chip esp32s3 merge_bin --output $BUILD_DIR/merged-flash.bin --flash_mode dio --flash_size 8MB '
-for image in env.get("FLASH_EXTRA_IMAGES", []):
-    cmd += image[0] + " " + env.subst(image[1]) + " "
-cmd += " 0x10000 $BUILD_DIR/firmware.bin 0x670000 $BUILD_DIR/littlefs.bin"
-#print(cmd)
-#print()
-env.AddCustomTarget(
-    "buildall",
-    ["$BUILD_DIR/firmware.bin", "$BUILD_DIR/littlefs.bin"],
-    cmd
-    #"$PYTHONEXE $UPLOADER --chip esp32s3 merge_bin --output $BUILD_DIR/merged-flash.bin --flash_mode dio --flash_size 8MB 0x0000 $BUILD_DIR/bootloader.bin 0x8000 $BUILD_DIR/partitions.bin 0xe000 C:/Users/wmb/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin 0x10000 $BUILD_DIR/firmware.bin 0x670000 $BUILD_DIR/littlefs.bin"
-)

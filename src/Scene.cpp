@@ -215,7 +215,7 @@ void Scene::getPref(const char* base_name, int axis, int* value) {
     if (!_prefs) {
         return;
     }
-    nvs_get_i32(_prefs, setting_name(base_name, axis), value);
+    nvs_get_i32(_prefs, setting_name(base_name, axis), reinterpret_cast<int32_t *>(value));
 }
 void Scene::setPref(const char* base_name, int axis, const char* value) {
     if (!_prefs) {
