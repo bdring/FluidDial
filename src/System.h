@@ -42,6 +42,7 @@ extern LGFX_Sprite      canvas;
 extern m5::Touch_Class& touch;
 
 void drawPngFile(const char* filename, int x, int y);
+void drawPngFile(LGFX_Sprite* sprite, const char* filename, int x, int y);
 
 void init_system();
 

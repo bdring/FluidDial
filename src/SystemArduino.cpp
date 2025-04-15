@@ -65,11 +65,14 @@ extern "C" void poll_extra() {
 }
 
 void drawPngFile(const char* filename, int x, int y) {
+    drawPngFile(&canvas, filename, x, y);
+}
+void drawPngFile(LGFX_Sprite* sprite, const char* filename, int x, int y) {
     // When datum is middle_center, the origin is the center of the canvas and the
     // +Y direction is down.
     std::string fn { "/" };
     fn += filename;
-    canvas.drawPngFile(LittleFS, fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
+    sprite->drawPngFile(LittleFS, fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
 #define FORMAT_LITTLEFS_IF_FAILED true

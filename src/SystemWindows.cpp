@@ -46,11 +46,14 @@ void delay_ms(uint32_t ms) {
 }
 
 void drawPngFile(const char* filename, int x, int y) {
+    drawPngFile(&canvas, filename, x, y);
+}
+void drawPngFile(LGFX_Sprite* sprite, const char* filename, int x, int y) {
     std::string fn("data/");
     fn += filename;
     // When datum is middle_center, the origin is the center of the canvas and the
     // +Y direction is down.
-    canvas.drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
+    sprite->drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
 #define TIOCM_LE 0x001
