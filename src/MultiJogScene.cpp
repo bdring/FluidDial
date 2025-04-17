@@ -98,6 +98,14 @@ public:
         }
         send_line(cmd.c_str());
     }
+
+    void zero_axis(int axis) {
+        std::string cmd = "G10L20P0";
+        cmd += axisNumToChar(axis);
+        cmd += "0";
+        send_line(cmd.c_str());
+    }
+
     void onEntry(void* arg) {
         if (arg && strcmp((const char*)arg, "Confirmed") == 0) {
             zero_axes();
@@ -107,6 +115,19 @@ public:
             for (size_t axis = 0; axis < 3; axis++) {
                 getPref("DistanceDigit", axis, &_dist_index[axis]);
             }
+        }
+        extern m5::Button_Class& setXButton;
+        extern m5::Button_Class& setYButton;
+        extern m5::Button_Class& setZButton;
+        if (setXButton.isPressed()) {
+            set_axis(0);
+        } else if (setYButton.isPressed()) {
+            set_axis(1);
+        } else if (setZButton.isPressed()) {
+            set_axis(2);
+        } else {
+            unselect_all();
+            select(0);
         }
     }
 
@@ -165,6 +186,7 @@ public:
                 if (++_dist_index[axis] >= max_index()) {
                     _dist_index[axis] = min_index();
                 }
+                set_dist_index(axis, _dist_index[axis]);
             }
         }
     }
@@ -208,6 +230,10 @@ public:
             the_axis = num_axes - 1;
         }
         select(the_axis);
+    }
+    void set_axis(int axis) {
+        unselect_all();
+        select(axis);
     }
     void touch_top() {
         prev_axis();
@@ -367,6 +393,48 @@ public:
             start_mpg_jog(delta);
         }
     }
+
+#ifdef I2C_BUTTONS
+    void onOtherButtonPress() {        
+        // handling physical buttons for this scene
+        extern m5::Button_Class& setXButton;
+        extern m5::Button_Class& setYButton;
+        extern m5::Button_Class& setZButton;
+        extern m5::Button_Class& changeStepButton;
+        if (setXButton.wasPressed()) {
+            set_axis(0);
+            reDisplay();
+        }
+        if (setYButton.wasPressed()) {
+            set_axis(1);
+            reDisplay();
+        }
+        if (setZButton.wasPressed()) {
+            set_axis(2);
+            reDisplay();
+        }
+        if (changeStepButton.wasPressed()) {
+            rotate_distance();
+            reDisplay();
+        }
+        // TODO isHolding action doesnt work
+        // long press - zero the X axis
+        if (setXButton.isHolding()) {
+            zero_axis(0);
+            reDisplay();
+        }
+        // long press - zero the Y axis
+        if (setYButton.isHolding()) {
+            zero_axis(1);
+            reDisplay();
+        }
+        // long press - zero the Z axis
+        if (setZButton.isHolding()) {
+            zero_axis(2);
+            reDisplay();
+        }
+    }
+#endif
 
     void onDROChange() {
         reDisplay();

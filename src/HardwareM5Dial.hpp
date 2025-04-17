@@ -5,6 +5,15 @@ constexpr static const int DIAL_BUTTON_PIN = GPIO_NUM_42;
 #include "M5Dial.h"
 
 constexpr static const int FNC_UART_NUM = 1;
+#ifdef I2C_BUTTONS
+// PORT B is used for I2C buttons
+constexpr static const int I2C_BUTTONS_ADDR = 0x20;
+constexpr static const int I2C_BUTTONS_SDA  = GPIO_NUM_2;  // SDA
+constexpr static const int I2C_BUTTONS_SCL  = GPIO_NUM_1;  // SCL
+// PORT A is used for UART
+constexpr static const int PND_RX_FNC_TX_PIN = GPIO_NUM_15;
+constexpr static const int PND_TX_FNC_RX_PIN = GPIO_NUM_13;
+#else
 #ifdef UART_ON_PORT_B
 constexpr static const int RED_BUTTON_PIN    = GPIO_NUM_13;
 constexpr static const int GREEN_BUTTON_PIN  = GPIO_NUM_15;
@@ -27,5 +36,5 @@ constexpr static const int GREEN_BUTTON_PIN  = GPIO_NUM_2;
 constexpr static const int PND_RX_FNC_TX_PIN = GPIO_NUM_15;
 constexpr static const int PND_TX_FNC_RX_PIN = GPIO_NUM_13;
 #endif
-
 #define WAKEUP_GPIO RED_BUTTON_PIN
+#endif  // I2C_BUTTONS

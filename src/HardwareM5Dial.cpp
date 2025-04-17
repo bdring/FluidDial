@@ -7,6 +7,10 @@
 #include "M5GFX.h"
 #include "Drawing.h"
 #include "HardwareM5Dial.hpp"
+#if I2C_BUTTONS
+#include <Wire.h>
+#include <PCF8574.h>
+#endif
 
 LGFX_Device&       display = M5Dial.Display;
 LGFX_Sprite        canvas(&M5Dial.Display);
@@ -15,8 +19,24 @@ m5::Touch_Class&   touch     = M5Dial.Touch;
 Stream&            debugPort = USBSerial;
 
 m5::Button_Class& dialButton = M5Dial.BtnA;
+#ifdef I2C_BUTTONS
+// Buttons through the I2C expander
+m5::Button_Class buttons_i2c[8];
+PCF8574 pcf20(I2C_BUTTONS_ADDR);    // I2C expander 8x DIO
+// Map the original button objects to the array elements
+m5::Button_Class& greenButton = buttons_i2c[0];
+m5::Button_Class& redButton =   buttons_i2c[1];
+m5::Button_Class& setXButton =  buttons_i2c[2];
+m5::Button_Class& setYButton =  buttons_i2c[3];
+m5::Button_Class& setZButton =  buttons_i2c[4];
+m5::Button_Class& changeStepButton = buttons_i2c[5];
+m5::Button_Class& futureUse1Button = buttons_i2c[6];
+m5::Button_Class& futureUse2Button = buttons_i2c[7];
+#else
+// Two buttons through GPIO pins
 m5::Button_Class  greenButton;
 m5::Button_Class  redButton;
+#endif
 
 bool round_display = true;
 
@@ -41,12 +61,20 @@ void init_hardware() {
 
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 
+    #ifdef I2C_BUTTONS
+    Wire.begin(I2C_BUTTONS_SDA, I2C_BUTTONS_SCL);
+    pcf20.begin();
+    for (auto& button : buttons_i2c) {
+        button.setDebounceThresh(5);
+    }
+    #else
     // Setup external GPIOs as buttons
     lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);
     lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, GREEN_BUTTON_PIN);
 
     greenButton.setDebounceThresh(5);
     redButton.setDebounceThresh(5);
+    #endif
 
     init_encoder(ENC_A, ENC_B);
 
@@ -69,36 +97,52 @@ void system_background() {
 }
 
 bool switch_button_touched(bool& pressed, int& button) {
-    if (redButton.wasPressed()) {
-        button  = 0;
-        pressed = true;
-        return true;
-    }
-    if (redButton.wasReleased()) {
-        button  = 0;
-        pressed = false;
-        return true;
-    }
     if (dialButton.wasPressed()) {
-        button  = 1;
+        button  = 0;
         pressed = true;
         return true;
     }
     if (dialButton.wasReleased()) {
-        button  = 1;
+        button  = 0;
         pressed = false;
         return true;
     }
+    #ifdef I2C_BUTTONS
+    for (int i = 0; i < 8; ++i) {
+        if (buttons_i2c[i].wasPressed()) {
+            button  = i + 1; // Shift index by 1
+            pressed = true;
+            return true;
+        }
+        if (buttons_i2c[i].wasReleased()) {
+            button  = i + 1; // Shift index by 1
+            pressed = false;
+            return true;
+        }
+    }
+    #else
     if (greenButton.wasPressed()) {
-        button  = 2;
+        button  = 1;
         pressed = true;
         return true;
     }
     if (greenButton.wasReleased()) {
+        button  = 1;
+        pressed = false;
+        return true;
+    }
+    if (redButton.wasPressed()) {
+        button  = 2;
+        pressed = true;
+        return true;
+    }
+    if (redButton.wasReleased()) {
         button  = 2;
         pressed = false;
         return true;
     }
+    #endif
+    // No button pressed or released
     return false;
 }
 
@@ -114,9 +158,18 @@ void update_events() {
 
     auto ms = m5gfx::millis();
 
+    #ifdef I2C_BUTTONS
+    // Read the state of the I2C expander and update button states
+    auto but_bits = ~pcf20.read8();    // Active low
+    for (int i = 0; i < 8; ++i) {
+        bool state = bitRead(but_bits, i);
+        buttons_i2c[i].setRawState(ms, state);
+    }
+    #else
     // The red and green buttons are active low
     redButton.setRawState(ms, !m5gfx::gpio_in(RED_BUTTON_PIN));
     greenButton.setRawState(ms, !m5gfx::gpio_in(GREEN_BUTTON_PIN));
+    #endif
 }
 
 void ackBeep() {
@@ -134,6 +187,7 @@ bool ui_locked() {
 // but that can't work because GPIO42 is not an RTC GPIO and thus
 // cannot be used as an ext0 wakeup source.
 void deep_sleep(int us) {
+#ifdef WAKEUP_GPIO
     display.sleep();
 
     rtc_gpio_pullup_en((gpio_num_t)WAKEUP_GPIO);
@@ -148,4 +202,5 @@ void deep_sleep(int us) {
         // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     }
     esp_deep_sleep_start();
+#endif
 }

@@ -39,6 +39,7 @@ public:
     virtual void onGreenButtonRelease() {}
     virtual void onDialButtonPress() {}
     virtual void onDialButtonRelease() {}
+    virtual void onOtherButtonPress() {}
     virtual void onTouchPress() {}
     virtual void onTouchRelease() {}
     virtual void onTouchClick() {}
