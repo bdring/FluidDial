@@ -4,7 +4,11 @@
 // System interface routines for the Arduino framework
 
 #include "System.h"
-#include <LGFX_AUTODETECT.hpp>
+
+#define LGFX_USE_V1
+#include <LovyanGFX.hpp>
+#include <driver/i2c.h>
+
 #include "Hardware2432.hpp"
 #include "Drawing.h"
 #include "NVS.h"
@@ -15,7 +19,8 @@
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
 
-LGFX         xdisplay;
+extern LGFX_Device xdisplay;
+
 LGFX_Device& display = xdisplay;
 LGFX_Sprite  canvas(&xdisplay);
 
@@ -24,9 +29,9 @@ LGFX_Sprite buttons(&xdisplay);
 LGFX_Sprite locked_buttons(&xdisplay);
 #endif
 
-int red_button_pin   = -1;
-int dial_button_pin  = -1;
-int green_button_pin = -1;
+extern int red_button_pin;
+extern int dial_button_pin;
+extern int green_button_pin;
 
 #ifdef DEBUG_TO_USB
 Stream& debugPort = Serial;
@@ -110,6 +115,14 @@ void  set_layout(int n) {
 
 nvs_handle_t hw_nvs;
 
+int red_button_pin   = -1;
+int dial_button_pin  = -1;
+int green_button_pin = -1;
+
+int enc_a, enc_b;
+
+extern void init_board();
+
 void init_hardware() {
 #ifdef DEBUG_TO_USB
     Serial.begin(115200);
@@ -117,49 +130,14 @@ void init_hardware() {
     hw_nvs = nvs_init("hardware");
     nvs_get_i32(hw_nvs, "layout", &layout_num);
 
+    dbg_printf("Display Init\n");
     display.init();
     set_layout(layout_num);
 
     touch.begin(&display);
 
-    int enc_a = -1, enc_b = -1;
-    red_button_pin   = -1;
-    dial_button_pin  = -1;
-    green_button_pin = -1;
+    init_board();
 
-    lgfx::boards::board_t board_id = display.getBoard();
-    switch (board_id) {
-        case lgfx::boards::board_Guition_ESP32_2432W328:
-#ifdef LOCKOUT_PIN
-            pinMode(LOCKOUT_PIN, INPUT);
-#endif
-
-#ifdef CYD_BUTTONS
-            enc_a = GPIO_NUM_22;
-            enc_b = GPIO_NUM_21;
-            // rotary_button_pin = GPIO_NUM_35;
-            // pinMode(rotary_button_pin, INPUT);  // Pullup does not work on GPIO35
-
-            red_button_pin   = GPIO_NUM_4;   // RGB LED Red
-            dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
-            green_button_pin = GPIO_NUM_16;  // RGB LED Green
-            pinMode(red_button_pin, INPUT_PULLUP);
-            pinMode(dial_button_pin, INPUT_PULLUP);
-            pinMode(green_button_pin, INPUT_PULLUP);
-#else
-            enc_a = GPIO_NUM_22;
-            enc_b = GPIO_NUM_17;  // RGB LED Blue
-#endif
-            // backlight = GPIO_NUM_27;
-            break;
-        case lgfx::boards::board_Sunton_ESP32_2432S028:
-            enc_a = GPIO_NUM_22;
-            enc_b = GPIO_NUM_27;
-            break;
-        default:
-            dbg_printf("Unknown board id %d\n", board_id);
-            break;
-    }
     init_encoder(enc_a, enc_b);
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 
