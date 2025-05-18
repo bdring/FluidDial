@@ -44,6 +44,7 @@ jobs:
       - name: Build
         run: |
           for env in m5dial cyd cyd_nodebug cyd_buttons; do
+          pio run -e $env
           pio run -e $env -t build_merged
           cp .pio/build/$env/merged-flash.bin release/FluidDial_$env.bin
           done
