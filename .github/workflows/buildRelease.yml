@@ -1,0 +1,70 @@
+name: Build FluidDial Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release version'
+        required: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+      - name: Set release version
+        run: |
+          git config user.email "wmb@firmworks.com"
+          git config user.name "Mitch Bradley"
+          git tag "${{ github.event.inputs.tag }}" -a -m "Release test"
+      - name: Create release directory
+          mkdir release
+  build:
+    strategy:
+      matrix:
+        pio_env:
+          - m5dial
+          - cyd
+          - cyd_nodebug
+          - cyd_buttons
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: |
+          pio run -e ${{matrix.pio_env}} -t build_merged
+          cp .pio/build/${{matrix.pio_env}}/merged-flash.bin release/FluidDial_${{matrix.pio_env}}.bin
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: FluidDial_${{matrix.pio_env}}
+          path: .pio/build/${{matrix.pio_env}}/merged-flash.bin
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.tag }}
+        files: release/*
+        draft: True
