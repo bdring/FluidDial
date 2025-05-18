@@ -16,7 +16,7 @@ cmd += " 0x10000 $BUILD_DIR/firmware.bin " + filesystem_start + " $BUILD_DIR/lit
 
 env.AddCustomTarget(
     name="build_merged",
-    dependencies=["$BUILD_DIR/bootloader.bin", "$BUILD_DIR/firmware.bin"]
+    dependencies=["$BUILD_DIR/bootloader.bin", "$BUILD_DIR/firmware.bin"],
     actions=["pio run -e $PIOENV -t buildfs", cmd],
     title="Build Merged",
     description="Build combined image with program and filesystem"
