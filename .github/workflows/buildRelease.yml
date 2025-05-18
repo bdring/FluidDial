@@ -48,6 +48,7 @@ jobs:
         run: mkdir -p release
       - name: Build
         run: |
+          ls .pio/build
           pio run -e ${{matrix.pio_env}} -t build_merged
           cp .pio/build/${{matrix.pio_env}}/merged-flash.bin release/FluidDial_${{matrix.pio_env}}.bin
       - name: Upload binaries
