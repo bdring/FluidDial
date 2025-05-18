@@ -38,7 +38,7 @@ jobs:
           git config user.name "Mitch Bradley"
           git tag "${{ github.event.inputs.tag }}" -a -m "Release test"
       - name: Create release directory
-          mkdir release
+        run: mkdir release
   build:
     strategy:
       matrix:
