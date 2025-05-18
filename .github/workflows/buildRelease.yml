@@ -9,13 +9,6 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        pio_env:
-          - m5dial
-          - cyd
-          - cyd_nodebug
-          - cyd_buttons
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,25 +38,23 @@ jobs:
           git config user.name "Mitch Bradley"
           git tag "${{ github.event.inputs.tag }}" -a -m "Release test"
       - name: Create release directory
-        run: mkdir -p release
+        run: |
+          mkdir -p release
+          rm -f release/*
       - name: Build
         run: |
-          pio run -e ${{matrix.pio_env}}
-          ls .pio/build/${{matrix.pio_env}}
-          pio run -e ${{matrix.pio_env}} -t build_merged
-          cp .pio/build/${{matrix.pio_env}}/merged-flash.bin release/FluidDial_${{matrix.pio_env}}.bin
+          for env in m5dial cyd cyd_nodebug cyd_buttons; do
+          pio run -e $env -t build_merged
+          cp .pio/build/$env/merged-flash.bin release/FluidDial_$env.bin
+          done
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: FluidDial_${{matrix.pio_env}}
-          path: .pio/build/${{matrix.pio_env}}/merged-flash.bin
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Create release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ github.event.inputs.tag }}
-        files: release/*
-        draft: True
+          name: FluidDial_firmware
+          path: release/*
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          files: release/*
+          draft: True
