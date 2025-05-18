@@ -8,10 +8,17 @@ on:
         required: true
 
 jobs:
-  prepare:
+  build:
+    strategy:
+      matrix:
+        pio_env:
+          - m5dial
+          - cyd
+          - cyd_nodebug
+          - cyd_buttons
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+          - uses: actions/checkout@v4
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -38,17 +45,7 @@ jobs:
           git config user.name "Mitch Bradley"
           git tag "${{ github.event.inputs.tag }}" -a -m "Release test"
       - name: Create release directory
-        run: mkdir release
-  build:
-    strategy:
-      matrix:
-        pio_env:
-          - m5dial
-          - cyd
-          - cyd_nodebug
-          - cyd_buttons
-    runs-on: ubuntu-latest
-    steps:
+        run: mkdir -p release
       - name: Build
         run: |
           pio run -e ${{matrix.pio_env}} -t build_merged
