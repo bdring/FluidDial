@@ -7,6 +7,7 @@
 #include "AboutScene.h"
 
 extern void base_display();
+extern void show_logo();
 
 extern const char* git_info;
 
@@ -17,9 +18,10 @@ void setup() {
 
     display.setBrightness(aboutScene.getBrightness());
 
-    base_display();
-
+    show_logo();
     delay_ms(2000);  // view the logo and wait for the debug port to connect
+
+    base_display();
 
     dbg_printf("FluidNC Pendant %s\n", git_info);
 

@@ -57,9 +57,12 @@ void init_hardware() {
 
 Point sprite_offset { 0, 0 };
 
+void show_logo() {
+    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+}
+
 void base_display() {
     display.clear();
-    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
 }
 
 void next_layout(int delta) {}

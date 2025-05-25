@@ -29,15 +29,20 @@ void AboutScene::onGreenButtonPress() {
 #endif
 }
 void AboutScene::onRedButtonPress() {
+#ifdef USE_M5
     set_disconnected_state();
-#ifdef ARDUINO
+#    ifdef ARDUINO
     centered_text("Use red button to wakeup", 118, RED, TINY);
     refreshDisplay();
     delay_ms(2000);
 
     deep_sleep(0);
-#else
+#    else
     dbg_println("Sleep");
+#    endif
+#else
+    next_layout(1);
+    reDisplay();
 #endif
 }
 
@@ -115,7 +120,11 @@ void AboutScene::reDisplay() {
 
     drawMenuTitle(current_scene->name());
 
+#ifdef USE_M5
     drawButtonLegends("Sleep", greenLegend, "Menu");
+#else
+    drawButtonLegends("Layout", greenLegend, "Menu");
+#endif
     drawError();  // if there is one
     refreshDisplay();
 }

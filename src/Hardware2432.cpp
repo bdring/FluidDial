@@ -19,22 +19,184 @@
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
 
-extern LGFX_Device xdisplay;
-
+LGFX_Device  xdisplay;
 LGFX_Device& display = xdisplay;
-LGFX_Sprite  canvas(&xdisplay);
+
+LGFX_Sprite canvas(&xdisplay);
 
 LGFX_Sprite buttons(&xdisplay);
 #ifdef LOCKOUT_PIN
 LGFX_Sprite locked_buttons(&xdisplay);
 #endif
 
-extern int red_button_pin;
-extern int dial_button_pin;
-extern int green_button_pin;
-
 #ifdef DEBUG_TO_USB
 Stream& debugPort = Serial;
+#endif
+
+int red_button_pin   = -1;
+int dial_button_pin  = -1;
+int green_button_pin = -1;
+
+int enc_a, enc_b;
+
+lgfx::Bus_SPI   _bus;
+lgfx::Light_PWM _light;
+#ifdef CAPACITIVE_CYD
+lgfx::Panel_ILI9341_2 _panel_ili9341;
+lgfx::Touch_CST816S   _touch_cst816s;
+
+void init_capacitive_cyd() {
+    {
+        auto cfg       = _bus.config();
+        cfg.freq_write = 55000000;
+        cfg.freq_read  = 20000000;
+        cfg.use_lock   = true;
+
+        cfg.dma_channel = SPI_DMA_CH_AUTO;
+        cfg.spi_host    = HSPI_HOST;
+        cfg.pin_mosi    = GPIO_NUM_13;
+        cfg.pin_miso    = GPIO_NUM_12;
+        cfg.pin_sclk    = GPIO_NUM_14;
+        cfg.pin_dc      = GPIO_NUM_2;
+        cfg.spi_mode    = 0;
+        cfg.spi_3wire   = false;
+
+        _bus.config(cfg);
+        _panel_ili9341.bus(&_bus);
+    }
+    {
+        auto cfg             = _panel_ili9341.config();
+        cfg.pin_cs           = GPIO_NUM_15;
+        cfg.offset_x         = 0;
+        cfg.offset_y         = 0;
+        cfg.offset_rotation  = 6;
+        cfg.dummy_read_pixel = 8;
+        cfg.dummy_read_bits  = 1;
+        cfg.readable         = true;
+        cfg.invert           = true;
+        cfg.rgb_order        = false;
+        cfg.dlen_16bit       = false;
+        cfg.bus_shared       = false;
+        _panel_ili9341.config(cfg);
+    }
+    {
+        auto cfg        = _light.config();
+        cfg.pin_bl      = GPIO_NUM_27;
+        cfg.freq        = 12000;
+        cfg.pwm_channel = 7;
+        cfg.offset      = 0;
+        cfg.invert      = false;
+        _light.config(cfg);
+        _panel_ili9341.light(&_light);
+    }
+    {
+        auto cfg            = _touch_cst816s.config();
+        cfg.i2c_port        = I2C_NUM_0;
+        cfg.pin_sda         = GPIO_NUM_33;
+        cfg.pin_scl         = GPIO_NUM_32;
+        cfg.pin_rst         = GPIO_NUM_25;
+        cfg.pin_int         = -1;
+        cfg.offset_rotation = 6;
+        cfg.freq            = 400000;
+        cfg.x_max           = 240;
+        cfg.y_max           = 320;
+        _touch_cst816s.config(cfg);
+        _panel_ili9341.setTouch(&_touch_cst816s);
+    }
+    _panel_ili9341.init(true);
+
+    xdisplay.setPanel(&_panel_ili9341);
+
+#    ifdef LOCKOUT_PIN
+    pinMode(LOCKOUT_PIN, INPUT);
+#    endif
+
+#    ifdef CYD_BUTTONS
+    enc_a = GPIO_NUM_22;
+    enc_b = GPIO_NUM_21;
+    // rotary_button_pin = GPIO_NUM_35;
+    // pinMode(rotary_button_pin, INPUT);  // Pullup does not work on GPIO35
+
+    red_button_pin   = GPIO_NUM_4;   // RGB LED Red
+    dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
+    green_button_pin = GPIO_NUM_16;  // RGB LED Green
+    pinMode(red_button_pin, INPUT_PULLUP);
+    pinMode(dial_button_pin, INPUT_PULLUP);
+    pinMode(green_button_pin, INPUT_PULLUP);
+#    else
+    enc_a = GPIO_NUM_22;
+    enc_b = GPIO_NUM_17;  // RGB LED Blue
+#    endif
+}
+
+#endif
+
+#ifdef RESISTIVE_CYD
+lgfx::Panel_ST7789  _panel_st7789;
+lgfx::Touch_XPT2046 _touch_xpt2046;
+
+void init_resistive_cyd() {
+    {
+        auto cfg       = _bus.config();
+        cfg.freq_write = 8000000;
+        cfg.freq_read  = 16000000;
+        cfg.use_lock   = true;
+
+        cfg.dma_channel = SPI_DMA_CH_AUTO;
+        cfg.spi_host    = HSPI_HOST;
+        cfg.pin_mosi    = GPIO_NUM_13;
+        cfg.pin_miso    = GPIO_NUM_12;
+        cfg.pin_sclk    = GPIO_NUM_14;
+        cfg.pin_dc      = GPIO_NUM_2;
+        cfg.spi_mode    = 0;
+        cfg.spi_3wire   = false;
+
+        _bus.config(cfg);
+        _panel_st7789.bus(&_bus);
+    }
+    {
+        auto cfg            = _panel_st7789.config();
+        cfg.pin_cs          = GPIO_NUM_15;
+        cfg.offset_rotation = 0;
+        cfg.pin_rst         = -1;
+        cfg.pin_busy        = -1;
+        cfg.bus_shared      = false;
+        _panel_st7789.config(cfg);
+    }
+    {
+        auto cfg        = _light.config();
+        cfg.pin_bl      = GPIO_NUM_21;
+        cfg.freq        = 12000;
+        cfg.pwm_channel = 7;
+        cfg.offset      = 0;
+        cfg.invert      = false;
+        _light.config(cfg);
+        _panel_st7789.light(&_light);
+    }
+    {
+        auto cfg            = _touch_xpt2046.config();
+        cfg.x_min           = 300;
+        cfg.x_max           = 3900;
+        cfg.y_min           = 3700;
+        cfg.y_max           = 200;
+        cfg.pin_int         = -1;
+        cfg.bus_shared      = false;
+        cfg.spi_host        = -1;  // -1:use software SPI for XPT2046
+        cfg.pin_sclk        = GPIO_NUM_25;
+        cfg.pin_mosi        = GPIO_NUM_32;
+        cfg.pin_miso        = GPIO_NUM_39;
+        cfg.pin_cs          = GPIO_NUM_33;
+        cfg.offset_rotation = 2;
+        _touch_xpt2046.config(cfg);
+        _panel_st7789.setTouch(&_touch_xpt2046);
+    }
+    _panel_st7789.init(true);
+
+    xdisplay.setPanel(&_panel_st7789);
+    enc_a          = GPIO_NUM_22;
+    enc_b          = GPIO_NUM_27;
+    red_button_pin = dial_button_pin = green_button_pin = -1;
+}
 #endif
 
 bool round_display = false;
@@ -57,9 +219,6 @@ public:
     Point buttonsHeight;
     Point buttonsWH;
     Point spritePosition;
-#if 0
-    Point buttonPosition[3];
-#endif
     Layout(int rotation, Point spritePosition, Point firstButtonPosition) :
         _rotation(rotation), spritePosition(spritePosition), buttonsXY(firstButtonPosition) {
         if (_rotation & 1) {  // Vertical
@@ -67,40 +226,25 @@ public:
         } else {
             buttonsWH = { sprite_wh, button_h };
         }
-#if 0
-        buttonPosition[0] = buttonsXY;
-        if (_rotation & 1) { // Vertical
-            int x             = buttonPosition[0].x;
-            buttonPosition[1] = { x, button_h };
-            buttonPosition[2] = { x, 2 * button_h };
-        } else {
-            int y             = buttonPosition[0].y;
-            buttonPosition[1] = { button_w, y };
-            buttonPosition[2] = { 2 * button_w, y };
-        }
-#endif
     }
-    Point buttonOffset(int n) {
-        return (_rotation & 1) ? Point(0, n * button_h) : Point(n * button_w, 0);
-    }
+    Point buttonOffset(int n) { return (_rotation & 1) ? Point(0, n * button_h) : Point(n * button_w, 0); }
 
-    int rotation() {
-        return _rotation;
-    }
+    int rotation() { return _rotation; }
 };
 
 // clang-format off
 Layout layouts[] = {
 // rotation  sprite_XY        button0_XY
-    { 0,     { 0, 0 },        { 0, sprite_wh } }, // Buttons above
-    { 0,     { 0, button_h }, { 0, 0 }         }, // Buttons below
-    { 1,     { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
-    { 1,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
-    { 2,     { 0, 0 },        { 0, sprite_wh } }, // Buttons below
-    { 2,     { 0, button_h }, { 0, 0 }         }, // Buttons above
-    { 3,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
-    { 3,     { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
+    { 0,      { 0, 0 },        { 0, sprite_wh } }, // Buttons below
+    { 0,      { 0, button_h }, { 0, 0 }         }, // Buttons above
+    { 1,      { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
+    { 1,      { button_w, 0 }, { 0, 0 }         }, // Buttons left
+    { 2,      { 0, 0 },        { 0, sprite_wh } }, // Buttons below
+    { 2,      { 0, button_h }, { 0, 0 }         }, // Buttons above
+    { 3,      { button_w, 0 }, { 0, 0 }         }, // Buttons left
+    { 3,      { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
 };
+int num_layouts = sizeof(layouts)/sizeof(layouts[0]);
 // clang-format on
 
 Layout* layout;
@@ -115,19 +259,93 @@ void  set_layout(int n) {
 
 nvs_handle_t hw_nvs;
 
-int red_button_pin   = -1;
-int dial_button_pin  = -1;
-int green_button_pin = -1;
+int display_num = 0;
 
-int enc_a, enc_b;
+#if defined(RESISTIVE_CYD) && defined(CAPACITIVE_CYD)
+bool try_display(const char* message) {
+    dbg_printf("Trying %s\n", message);
+    display.init();
+    display.clear();
+    display.fillRect(0, 0, display.width(), display.height(), WHITE);
+    display.setFont(&fonts::FreeSansBold18pt7b);
+    display.setTextDatum(middle_center);
+    display.setTextColor(BLACK);
+    display.drawString(message, display.width() / 2, 30);
+    display.drawString("Tap", display.width() / 2, 100);
+    display.drawString("the", display.width() / 2, 140);
+    display.drawString("Screen", display.width() / 2, 180);
+    uint32_t timeout = millis() + 5000;
+    touch.begin(&display);
+    while (millis() < timeout) {
+        lgfx::touch_point_t t;
+        if (display.getTouch(&t, 1)) {
+            dbg_printf("Touched\n");
+            return true;
+        }
+        delay(50);
+    }
+    return false;
+}
 
-extern void init_board();
+int try_displays() {
+    while (true) {
+        init_resistive_cyd();
+        if (try_display("Resistive -")) {
+            return 1;
+        }
+        init_capacitive_cyd();
+        if (try_display("Capacitive -")) {
+            return 2;
+        }
+    }
+}
+void choose_display() {
+    uint32_t timeout = millis() + 1000;
+    pinMode(0, INPUT);
+    while (millis() < timeout) {
+        if (digitalRead(0) == 0) {
+            nvs_set_i32(hw_nvs, "display", 0);
+            nvs_set_i32(hw_nvs, "layout", 0);
+            break;
+        }
+        delay(50);
+    }
+
+    nvs_get_i32(hw_nvs, "display", &display_num);
+
+    switch (display_num) {
+        case 0:
+            display_num = try_displays();
+            nvs_set_i32(hw_nvs, "display", display_num);
+            esp_restart();
+            break;
+        case 1:
+            init_resistive_cyd();
+            break;
+        case 2:
+            init_capacitive_cyd();
+            break;
+    }
+}
+#else
+void choose_display() {
+#    ifdef RESISTIVE_CYD
+    init_resistive_cyd();
+#    endif
+#    ifdef CAPACITIVE_CYD
+    init_capacitive_cyd();
+#    endif
+}
+#endif
 
 void init_hardware() {
 #ifdef DEBUG_TO_USB
     Serial.begin(115200);
 #endif
     hw_nvs = nvs_init("hardware");
+
+    choose_display();
+
     nvs_get_i32(hw_nvs, "layout", &layout_num);
 
     dbg_printf("Display Init\n");
@@ -136,10 +354,8 @@ void init_hardware() {
 
     touch.begin(&display);
 
-    init_board();
-
     init_encoder(enc_a, enc_b);
-    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+    //    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 
     touch.setFlickThresh(10);
 
@@ -208,10 +424,14 @@ static void initButtons() {
     }
 }
 
-void base_display() {
-    display.clear();
+void show_logo() {
+    // display.clear();
     display.drawPngFile(
         LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+}
+
+void base_display() {
+    display.clear();
 
     initButtons();
 #ifdef LOCKOUT_PIN
@@ -221,12 +441,14 @@ void base_display() {
 }
 void next_layout(int delta) {
     layout_num += delta;
-    while (layout_num >= 8) {
-        layout_num -= 8;
+    while (layout_num >= num_layouts) {
+        layout_num -= num_layouts;
     }
     while (layout_num < 0) {
-        layout_num += 8;
+        layout_num += num_layouts;
     }
+    dbg_printf("Layout %d\n", layout_num);
+    delay(200);
     set_layout(layout_num);
     nvs_set_i32(hw_nvs, "layout", layout_num);
     base_display();

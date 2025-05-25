@@ -21,5 +21,4 @@ constexpr static const int FNC_UART_NUM      = 0;
 
 // GPIO assignments for the encoder are set by
 // init_hardware() in Hardware2432.cpp, based
-// on which board variant is detected by the
-// LovyanGFX display autodetection code.
+// on which board variant is in use.

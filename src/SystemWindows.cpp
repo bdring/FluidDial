@@ -278,6 +278,7 @@ void init_system() {
 
 Point sprite_offset { 0, 0 };
 
+void show_logo() {}
 void base_display() {
     display.clear();
 }
