@@ -19,14 +19,73 @@
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
 
-LGFX_Device  xdisplay;
+class LGFX : public lgfx::LGFX_Device {
+    lgfx::Panel_ST7789 _panel_instance;
+    lgfx::Bus_SPI      _bus_instance;
+    lgfx::Light_PWM    _light_instance;
+
+public:
+    LGFX(void) {
+        {
+            auto cfg       = _bus_instance.config();
+            cfg.freq_write = 55000000;
+            cfg.freq_read  = 20000000;
+            cfg.use_lock   = true;
+
+            cfg.dma_channel = SPI_DMA_CH_AUTO;
+            cfg.spi_host    = HSPI_HOST;
+            cfg.pin_mosi    = GPIO_NUM_13;
+            cfg.pin_miso    = GPIO_NUM_12;
+            cfg.pin_sclk    = GPIO_NUM_14;
+            cfg.pin_dc      = GPIO_NUM_2;
+            cfg.spi_mode    = 0;
+            cfg.spi_3wire   = false;
+
+            _bus_instance.config(cfg);
+            _panel_instance.bus(&_bus_instance);
+        }
+        {
+            auto cfg            = _panel_instance.config();
+            cfg.pin_cs          = GPIO_NUM_15;
+            cfg.offset_rotation = 0;
+            cfg.pin_rst         = -1;
+            cfg.pin_busy        = -1;
+            cfg.bus_shared      = false;
+            _panel_instance.config(cfg);
+        }
+        {
+            auto cfg        = _light_instance.config();
+            cfg.pin_bl      = GPIO_NUM_27;
+            cfg.freq        = 12000;
+            cfg.pwm_channel = 7;
+            cfg.offset      = 0;
+            cfg.invert      = false;
+            _light_instance.config(cfg);
+            _panel_instance.light(&_light_instance);
+        }
+
+        setPanel(&_panel_instance);
+    }
+    void setBacklightPin(uint8_t pinnum) {
+        auto cfg   = _light_instance.config();
+        cfg.pin_bl = pinnum;
+        _light_instance.config(cfg);
+    }
+};
+
+// xdisplay is an instance of the concrete wrapper class "LGFX" with knowledge
+// of various details of the panel and touch
+LGFX xdisplay;
+
+// display is an instance of the abstract class "LGFX_Device" with virtual
+// methods to perform device-independent display operations
 LGFX_Device& display = xdisplay;
 
-LGFX_Sprite canvas(&xdisplay);
+LGFX_Sprite canvas(&display);
 
-LGFX_Sprite buttons(&xdisplay);
+LGFX_Sprite buttons(&display);
 #ifdef LOCKOUT_PIN
-LGFX_Sprite locked_buttons(&xdisplay);
+LGFX_Sprite locked_buttons(&display);
 #endif
 
 #ifdef DEBUG_TO_USB
@@ -39,56 +98,10 @@ int green_button_pin = -1;
 
 int enc_a, enc_b;
 
-lgfx::Bus_SPI   _bus;
-lgfx::Light_PWM _light;
 #ifdef CAPACITIVE_CYD
-lgfx::Panel_ILI9341_2 _panel_ili9341;
-lgfx::Touch_CST816S   _touch_cst816s;
+lgfx::Touch_CST816S _touch_cst816s;
 
 void init_capacitive_cyd() {
-    {
-        auto cfg       = _bus.config();
-        cfg.freq_write = 55000000;
-        cfg.freq_read  = 20000000;
-        cfg.use_lock   = true;
-
-        cfg.dma_channel = SPI_DMA_CH_AUTO;
-        cfg.spi_host    = HSPI_HOST;
-        cfg.pin_mosi    = GPIO_NUM_13;
-        cfg.pin_miso    = GPIO_NUM_12;
-        cfg.pin_sclk    = GPIO_NUM_14;
-        cfg.pin_dc      = GPIO_NUM_2;
-        cfg.spi_mode    = 0;
-        cfg.spi_3wire   = false;
-
-        _bus.config(cfg);
-        _panel_ili9341.bus(&_bus);
-    }
-    {
-        auto cfg             = _panel_ili9341.config();
-        cfg.pin_cs           = GPIO_NUM_15;
-        cfg.offset_x         = 0;
-        cfg.offset_y         = 0;
-        cfg.offset_rotation  = 6;
-        cfg.dummy_read_pixel = 8;
-        cfg.dummy_read_bits  = 1;
-        cfg.readable         = true;
-        cfg.invert           = true;
-        cfg.rgb_order        = false;
-        cfg.dlen_16bit       = false;
-        cfg.bus_shared       = false;
-        _panel_ili9341.config(cfg);
-    }
-    {
-        auto cfg        = _light.config();
-        cfg.pin_bl      = GPIO_NUM_27;
-        cfg.freq        = 12000;
-        cfg.pwm_channel = 7;
-        cfg.offset      = 0;
-        cfg.invert      = false;
-        _light.config(cfg);
-        _panel_ili9341.light(&_light);
-    }
     {
         auto cfg            = _touch_cst816s.config();
         cfg.i2c_port        = I2C_NUM_0;
@@ -96,16 +109,15 @@ void init_capacitive_cyd() {
         cfg.pin_scl         = GPIO_NUM_32;
         cfg.pin_rst         = GPIO_NUM_25;
         cfg.pin_int         = -1;
-        cfg.offset_rotation = 6;
+        cfg.offset_rotation = 0;
         cfg.freq            = 400000;
         cfg.x_max           = 240;
         cfg.y_max           = 320;
         _touch_cst816s.config(cfg);
-        _panel_ili9341.setTouch(&_touch_cst816s);
+        xdisplay.getPanel()->setTouch(&_touch_cst816s);
+        xdisplay.getPanel()->initTouch();
     }
-    _panel_ili9341.init(true);
-
-    xdisplay.setPanel(&_panel_ili9341);
+    xdisplay.setBacklightPin(GPIO_NUM_27);
 
 #    ifdef LOCKOUT_PIN
     pinMode(LOCKOUT_PIN, INPUT);
@@ -128,51 +140,12 @@ void init_capacitive_cyd() {
     enc_b = GPIO_NUM_17;  // RGB LED Blue
 #    endif
 }
-
-#endif
+#endif  // CAPACITIVE_CYD
 
 #ifdef RESISTIVE_CYD
-lgfx::Panel_ST7789  _panel_st7789;
 lgfx::Touch_XPT2046 _touch_xpt2046;
 
 void init_resistive_cyd() {
-    {
-        auto cfg       = _bus.config();
-        cfg.freq_write = 8000000;
-        cfg.freq_read  = 16000000;
-        cfg.use_lock   = true;
-
-        cfg.dma_channel = SPI_DMA_CH_AUTO;
-        cfg.spi_host    = HSPI_HOST;
-        cfg.pin_mosi    = GPIO_NUM_13;
-        cfg.pin_miso    = GPIO_NUM_12;
-        cfg.pin_sclk    = GPIO_NUM_14;
-        cfg.pin_dc      = GPIO_NUM_2;
-        cfg.spi_mode    = 0;
-        cfg.spi_3wire   = false;
-
-        _bus.config(cfg);
-        _panel_st7789.bus(&_bus);
-    }
-    {
-        auto cfg            = _panel_st7789.config();
-        cfg.pin_cs          = GPIO_NUM_15;
-        cfg.offset_rotation = 0;
-        cfg.pin_rst         = -1;
-        cfg.pin_busy        = -1;
-        cfg.bus_shared      = false;
-        _panel_st7789.config(cfg);
-    }
-    {
-        auto cfg        = _light.config();
-        cfg.pin_bl      = GPIO_NUM_21;
-        cfg.freq        = 12000;
-        cfg.pwm_channel = 7;
-        cfg.offset      = 0;
-        cfg.invert      = false;
-        _light.config(cfg);
-        _panel_st7789.light(&_light);
-    }
     {
         auto cfg            = _touch_xpt2046.config();
         cfg.x_min           = 300;
@@ -188,16 +161,17 @@ void init_resistive_cyd() {
         cfg.pin_cs          = GPIO_NUM_33;
         cfg.offset_rotation = 2;
         _touch_xpt2046.config(cfg);
-        _panel_st7789.setTouch(&_touch_xpt2046);
+        xdisplay.getPanel()->setTouch(&_touch_xpt2046);
+        xdisplay.getPanel()->initTouch();
     }
-    _panel_st7789.init(true);
 
-    xdisplay.setPanel(&_panel_st7789);
+    xdisplay.setBacklightPin(GPIO_NUM_21);
+
     enc_a          = GPIO_NUM_22;
     enc_b          = GPIO_NUM_27;
     red_button_pin = dial_button_pin = green_button_pin = -1;
 }
-#endif
+#endif  // RESISTIVE_CYD
 
 bool round_display = false;
 
@@ -262,10 +236,8 @@ nvs_handle_t hw_nvs;
 int display_num = 0;
 
 #if defined(RESISTIVE_CYD) && defined(CAPACITIVE_CYD)
-bool try_display(const char* message) {
+bool try_touch(const char* message) {
     dbg_printf("Trying %s\n", message);
-    display.init();
-    display.clear();
     display.fillRect(0, 0, display.width(), display.height(), WHITE);
     display.setFont(&fonts::FreeSansBold18pt7b);
     display.setTextDatum(middle_center);
@@ -274,7 +246,7 @@ bool try_display(const char* message) {
     display.drawString("Tap", display.width() / 2, 100);
     display.drawString("the", display.width() / 2, 140);
     display.drawString("Screen", display.width() / 2, 180);
-    uint32_t timeout = millis() + 5000;
+    uint32_t timeout = millis() + 2000;
     touch.begin(&display);
     while (millis() < timeout) {
         lgfx::touch_point_t t;
@@ -287,19 +259,25 @@ bool try_display(const char* message) {
     return false;
 }
 
-int try_displays() {
+int try_touch_chips() {
+    // Initially turn on both backlight possibilities to light up the screen
+    pinMode(21, OUTPUT);
+    digitalWrite(21, 1);
+    pinMode(27, OUTPUT);
+    digitalWrite(27, 1);
+
     while (true) {
-        init_resistive_cyd();
-        if (try_display("Resistive -")) {
-            return 1;
-        }
         init_capacitive_cyd();
-        if (try_display("Capacitive -")) {
+        if (try_touch("Capacitive -")) {
             return 2;
+        }
+        init_resistive_cyd();
+        if (try_touch("Resistive -")) {
+            return 1;
         }
     }
 }
-void choose_display() {
+void choose_board() {
     uint32_t timeout = millis() + 1000;
     pinMode(0, INPUT);
     while (millis() < timeout) {
@@ -315,7 +293,7 @@ void choose_display() {
 
     switch (display_num) {
         case 0:
-            display_num = try_displays();
+            display_num = try_touch_chips();
             nvs_set_i32(hw_nvs, "display", display_num);
             esp_restart();
             break;
@@ -328,7 +306,7 @@ void choose_display() {
     }
 }
 #else
-void choose_display() {
+void choose_board() {
 #    ifdef RESISTIVE_CYD
     init_resistive_cyd();
 #    endif
@@ -343,8 +321,9 @@ void init_hardware() {
     Serial.begin(115200);
 #endif
     hw_nvs = nvs_init("hardware");
+    display.init();
 
-    choose_display();
+    choose_board();
 
     nvs_get_i32(hw_nvs, "layout", &layout_num);
 
@@ -355,7 +334,7 @@ void init_hardware() {
     touch.begin(&display);
 
     init_encoder(enc_a, enc_b);
-    //    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 
     touch.setFlickThresh(10);
 
