@@ -65,40 +65,10 @@ def addImage(name, offset, filename, srcpath, dstpath):
     manifest['images'][name] = image
     # manifest['images'].append(image)
 
-def addFile(name, controllerpath, filename, srcpath, dstpath):
-    fulldstpath = os.path.join(manifestRelPath,os.path.normpath(dstpath))
-
-    os.makedirs(fulldstpath, exist_ok=True)
-
-    fulldstfile = os.path.join(fulldstpath, filename)
-
-    # Only copy files that are not already in the directory
-    if os.path.join(srcpath, filename) != fulldstfile:
-        shutil.copy(os.path.join(srcpath, filename), fulldstfile)
-
-    print("file ", name)
-
-    with open(fulldstfile, "rb") as f:
-        data = f.read()
-    file = {
-        "size": os.path.getsize(fulldstfile),
-        "controller-path": controllerpath,
-        "path": dstpath + '/' + filename,
-        "signature": {
-            "algorithm": "SHA2-256",
-            "value": hashlib.sha256(data).hexdigest()
-        }
-    }
-    if manifest['files'].get(name) != None:
-        print("Duplicate file name", name)
-        sys.exit(1)
-    manifest['files'][name] = file
-    # manifest['images'].append(image)
-
 for envName in ['m5dial', 'cyddial']:
     buildDir = os.path.join('.pio', 'build', envName)
-    shutil.copy(os.path.join(buildDir, 'merged-flash.bin'), os.path.join(relPath, envName + '.bin'))
-    addImage(envName, '0x1000', 'firmware.bin', buildDir, envName)
+    # shutil.copy(os.path.join(buildDir, 'merged-flash.bin'), os.path.join(relPath, envName + '.bin'))
+    addImage(envName, '0x1000', 'merged-flash.bin', buildDir, envName)
 
 def addSection(node, name, description, choice):
     section = {
