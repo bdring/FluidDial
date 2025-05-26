@@ -46,11 +46,12 @@ jobs:
           rm -f release/*
       - name: Build
         run: |
-          for env in m5dial cyd_both; do
+          for env in m5dial cyddial; do
           pio run -e $env
           pio run -e $env -t build_merged
           cp .pio/build/$env/merged-flash.bin release/FluidDial_$env.bin
           done
+          python manifest.py
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
