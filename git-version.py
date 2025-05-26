@@ -10,27 +10,56 @@ except:
     gitFail = True
 
 if gitFail:
+    tag = "v0.0.x"
     rev = " (noGit)"
     url = " (noGit)"
 else:
-    branchname = (
-        subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-        .strip()
-        .decode("utf-8")
-    )
-    revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).strip().decode("utf-8")
-    modified = subprocess.check_output(["git", "status", "-uno", "-s"]).strip().decode("utf-8")
-    if modified:
-        dirty = "-dirty"
-    else:
-        dirty = ""
-    rev = "%s-%s%s" % (branchname, revision, dirty)
     try:
-        url = subprocess.check_output(["git", "config", "--get", "remote.origin.url"]).strip().decode("utf-8")
+        tag = (
+            subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
+            .strip()
+            .decode("utf-8")
+        )
+    except:
+        tag = "v0.0.x"
+
+    # Check to see if the head commit exactly matches a tag.
+    # If so, the revision is "release", otherwise it is BRANCH-COMMIT
+    try:
+        subprocess.check_call(["git", "describe", "--tags", "--exact"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        rev = ''
+    except:
+        branchname = (
+            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        revision = (
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        modified = (
+            subprocess.check_output(["git", "status", "-uno", "-s"])
+            .strip()
+            .decode("utf-8")
+        )
+        if modified:
+            dirty = "-dirty"
+        else:
+            dirty = ""
+        rev = "%s-%s%s" % (branchname, revision, dirty)
+
+    try:
+        url = (
+            subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
+            .strip()
+            .decode("utf-8")
+        )
     except:
         url = "None"
 
-git_info = rev
+git_info = '%s%s' % (tag, rev)
 git_url = url
 
 provisional = "src/version.cxx"
