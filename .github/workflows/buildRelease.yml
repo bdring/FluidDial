@@ -62,3 +62,15 @@ jobs:
           tag_name: ${{ github.event.inputs.tag }}
           files: release/*
           draft: True
+      - name: Deploy to fluidnc-releases
+        uses: datalbry/copy_folder_to_another_repo_action@1.0.0
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.FLUIDDIAL_RELEASE_COPY_TOKEN }}
+        with:
+          source_folder: 'release/current'
+          destination_repo: 'bdring/fluiddial-releases'
+          destination_branch: 'main'
+          destination_folder: releases/${{ github.event.inputs.tag }}
+          user_email: bdring@buildlog.net
+          user_name: 'Bart Dring'
+          commit_msg: Release ${{ github.event.inputs.tag }}
