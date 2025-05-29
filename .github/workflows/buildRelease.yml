@@ -51,16 +51,18 @@ jobs:
           pio run -e $env -t build_merged
           done
           python manifest.py
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: FluidDial_firmware
-          path: release/*
+      #- name: Upload binaries
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: FluidDial_firmware
+      #    path: release/*
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.event.inputs.tag }}
-          files: release/*
+          files: |
+            release/*.json
+            release/*/*.bin
           draft: True
       - name: Deploy to fluidnc-releases
         uses: datalbry/copy_folder_to_another_repo_action@1.0.0
