@@ -2,19 +2,13 @@ from shutil import copy
 import subprocess, os, sys, shutil
 import hashlib
 
-relPath = os.path.join('release')
-
 tag = (
     subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"])
     .strip()
     .decode("utf-8")
 )
 
-manifestRelPath = os.path.join(relPath, 'current')
-if os.path.exists(manifestRelPath):
-    shutil.rmtree(manifestRelPath)
-
-os.makedirs(manifestRelPath)
+manifestRelPath = 'release'
 
 manifest = {
         "name": "FluidDial",
@@ -67,7 +61,6 @@ def addImage(name, offset, filename, srcpath, dstpath):
 
 for envName in ['m5dial', 'cyddial']:
     buildDir = os.path.join('.pio', 'build', envName)
-    # shutil.copy(os.path.join(buildDir, 'merged-flash.bin'), os.path.join(relPath, envName + '.bin'))
     addImage(envName, '0x1000', 'merged-flash.bin', buildDir, envName)
 
 def addSection(node, name, description, choice):

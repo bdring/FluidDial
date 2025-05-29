@@ -51,6 +51,7 @@ jobs:
           pio run -e $env -t build_merged
           done
           python manifest.py
+          ls release/*
       #- name: Upload binaries
       #  uses: actions/upload-artifact@v4
       #  with:
@@ -61,15 +62,16 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag }}
           files: |
-            release/current/*.json
-            release/current/*/*.bin
+            release/manifest.json
+            release/m5dial/merged-flash.bin
+            release/cyddial/merged-flash.bin
           draft: True
       - name: Deploy to fluidnc-releases
         uses: datalbry/copy_folder_to_another_repo_action@1.0.0
         env:
           API_TOKEN_GITHUB: ${{ secrets.FLUIDDIAL_RELEASE_COPY_TOKEN }}
         with:
-          source_folder: 'release/current'
+          source_folder: 'release'
           destination_repo: 'bdring/fluiddial-releases'
           destination_branch: 'main'
           destination_folder: releases/${{ github.event.inputs.tag }}
