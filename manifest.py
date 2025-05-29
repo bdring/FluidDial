@@ -1,6 +1,7 @@
-from shutil import copy
 import subprocess, os, sys, shutil
 import hashlib
+
+relPath = os.path.join('release')
 
 tag = (
     subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"])
@@ -8,7 +9,7 @@ tag = (
     .decode("utf-8")
 )
 
-manifestRelPath = 'release'
+manifestRelPath = relPath
 
 manifest = {
         "name": "FluidDial",
@@ -32,14 +33,12 @@ manifest = {
         },
 }
 
-def addImage(name, offset, filename, srcpath, dstpath):
-    fulldstpath = os.path.join(manifestRelPath,os.path.normpath(dstpath))
+def addImage(name, offset, srcfilename, srcpath, dstpath):
+    dstFilename = name + '.bin'
+    fulldstfile = os.path.join(dstpath, dstFilename)
 
-    os.makedirs(fulldstpath, exist_ok=True)
-
-    fulldstfile = os.path.join(fulldstpath, filename)
-
-    shutil.copy(os.path.join(srcpath, filename), fulldstfile)
+    print(fulldstfile)
+    shutil.copy(os.path.join(srcpath, srcfilename), fulldstfile)
 
     with open(fulldstfile, "rb") as f:
         data = f.read()
@@ -47,7 +46,7 @@ def addImage(name, offset, filename, srcpath, dstpath):
         # "name": name,
         "size": os.path.getsize(fulldstfile),
         "offset": offset,
-        "path": dstpath + '/' + filename,
+        "path": dstFilename,
         "signature": {
             "algorithm": "SHA2-256",
             "value": hashlib.sha256(data).hexdigest()
@@ -57,11 +56,11 @@ def addImage(name, offset, filename, srcpath, dstpath):
         print("Duplicate image name", name)
         sys.exit(1)
     manifest['images'][name] = image
-    # manifest['images'].append(image)
 
 for envName in ['m5dial', 'cyddial']:
     buildDir = os.path.join('.pio', 'build', envName)
-    addImage(envName, '0x1000', 'merged-flash.bin', buildDir, envName)
+    # shutil.copy(os.path.join(buildDir, 'merged-flash.bin'), os.path.join(relPath, envName + '.bin'))
+    addImage(envName, '0x0000', 'merged-flash.bin', buildDir, manifestRelPath)
 
 def addSection(node, name, description, choice):
     section = {

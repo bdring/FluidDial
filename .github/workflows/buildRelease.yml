@@ -61,10 +61,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.event.inputs.tag }}
-          files: |
-            release/manifest.json
-            release/m5dial/merged-flash.bin
-            release/cyddial/merged-flash.bin
+          files: release/*
           draft: True
       - name: Deploy to fluidnc-releases
         uses: datalbry/copy_folder_to_another_repo_action@1.0.0
