@@ -61,8 +61,8 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag }}
           files: |
-            release/*.json
-            release/*/*.bin
+            release/current/*.json
+            release/current/*/*.bin
           draft: True
       - name: Deploy to fluidnc-releases
         uses: datalbry/copy_folder_to_another_repo_action@1.0.0
