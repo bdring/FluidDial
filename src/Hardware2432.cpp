@@ -26,6 +26,9 @@ static uint32_t read_panel_reg(lgfx::IBus* bus, int32_t pin_cs, uint_fast16_t cm
     lgfx::pinMode(pin_cs, lgfx::pin_mode_t::output);
 
     bus->beginTransaction();
+
+    // Dummy clocks with CS- high in hopes of clearing out any junk
+    // It is unclear whether this is necessary, but it probably doesn't hurt
     lgfx::gpio_hi(pin_cs);
     bus->writeCommand(0, dlen);
     bus->wait();
