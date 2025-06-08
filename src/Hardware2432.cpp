@@ -16,6 +16,13 @@
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
 
+// This pin is connected to a photoresistor that is ostensibly used for ambient
+// light sensing.  It is possible to repurpose it as a UI lock by connecting a
+// normally-open switch to ground. Some people use the pushbutton switch on the
+// side of the CYD that is supposed to control battery charging, cutting the traces
+// that connect it to the battery circuit and running a wire over to the photoresistor.
+int lockout_pin = GPIO_NUM_34;
+
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
 
@@ -56,10 +63,8 @@ LGFX_Device  xdisplay;
 LGFX_Device& display = xdisplay;
 
 LGFX_Sprite canvas(&display);
-LGFX_Sprite buttons(&display);
-#ifdef LOCKOUT_PIN
-LGFX_Sprite locked_buttons(&display);
-#endif
+LGFX_Sprite buttons[3] = { &display, &display, &display };
+LGFX_Sprite locked_button(&display);
 
 uint8_t base_rotation = 2;
 
@@ -170,9 +175,7 @@ void init_capacitive_cyd() {
     }
     setBacklightPin(GPIO_NUM_27);
 
-#    ifdef LOCKOUT_PIN
-    pinMode(LOCKOUT_PIN, INPUT);
-#    endif
+    pinMode(lockout_pin, INPUT);
 
 #    ifdef CYD_BUTTONS
     enc_a = GPIO_NUM_22;
@@ -367,6 +370,50 @@ void choose_board() {
 }
 #endif
 
+void initButton(int n) {
+    buttons[n].setColorDepth(display.getColorDepth());
+    buttons[n].createSprite(button_w, button_h);
+    buttons[n].fillRect(0, 0, 80, 80, BLACK);
+    const int   radius = 28;
+    const char* filename;
+    int         color;
+    switch (n) {
+        case 0:
+            color    = RED;
+            filename = "/red_button.png";
+            break;
+        case 1:
+            color    = YELLOW;
+            filename = "/orange_button.png";
+            break;
+        case 2:
+            color    = GREEN;
+            filename = "/green_button.png";
+            break;
+    }
+    buttons[n].fillCircle(button_half_wh, button_half_wh, radius, color);
+    // If the image file exists the image will overwrite the circle
+    buttons[n].drawPngFile(LittleFS, filename, 10, 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+}
+
+void initLockedButton() {
+    locked_button.setColorDepth(display.getColorDepth());
+    locked_button.createSprite(button_w, button_h);
+
+    locked_button.fillRect(0, 0, button_w, button_h, BLACK);
+    const int radius = 28;
+    locked_button.fillCircle(button_half_wh, button_half_wh, radius, DARKGREY);
+}
+
+static void initButtons() {
+    // On-screen buttons
+    for (int i = 0; i < 3; i++) {
+        initButton(i);
+    }
+    // Greyed-out button for locked state
+    initLockedButton();
+}
+
 void init_hardware() {
 #ifdef DEBUG_TO_USB
     Serial.begin(115200);
@@ -406,61 +453,17 @@ void init_hardware() {
 #endif
 }
 
-void initButton(int n) {
-    Point offset = layout->buttonOffset(n);
-    buttons.fillRect(offset.x, offset.y, 80, 80, BLACK);
-    const int   radius = 28;
-    const char* filename;
-    int         color;
-    switch (n) {
-        case 0:
-            color    = RED;
-            filename = "/red_button.png";
-            break;
-        case 1:
-            color    = YELLOW;
-            filename = "/orange_button.png";
-            break;
-        case 2:
-            color    = GREEN;
-            filename = "/green_button.png";
-            break;
-    }
-    buttons.fillCircle(offset.x + button_half_wh, offset.y + button_half_wh, radius, color);
-    // If the image file exists the image will overwrite the circle
-    buttons.drawPngFile(LittleFS, filename, offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
-}
+int last_locked = -1;
 
-void redrawButtons(LGFX_Sprite& sprite) {
+void redrawButtons() {
     display.startWrite();
-    Point position = layout->buttonsXY;
-    sprite.pushSprite(position.x, position.y);
+    for (int i = 0; i < n_buttons; i++) {
+        Point position = layout->buttonsXY + layout->buttonOffset(i);
+        printf("button position %d,%d\n", position.x, position.y);
+        auto& sprite = last_locked == 1 ? locked_button : buttons[i];
+        sprite.pushSprite(position.x, position.y);
+    }
     display.endWrite();
-}
-
-#ifdef LOCKOUT_PIN
-void initLockedButtons() {
-    locked_buttons.setColorDepth(display.getColorDepth());
-    locked_buttons.createSprite(layout->buttonsWH.x, layout->buttonsWH.y);
-
-    locked_buttons.fillRect(0, 0, layout->buttonsWH.x, layout->buttonsWH.y, BLACK);
-
-    const int radius = 28;
-    for (int i = 0; i < 3; i++) {
-        Point offset = layout->buttonOffset(i);
-        locked_buttons.fillCircle(offset.x + button_half_wh, offset.y + button_half_wh, radius, DARKGREY);
-    }
-}
-#endif
-
-static void initButtons() {
-    buttons.setColorDepth(display.getColorDepth());
-    buttons.createSprite(layout->buttonsWH.x, layout->buttonsWH.y);
-
-    // On-screen buttons
-    for (int i = 0; i < 3; i++) {
-        initButton(i);
-    }
 }
 
 void show_logo() {
@@ -471,10 +474,7 @@ void show_logo() {
 
 void base_display() {
     initButtons();
-#ifdef LOCKOUT_PIN
-    initLockedButtons();
-#endif
-    redrawButtons(buttons);
+    redrawButtons();
 }
 void next_layout(int delta) {
     layout_num += delta;
@@ -488,7 +488,7 @@ void next_layout(int delta) {
     delay(200);
     set_layout(layout_num);
     nvs_set_i32(hw_nvs, "layout", layout_num);
-    base_display();
+    redrawButtons();
 }
 
 void system_background() {
@@ -544,17 +544,12 @@ bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
 
 bool ui_locked() {
-#ifdef LOCKOUT_PIN
-    static int last_lock = -1;
-    bool       state     = digitalRead(LOCKOUT_PIN);
-    if ((int)state != last_lock) {
-        last_lock = state;
-        redrawButtons(state ? locked_buttons : buttons);
+    bool locked = digitalRead(lockout_pin);
+    if ((int)locked != last_locked) {
+        last_locked = locked;
+        redrawButtons();
     }
-    return state;
-#else
-    return false;
-#endif
+    return locked;
 }
 
 bool in_rect(Point test, Point xy, Point wh) {

@@ -151,21 +151,21 @@ void schedule_action(ActionHandler _action) {
 }
 
 void dispatch_events() {
-    if (!ui_locked()) {
-        update_events();
+    update_events();
 
-        static int16_t oldEncoder   = 0;
-        int16_t        newEncoder   = get_encoder();
-        int16_t        encoderDelta = newEncoder - oldEncoder;
-        if (encoderDelta) {
-            oldEncoder = newEncoder;
+    static int16_t oldEncoder   = 0;
+    int16_t        newEncoder   = get_encoder();
+    int16_t        encoderDelta = newEncoder - oldEncoder;
+    if (encoderDelta) {
+        oldEncoder = newEncoder;
 
-            int16_t scaledDelta = current_scene->scale_encoder(encoderDelta);
-            if (scaledDelta) {
-                current_scene->onEncoder(scaledDelta);
-            }
+        int16_t scaledDelta = current_scene->scale_encoder(encoderDelta);
+        if (scaledDelta && !ui_locked()) {
+            current_scene->onEncoder(scaledDelta);
         }
+    }
 
+    if (!ui_locked()) {
         bool pressed;
         int  button;
         if (switch_button_touched(pressed, button)) {
@@ -214,7 +214,7 @@ void Scene::getPref(const char* base_name, int axis, int* value) {
     if (!_prefs) {
         return;
     }
-    nvs_get_i32(_prefs, setting_name(base_name, axis), reinterpret_cast<int32_t *>(value));
+    nvs_get_i32(_prefs, setting_name(base_name, axis), reinterpret_cast<int32_t*>(value));
 }
 void Scene::setPref(const char* base_name, int axis, const char* value) {
     if (!_prefs) {
