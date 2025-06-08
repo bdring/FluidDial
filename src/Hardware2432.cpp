@@ -16,11 +16,13 @@
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
 
-// This pin is connected to a photoresistor that is ostensibly used for ambient
-// light sensing.  It is possible to repurpose it as a UI lock by connecting a
-// normally-open switch to ground. Some people use the pushbutton switch on the
-// side of the CYD that is supposed to control battery charging, cutting the traces
-// that connect it to the battery circuit and running a wire over to the photoresistor.
+// This pin is connected to a photoresistor that is ostensibly used
+// for ambient light sensing.  It is possible to repurpose it as a UI
+// lock by connecting a normally-open switch between the photoresistor
+// and 3V3. Some people use the pushbutton switch on the side of the
+// CYD that is supposed to control battery charging, cutting the
+// traces that connect it to the battery circuit and running a wire
+// over to the photoresistor.
 int lockout_pin = GPIO_NUM_34;
 
 m5::Touch_Class  xtouch;
