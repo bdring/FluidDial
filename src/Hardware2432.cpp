@@ -192,8 +192,8 @@ void init_capacitive_cyd() {
     pinMode(dial_button_pin, INPUT_PULLUP);
     pinMode(green_button_pin, INPUT_PULLUP);
 #    else
-    enc_a = GPIO_NUM_22;
-    enc_b = GPIO_NUM_17;  // RGB LED Blue
+    enc_a          = GPIO_NUM_22;
+    enc_b          = GPIO_NUM_17;  // RGB LED Blue
 #    endif
 }
 #endif  // CAPACITIVE_CYD
@@ -223,9 +223,15 @@ void init_resistive_cyd() {
 
     setBacklightPin(GPIO_NUM_21);
 
-    enc_a          = GPIO_NUM_22;
-    enc_b          = GPIO_NUM_27;
+    enc_a = GPIO_NUM_22;
+    enc_b = GPIO_NUM_27;
+#    ifdef CYD_BUTTONS
+    red_button_pin   = GPIO_NUM_4;   // RGB LED Red
+    dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
+    green_button_pin = GPIO_NUM_16;  // RGB LED Green
+#    else
     red_button_pin = dial_button_pin = green_button_pin = -1;
+#    endif
 }
 #endif  // RESISTIVE_CYD
 
