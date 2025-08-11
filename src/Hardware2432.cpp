@@ -284,7 +284,7 @@ int num_layouts = sizeof(layouts)/sizeof(layouts[0]);
 // clang-format on
 
 Layout* layout;
-int     layout_num = 0;
+int32_t layout_num = 0;
 
 Point sprite_offset;
 void  set_layout(int n) {
@@ -295,7 +295,7 @@ void  set_layout(int n) {
 
 nvs_handle_t hw_nvs;
 
-int display_num = 0;
+int32_t display_num = 0;
 
 #if defined(RESISTIVE_CYD) && defined(CAPACITIVE_CYD)
 bool try_touch(const char* message) {
