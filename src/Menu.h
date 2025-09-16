@@ -102,7 +102,8 @@ private:
     int         _radius;
     color_t     _outline_color;
     LGFX_Sprite* _img_cache=NULL;
-    
+//    LGFX_Sprite* _img_cache_highlight=NULL;
+//    LGFX_Sprite* _img_cache_disabled=NULL;    
 public:
     ImageButton(const char* name, callback_t callback, const char* filename, int radius, color_t outline_color = WHITE) :
         Item(name, callback), _filename(filename), _radius(radius), _outline_color(outline_color) {}
