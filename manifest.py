@@ -28,17 +28,21 @@ manifest = {
         "installable": {
             "name": "installable",
             "description": "Things you can install",
-            "choice-name": "Dial type",
+            "choice-name": "Processor type",
             "choices": []
         },
 }
 
-def addImage(name, offset, srcfilename, srcpath, dstpath):
-    dstFilename = name + '.bin'
-    fulldstfile = os.path.join(dstpath, dstFilename)
+def addImage(name, offset, filename, srcpath, dstpath):
+    fulldstpath = os.path.join(manifestRelPath,os.path.normpath(dstpath))
+    os.makedirs(fulldstpath, exist_ok=True)
 
-    print(fulldstfile)
-    shutil.copy(os.path.join(srcpath, srcfilename), fulldstfile)
+    fulldstfile = os.path.join(fulldstpath, filename)
+    reldstfile = filename if dstpath == "" else dstpath + "/" + filename;
+
+    shutil.copy(os.path.join(srcpath, filename), fulldstfile)
+
+    print("image", name)
 
     with open(fulldstfile, "rb") as f:
         data = f.read()
@@ -46,7 +50,7 @@ def addImage(name, offset, srcfilename, srcpath, dstpath):
         # "name": name,
         "size": os.path.getsize(fulldstfile),
         "offset": offset,
-        "path": dstFilename,
+        "path": reldstfile,
         "signature": {
             "algorithm": "SHA2-256",
             "value": hashlib.sha256(data).hexdigest()
@@ -60,8 +64,9 @@ def addImage(name, offset, srcfilename, srcpath, dstpath):
 for envName in ['m5dial', 'cyddial']:
     buildDir = os.path.join('.pio', 'build', envName)
     # shutil.copy(os.path.join(buildDir, 'merged-flash.bin'), os.path.join(relPath, envName + '.bin'))
-    addImage(envName, '0x0000', 'merged-flash.bin', buildDir, manifestRelPath)
+    addImage(envName, '0x0000.bin', 'merged-flash.bin', buildDir, "")
 
+installableChoices = manifest['installable']['choices']
 def addSection(node, name, description, choice):
     section = {
         "name": name,
@@ -71,9 +76,17 @@ def addSection(node, name, description, choice):
         section['choice-name'] = choice
         section['choices'] = []
     node.append(section)
+    return section['choices']
 
+mcuChoices = None
+def addMCU(name, description, choice=None):
+    global mcuChoices
+    mcuChoices = addSection(installableChoices, name, description, choice)
+
+dialChoices = None
 def addDialType(name, description, choice=None):
-    addSection(manifest['installable']['choices'], name, description, choice)
+    global dialChoices
+    dialChoices = addSection(mcuChoices, name, description, choice)
 
 def addInstallable(install_type, erase, images):
     for image in images:
@@ -81,24 +94,28 @@ def addInstallable(install_type, erase, images):
             print("Missing image", image)
             sys.exit(1)
                       
-    node1 = manifest['installable']['choices']
     installable = {
         "name": install_type["name"],
         "description": install_type["description"],
         "erase": erase,
         "images": images
     }
-    node1[len(node1)-1]['choices'].append(installable)
+    dialChoices.append(installable)
 
 fresh_install = { "name": "install", "description": "Complete FluidDial installation"}
 
 def makeManifest():
-    addDialType("FluidDial for M5Dial", "FluidDial for M5Dial", "FluidDial type")
-    addInstallable(fresh_install, True, ["m5dial"])
+    mcu = "esp32"
+    addMCU(mcu, "ESP32-WROOM", "Firmware variant")
 
     addDialType("FluidDial for CYD", "FluidDial for CYD Dial", "FluidDial type")
     addInstallable(fresh_install, True, ["cyddial"])
 
+    mcu = "esp32s3"
+    addMCU(mcu, "ESP32-S3-WROOM-1", "Firmware variant")
+
+    addDialType("FluidDial for M5Dial", "FluidDial for M5Dial", "FluidDial type")
+    addInstallable(fresh_install, True, ["m5dial"])
 
 makeManifest()
 
