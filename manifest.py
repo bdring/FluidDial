@@ -38,7 +38,6 @@ def addImage(name, offset, filename, srcpath, dstpath):
     os.makedirs(fulldstpath, exist_ok=True)
 
     fulldstfile = os.path.join(fulldstpath, filename)
-
     reldstfile = os.path.join(dstpath, name) + ".bin"
 
     shutil.copy(os.path.join(srcpath, filename), fulldstfile)
