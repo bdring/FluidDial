@@ -38,7 +38,8 @@ def addImage(name, offset, filename, srcpath, dstpath):
     os.makedirs(fulldstpath, exist_ok=True)
 
     fulldstfile = os.path.join(fulldstpath, filename)
-    reldstfile = filename if dstpath == "" else dstpath + "/" + filename;
+
+    reldstfile = os.path.join(dstpath, name) + ".bin"
 
     shutil.copy(os.path.join(srcpath, filename), fulldstfile)
 
@@ -63,8 +64,7 @@ def addImage(name, offset, filename, srcpath, dstpath):
 
 for envName in ['m5dial', 'cyddial']:
     buildDir = os.path.join('.pio', 'build', envName)
-    # shutil.copy(os.path.join(buildDir, 'merged-flash.bin'), os.path.join(relPath, envName + '.bin'))
-    addImage(envName, '0x0000.bin', 'merged-flash.bin', buildDir, "")
+    addImage(envName, '0x0000', 'merged-flash.bin', buildDir, "")
 
 installableChoices = manifest['installable']['choices']
 def addSection(node, name, description, choice):
