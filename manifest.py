@@ -33,38 +33,34 @@ manifest = {
         },
 }
 
-def addImage(name, offset, filename, srcpath, dstpath):
-    fulldstpath = os.path.join(manifestRelPath,os.path.normpath(dstpath))
-    os.makedirs(fulldstpath, exist_ok=True)
+def addImage(imageName, offset, srcFilePath, dstFileName):
+    os.makedirs(manifestRelPath, exist_ok=True)
 
-    fulldstfile = os.path.join(fulldstpath, filename)
+    dstFilePath = os.path.join(manifestRelPath, dstFileName)
 
-    reldstfile = os.path.join(dstpath, name) + ".bin"
+    shutil.copy(srcFilePath, dstFilePath)
 
-    shutil.copy(os.path.join(srcpath, filename), fulldstfile)
+    print("image", imageName)
 
-    print("image", name)
-
-    with open(fulldstfile, "rb") as f:
+    with open(dstFilePath, "rb") as f:
         data = f.read()
     image = {
-        # "name": name,
-        "size": os.path.getsize(fulldstfile),
+        "size": os.path.getsize(dstFilePath),
         "offset": offset,
-        "path": reldstfile,
+        "path": dstFileName,
         "signature": {
             "algorithm": "SHA2-256",
             "value": hashlib.sha256(data).hexdigest()
         }
     }
-    if manifest['images'].get(name) != None:
-        print("Duplicate image name", name)
+    if manifest['images'].get(imageName) != None:
+        print("Duplicate image name", imageName)
         sys.exit(1)
-    manifest['images'][name] = image
+    manifest['images'][imageName] = image
 
 for envName in ['m5dial', 'cyddial']:
     buildDir = os.path.join('.pio', 'build', envName)
-    addImage(envName, '0x0000', 'merged-flash.bin', buildDir, "")
+    addImage(envName, '0x0000', os.path.join(buildDir, 'merged-flash.bin'), envName + ".bin")
 
 installableChoices = manifest['installable']['choices']
 def addSection(node, name, description, choice):
