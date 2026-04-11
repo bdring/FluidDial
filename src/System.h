@@ -11,7 +11,9 @@
 #    include <LittleFS.h>
 constexpr static const int UPDATE_RATE_MS = 30;  // minimum refresh rate in milliseconds
 extern Stream&             debugPort;
-void                       init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
+#    ifndef USE_WIFI
+void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
+#    endif
 #endif  // ARDUINO
 
 #ifdef USE_LOVYANGFX

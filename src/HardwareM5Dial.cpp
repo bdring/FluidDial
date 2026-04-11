@@ -39,7 +39,9 @@ void init_hardware() {
     // at the other end to anything you want and it will still work.
     USBSerial.begin();
 
+#ifndef USE_WIFI
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+#endif
 
     // Setup external GPIOs as buttons
     lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);

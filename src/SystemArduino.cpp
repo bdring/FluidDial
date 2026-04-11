@@ -9,8 +9,10 @@
 
 #include <Esp.h>  // ESP.restart()
 
-#include <driver/uart.h>
-#include "hal/uart_hal.h"
+#ifndef USE_WIFI
+// ── FOR NOW: UART transport only compiled when USE_WIFI is not defined; will reintroduce later
+#    include <driver/uart.h>
+#    include "hal/uart_hal.h"
 
 uart_port_t fnc_uart_port;
 
@@ -21,9 +23,9 @@ uart_port_t fnc_uart_port;
 
 extern "C" void fnc_putchar(uint8_t c) {
     uart_write_bytes(fnc_uart_port, (const char*)&c, 1);
-#ifdef ECHO_FNC_TO_DEBUG
+#    ifdef ECHO_FNC_TO_DEBUG
     dbg_write(c);
-#endif
+#    endif
 }
 
 void ledcolor(int n) {
@@ -35,21 +37,22 @@ extern "C" int fnc_getchar() {
     char c;
     int  res = uart_read_bytes(fnc_uart_port, &c, 1, 0);
     if (res == 1) {
-#ifdef LED_DEBUG
+#    ifdef LED_DEBUG
         if (c == '\r' || c == '\n') {
             ledcolor(0);
         } else {
             ledcolor(c & 7);
         }
-#endif
+#    endif
         update_rx_time();
-#ifdef ECHO_FNC_TO_DEBUG
+#    ifdef ECHO_FNC_TO_DEBUG
         dbg_write(c);
-#endif
+#    endif
         return c;
     }
     return -1;
 }
+#endif  // !USE_WIFI
 
 extern "C" void poll_extra() {
 #ifdef DEBUG_TO_USB
@@ -84,19 +87,20 @@ void drawPngFile(LGFX_Sprite* sprite, const char* filename, int x, int y) {
 
 extern void init_hardware();
 
+#ifndef USE_WIFI
 void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
     fnc_uart_port = (uart_port_t)uart_num;
     int baudrate  = FNC_BAUD;
     uart_driver_delete(fnc_uart_port);
     uart_set_pin(fnc_uart_port, (gpio_num_t)tx_pin, (gpio_num_t)rx_pin, -1, -1);
     uart_config_t conf;
-#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
+#    if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
     conf.source_clk = UART_SCLK_APB;  // ESP32, ESP32S2
-#endif
-#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+#    endif
+#    if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
     // UART_SCLK_XTAL is independent of the APB frequency
     conf.source_clk = UART_SCLK_XTAL;  // ESP32C3, ESP32S3
-#endif
+#    endif
     conf.baud_rate = baudrate;
 
     conf.data_bits           = UART_DATA_8_BITS;
@@ -114,6 +118,7 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
     uint32_t baud;
     uart_get_baudrate(fnc_uart_port, &baud);
 }
+#endif  // !USE_WIFI
 
 void init_system() {
     init_hardware();
@@ -127,10 +132,12 @@ void init_system() {
     canvas.setColorDepth(8);
     canvas.createSprite(240, 240);  // display.width(), display.height());
 }
+#ifndef USE_WIFI
 void resetFlowControl() {
     fnc_putchar(0x11);
     uart_ll_force_xon(fnc_uart_port);
 }
+#endif  // !USE_WIFI
 
 extern "C" int milliseconds() {
     return millis();

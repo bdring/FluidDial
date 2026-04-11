@@ -4,6 +4,9 @@
 #    include "FileMenu.h"
 #endif
 #include "System.h"
+#ifdef USE_WIFI
+#    include "WiFiSetupScene.h"
+#endif
 
 void noop(void* arg) {}
 
@@ -67,7 +70,13 @@ IB filesButton("Files", &fileSelectScene, "filestp.png");
 #endif
 
 IB controlButton("Macros", &macroMenu, "macrostp.png");
+#ifdef USE_WIFI
+// WiFi scence replaces About button; will reintroduce display orientation later
+extern WiFiSetupScene wifiSetupScene;
+IB setupButton("WiFi", &wifiSetupScene, "abouttp.png");
+#else
 IB setupButton("About", &aboutScene, "abouttp.png");
+#endif
 
 class MenuScene : public PieMenu {
 public:
