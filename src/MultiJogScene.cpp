@@ -32,6 +32,12 @@ private:
     bool         _continuous    = false;
     LGFX_Sprite* _bg_image      = nullptr;
 
+    // MPG jog rate-limiting: accumulate encoder ticks and send at most one
+    // jog command per MPG_INTERVAL_MS to avoid flooding FluidNC's planner queue.
+    static const uint32_t MPG_INTERVAL_MS = 30;
+    int      _mpg_accum   = 0;
+    uint32_t _last_mpg_ms = 0;
+
 public:
     MultiJogScene() : Scene("Jog", 4, jog_help_text) {}
 
@@ -362,10 +368,25 @@ public:
         cancel_jog();
     }
 
-    void onEncoder(int delta) {
-        if (delta != 0) {
-            start_mpg_jog(delta);
+    void flush_mpg() {
+        if (_mpg_accum == 0) {
+            return;
         }
+        uint32_t now = millis();
+        if ((now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
+            start_mpg_jog(_mpg_accum);
+            _mpg_accum   = 0;
+            _last_mpg_ms = now;
+        }
+    }
+
+    void onEncoder(int delta) {
+        _mpg_accum += delta;
+        flush_mpg();
+    }
+
+    void onPoll() override {
+        flush_mpg();
     }
 
     void onDROChange() {

@@ -56,6 +56,7 @@ public:
     virtual void onLimitsChange() {}
     virtual void onMessage(char* command, char* arguments) {}
     virtual void onEncoder(int delta) {}
+    virtual void onPoll() {}
     virtual void reDisplay() {}
     virtual void onEntry(void* arg = nullptr) {}
     virtual void onExit() {}

@@ -9,6 +9,10 @@
 
 #include <Esp.h>  // ESP.restart()
 
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
+
 #ifndef USE_WIFI
 // ── FOR NOW: UART transport only compiled when USE_WIFI is not defined; will reintroduce later
 #    include <driver/uart.h>
@@ -55,6 +59,9 @@ extern "C" int fnc_getchar() {
 #endif  // !USE_WIFI
 
 extern "C" void poll_extra() {
+#ifdef USE_WIFI
+    wifi_poll();
+#endif
 #ifdef DEBUG_TO_USB
     if (debugPort.available()) {
         char c = debugPort.read();

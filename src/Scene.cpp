@@ -175,6 +175,8 @@ void dispatch_events() {
         dispatch_touch();
     }
 
+    current_scene->onPoll();
+
     if (!fnc_is_connected()) {
         if (state != Disconnected) {
             set_disconnected_state();
