@@ -36,6 +36,9 @@ void detect_homing_info() {
     homed_axes = 0;
 }
 bool can_home(int i) {
+    if (!homing_cycles[i].known() || !homing_allows[i].known()) {
+        return false;
+    }
     // Cannot home if cycle == 0 and !allow_single_axis
     return homing_cycles[i].get() != 0 || homing_allows[i].get();
 }
@@ -61,6 +64,9 @@ public:
         }
         const char* s = static_cast<const char*>(arg);
         _auto         = s && strcmp(s, "auto") == 0;
+        if (!have_homing_info()) {
+            schedule_action(detect_homing_info);
+        }
     }
 
     void onStateChange(state_t old_state) override {
@@ -159,7 +165,9 @@ public:
                 if (state == Alarm && (strchr(myCtrlPins, 'D') == NULL)) {  // You can reset alarms if door is not active
                     redLabel = "Reset";
                 }
-                if (_axis_to_home == -1) {
+                if (!have_homing_info()) {
+                    orangeLabel = "Loading";
+                } else if (_axis_to_home == -1) {
                     for (int axis = 0; axis < HOMING_N_AXIS; ++axis) {
                         if (can_home(axis)) {
                             if (!grnLabel.length()) {
@@ -184,7 +192,7 @@ public:
                 grnLabel = "Resume";
             }
         }
-        drawButtonLegends(redLabel, grnLabel.c_str(), "Back");
+        drawButtonLegends(redLabel, grnLabel.c_str(), orangeLabel[0] ? orangeLabel : "Back");
 
         refreshDisplay();
     }
