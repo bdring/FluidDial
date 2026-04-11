@@ -12,6 +12,12 @@
 
 extern Scene statusScene;
 
+#if defined(USE_WIFI)
+#    define FLUIDNC_SUPPRESS_STARTUP_SYNC 1
+#else
+#    define FLUIDNC_SUPPRESS_STARTUP_SYNC 0
+#endif
+
 // local copies of status items
 const char*        my_state_string    = "N/C";
 state_t            state              = Idle;
@@ -208,12 +214,16 @@ extern "C" void show_state(const char* state_string) {
     state_t new_state;
     if (decode_state_string(state_string, new_state) && state != new_state) {
         if (state == Disconnected) {
+#if FLUIDNC_SUPPRESS_STARTUP_SYNC
+            dbg_println("WiFi debug: suppressing startup sync burst");
+#else
             fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off
             send_line("$G");                     // Refresh GCode modes
             send_line("$G");                     // Refresh GCode modes
             send_line("$RI=200");
             init_file_list();
             detect_homing_info();
+#endif
         }
         state = new_state;
         if (state == Alarm && lastAlarm == 0) {  // Unknown

@@ -25,9 +25,15 @@
 #define WIFI_AP_PASS       ""          // Open AP — no password needed
 #define PREF_NAMESPACE     "fluidwifi"
 #define WS_SUBPROTOCOL     "arduino"
+#define FLUIDNC_WS_PORT    80
+#define FLUIDNC_WS_PATH    "/"
+#define HARDCODE_TEST_WIFI 1
+#define TEST_WIFI_SSID     "FluidNC"
+#define TEST_WIFI_PASS     "12345678"
+#define TEST_FLUIDNC_IP    "192.168.0.1"
 #define RX_BUF_SIZE        2048
 #define TX_BUF_SIZE        512
-#define PING_INTERVAL_MS   10000       // Application-level PING every 10 s
+#define FLUIDNC_WS_MINIMAL_STARTUP 1
 #define STATUS_POLL_MS     500         // Send '?' every 500 ms while connected
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
@@ -38,7 +44,10 @@ static DNSServer        dnsServer;
 
 static bool _ap_mode       = false;
 static bool _ws_connected  = false;
+static bool _ws_started    = false;
 static bool _wifi_was_connected = false;
+static WiFiConfig _active_cfg = {};
+static wl_status_t _last_wifi_status = WL_IDLE_STATUS;
 
 // Ring buffer for characters received from FluidNC via WebSocket.
 // Written in the WS callback, read by fnc_getchar() (both on the main task).
@@ -51,12 +60,47 @@ static uint8_t _tx_buf[TX_BUF_SIZE];
 static int     _tx_len = 0;
 
 // Timers.
-static uint32_t _last_ping_ms   = 0;
 static uint32_t _last_status_ms = 0;
-static uint16_t _page_id        = 1234;
 
 static void log_wifi_heap(const char* stage) {
     dbg_printf("%s free heap: %u\n", stage, ESP.getFreeHeap());
+}
+
+static const char* wifi_status_name(wl_status_t status) {
+    switch (status) {
+        case WL_NO_SHIELD:
+            return "WL_NO_SHIELD";
+        case WL_IDLE_STATUS:
+            return "WL_IDLE_STATUS";
+        case WL_NO_SSID_AVAIL:
+            return "WL_NO_SSID_AVAIL";
+        case WL_SCAN_COMPLETED:
+            return "WL_SCAN_COMPLETED";
+        case WL_CONNECTED:
+            return "WL_CONNECTED";
+        case WL_CONNECT_FAILED:
+            return "WL_CONNECT_FAILED";
+        case WL_CONNECTION_LOST:
+            return "WL_CONNECTION_LOST";
+        case WL_DISCONNECTED:
+            return "WL_DISCONNECTED";
+        default:
+            return "WL_UNKNOWN";
+    }
+}
+
+static bool ws_send_text(uint8_t* payload, size_t length) {
+    dbg_printf("WS TX text len=%u\n", (unsigned)length);
+    return webSocket.sendTXT(payload, length);
+}
+
+static bool ws_send_bin(const uint8_t* payload, size_t length) {
+    if (length > 0) {
+        dbg_printf("WS TX bin len=%u first=0x%02X\n", (unsigned)length, payload[0]);
+    } else {
+        dbg_printf("WS TX bin len=0\n");
+    }
+    return webSocket.sendBIN(payload, length);
 }
 
 // ─── Ring-buffer helpers ──────────────────────────────────────────────────────
@@ -85,14 +129,14 @@ extern "C" void fnc_putchar(uint8_t c) {
 
     // Extended single-byte realtime commands: Ctrl-X and 0x80–0x9F.
     if (c == 0x18 || (c >= 0x80 && c <= 0x9F)) {
-        if (_ws_connected) webSocket.sendBIN(&c, 1);
+        if (_ws_connected) ws_send_bin(&c, 1);
         return;
     }
 
     // ASCII realtime commands ('?', '!', '~') sent *outside* a text line.
     // GrblParserC calls fnc_putchar() with these as standalone bytes.
     if (_tx_len == 0 && (c == '?' || c == '!' || c == '~')) {
-        if (_ws_connected) webSocket.sendBIN(&c, 1);
+        if (_ws_connected) ws_send_bin(&c, 1);
         return;
     }
 
@@ -100,7 +144,7 @@ extern "C" void fnc_putchar(uint8_t c) {
     _tx_buf[_tx_len++] = c;
     if (c == '\n' || _tx_len >= TX_BUF_SIZE - 1) {
         if (_ws_connected) {
-            webSocket.sendTXT((char*)_tx_buf, _tx_len);
+            ws_send_text(_tx_buf, _tx_len);
         }
         _tx_len = 0;
     }
@@ -117,10 +161,15 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
     switch (type) {
         case WStype_CONNECTED: {
             _ws_connected = true;
-            dbg_println("WS: connected to FluidNC");
+            _last_status_ms = 0;
+            dbg_printf("WS: connected to FluidNC at ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
 
+#if !FLUIDNC_WS_MINIMAL_STARTUP
             // Replay startup log so GrblParserC parses the initial state.
-            webSocket.sendTXT("$SS\n");
+            ws_send_text((uint8_t*)"$SS\n", 4);
+#else
+            dbg_println("WS: minimal startup mode enabled; suppressing automatic startup writes");
+#endif
             break;
         }
 
@@ -132,6 +181,7 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
 
         case WStype_TEXT:
         case WStype_BIN: {
+            dbg_printf("WS RX %s len=%u\n", type == WStype_TEXT ? "text" : "bin", (unsigned)length);
             // Push every received byte into the ring buffer.
             // GrblParserC's fnc_getchar() will drain it character-by-character.
             for (size_t i = 0; i < length; i++) {
@@ -146,9 +196,12 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
             break;
         }
 
+        case WStype_ERROR:
+            dbg_println("WS: error");
+            break;
+
         case WStype_PING:
         case WStype_PONG:
-        case WStype_ERROR:
         case WStype_FRAGMENT_TEXT_START:
         case WStype_FRAGMENT_BIN_START:
         case WStype_FRAGMENT:
@@ -228,6 +281,10 @@ static void handleSave() {
     String pass = httpServer.arg("pass");
     String ip   = httpServer.arg("ip");
 
+    ssid.trim();
+    pass.trim();
+    ip.trim();
+
     if (ssid.length() == 0 || ip.length() == 0) {
         httpServer.send(400, "text/plain", "SSID and IP are required");
         return;
@@ -260,6 +317,15 @@ void wifi_save_config(const char* ssid, const char* password, const char* ip) {
 
 WiFiConfig wifi_load_config() {
     WiFiConfig cfg = {};
+
+#if HARDCODE_TEST_WIFI
+    strncpy(cfg.ssid, TEST_WIFI_SSID, sizeof(cfg.ssid) - 1);
+    strncpy(cfg.password, TEST_WIFI_PASS, sizeof(cfg.password) - 1);
+    strncpy(cfg.fluidnc_ip, TEST_FLUIDNC_IP, sizeof(cfg.fluidnc_ip) - 1);
+    cfg.valid = true;
+    return cfg;
+#endif
+
     Preferences prefs;
     // Open read-write so the namespace is created on first boot, avoiding
     // the NVS_NOT_FOUND error that occurs with read-only on a fresh device.
@@ -281,6 +347,7 @@ WiFiConfig wifi_load_config() {
 void wifi_start_ap_setup() {
     _ap_mode      = true;
     _ws_connected = false;
+    _ws_started   = false;
 
     log_wifi_heap("Starting AP setup");
     WiFi.disconnect(true);
@@ -295,6 +362,10 @@ void wifi_start_ap_setup() {
     dnsServer.start(53, "*", apIP);
 
     httpServer.on("/",      HTTP_GET,  handleRoot);
+    httpServer.on("/generate_204", HTTP_GET, handleRoot);
+    httpServer.on("/hotspot-detect.html", HTTP_GET, handleRoot);
+    httpServer.on("/ncsi.txt", HTTP_GET, handleRoot);
+    httpServer.on("/fwlink", HTTP_GET, handleRoot);
     httpServer.on("/save",  HTTP_POST, handleSave);
     httpServer.onNotFound(handleNotFound);
     httpServer.begin();
@@ -336,8 +407,6 @@ const char* wifi_status_str() {
 }
 
 void wifi_init() {
-    // Random page ID (matches WebUI behaviour).
-    _page_id = (uint16_t)(random(1000, 9999));
     log_wifi_heap("Before WiFi init");
 
     WiFiConfig cfg = wifi_load_config();
@@ -349,14 +418,16 @@ void wifi_init() {
     }
 
     dbg_printf("Connecting to WiFi: %s\n", cfg.ssid);
+    _active_cfg    = cfg;
+    _ws_started    = false;
+    _ws_connected  = false;
+    _wifi_was_connected = false;
+    _last_wifi_status = WL_IDLE_STATUS;
+    WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
     WiFi.begin(cfg.ssid, cfg.password[0] ? cfg.password : nullptr);
-
-    // Configure WebSocket client — it will connect once WiFi is up.
-    webSocket.begin(cfg.fluidnc_ip, 80, "/", WS_SUBPROTOCOL);
-    webSocket.onEvent(onWsEvent);
-    webSocket.setReconnectInterval(3000);  // retry every 3 s on disconnect
 }
 
 void wifi_poll() {
@@ -366,43 +437,56 @@ void wifi_poll() {
         return;
     }
 
-    // Drive the WebSocket state machine.
-    webSocket.loop();
+    wl_status_t wifi_status = WiFi.status();
+    if (wifi_status != _last_wifi_status) {
+        dbg_printf("WiFi status: %s (%d)\n", wifi_status_name(wifi_status), wifi_status);
+        _last_wifi_status = wifi_status;
+    }
 
     // Detect WiFi reconnects so the WebSocket can recover.
-    bool now_connected = wifi_is_connected();
+    bool now_connected = wifi_status == WL_CONNECTED;
     if (now_connected && !_wifi_was_connected) {
         dbg_printf("WiFi connected — IP: %s\n",
                    WiFi.localIP().toString().c_str());
+        dbg_printf("Starting WebSocket: ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
+        webSocket.begin(_active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH, WS_SUBPROTOCOL);
+        webSocket.onEvent(onWsEvent);
+        webSocket.setReconnectInterval(3000);  // retry every 3 s on disconnect
+        webSocket.enableHeartbeat(15000, 3000, 2);
+        _ws_started = true;
     }
     if (!now_connected && _wifi_was_connected) {
+        if (_ws_started) {
+            webSocket.disconnect();
+            _ws_started = false;
+        }
         _ws_connected = false;
         set_disconnected_state();
         dbg_println("WiFi lost");
     }
     _wifi_was_connected = now_connected;
 
+    if (_ws_started) {
+        // Drive the WebSocket state machine only after WiFi is up.
+        webSocket.loop();
+    }
+
     if (!_ws_connected) return;
 
     uint32_t now = millis();
 
-    // Application-level PING every 10 s (keeps FluidNC page-tracking happy).
-    if (now - _last_ping_ms >= PING_INTERVAL_MS) {
-        _last_ping_ms = now;
-        char ping[32];
-        snprintf(ping, sizeof(ping), "PING:%d\n", _page_id);
-        webSocket.sendTXT(ping);
-    }
-
+#if !FLUIDNC_WS_MINIMAL_STARTUP
     // Explicit status poll every 500 ms.
     // (FluidNC auto-report via $RI is also set when state transitions from
-    // Disconnected in show_state(), but we poll here as a belt-and-suspenders
-    // measure until the first status arrives.)
+    // Disconnected in show_state()
     if (now - _last_status_ms >= STATUS_POLL_MS) {
         _last_status_ms = now;
         uint8_t qmark = '?';
-        webSocket.sendBIN(&qmark, 1);
+        ws_send_bin(&qmark, 1);
     }
+#else
+    (void)now;
+#endif
 }
 
 // Stub: flow control is a no-op over WebSocket.
