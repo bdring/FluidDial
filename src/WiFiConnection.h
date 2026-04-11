@@ -38,4 +38,7 @@ WiFiConfig wifi_load_config();
 const char* wifi_ap_ssid();
 const char* wifi_status_str();
 
+// Returns signal strength as 0–4 bars (0 = no WiFi / disconnected).
+int wifi_signal_bars();
+
 #endif  // ARDUINO

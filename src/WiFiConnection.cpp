@@ -389,6 +389,16 @@ const char* wifi_status_str() {
     return "Connected";
 }
 
+int wifi_signal_bars() {
+    if (!wifi_is_connected()) return 0;
+    int rssi = WiFi.RSSI();
+    if (rssi >= -55) return 4;   // Excellent
+    if (rssi >= -65) return 3;   // Good
+    if (rssi >= -75) return 2;   // Fair
+    if (rssi >= -85) return 1;   // Weak
+    return 0;                    // Very weak
+}
+
 void wifi_init() {
     WiFiConfig cfg = wifi_load_config();
 
