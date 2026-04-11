@@ -33,7 +33,6 @@
 #define TEST_FLUIDNC_IP    "192.168.0.1"
 #define RX_BUF_SIZE        2048
 #define TX_BUF_SIZE        512
-#define FLUIDNC_WS_MINIMAL_STARTUP 1
 #define STATUS_POLL_MS     500         // Send '?' every 500 ms while connected
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
@@ -62,10 +61,6 @@ static int     _tx_len = 0;
 // Timers.
 static uint32_t _last_status_ms = 0;
 
-static void log_wifi_heap(const char* stage) {
-    dbg_printf("%s free heap: %u\n", stage, ESP.getFreeHeap());
-}
-
 static const char* wifi_status_name(wl_status_t status) {
     switch (status) {
         case WL_NO_SHIELD:
@@ -90,16 +85,10 @@ static const char* wifi_status_name(wl_status_t status) {
 }
 
 static bool ws_send_text(uint8_t* payload, size_t length) {
-    dbg_printf("WS TX text len=%u\n", (unsigned)length);
     return webSocket.sendTXT(payload, length);
 }
 
 static bool ws_send_bin(const uint8_t* payload, size_t length) {
-    if (length > 0) {
-        dbg_printf("WS TX bin len=%u first=0x%02X\n", (unsigned)length, payload[0]);
-    } else {
-        dbg_printf("WS TX bin len=0\n");
-    }
     return webSocket.sendBIN(payload, length);
 }
 
@@ -163,13 +152,6 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
             _ws_connected = true;
             _last_status_ms = 0;
             dbg_printf("WS: connected to FluidNC at ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
-
-#if !FLUIDNC_WS_MINIMAL_STARTUP
-            // Replay startup log so GrblParserC parses the initial state.
-            ws_send_text((uint8_t*)"$SS\n", 4);
-#else
-            dbg_println("WS: minimal startup mode enabled; suppressing automatic startup writes");
-#endif
             break;
         }
 
@@ -181,7 +163,6 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
 
         case WStype_TEXT:
         case WStype_BIN: {
-            dbg_printf("WS RX %s len=%u\n", type == WStype_TEXT ? "text" : "bin", (unsigned)length);
             // Push every received byte into the ring buffer.
             // GrblParserC's fnc_getchar() will drain it character-by-character.
             for (size_t i = 0; i < length; i++) {
@@ -349,7 +330,6 @@ void wifi_start_ap_setup() {
     _ws_connected = false;
     _ws_started   = false;
 
-    log_wifi_heap("Starting AP setup");
     WiFi.disconnect(true);
     delay(100);
     WiFi.mode(WIFI_AP);
@@ -407,8 +387,6 @@ const char* wifi_status_str() {
 }
 
 void wifi_init() {
-    log_wifi_heap("Before WiFi init");
-
     WiFiConfig cfg = wifi_load_config();
 
     if (!cfg.valid) {
@@ -472,21 +450,15 @@ void wifi_poll() {
     }
 
     if (!_ws_connected) return;
-
-    uint32_t now = millis();
-
-#if !FLUIDNC_WS_MINIMAL_STARTUP
     // Explicit status poll every 500 ms.
     // (FluidNC auto-report via $RI is also set when state transitions from
     // Disconnected in show_state()
+    uint32_t now = millis();
     if (now - _last_status_ms >= STATUS_POLL_MS) {
         _last_status_ms = now;
         uint8_t qmark = '?';
         ws_send_bin(&qmark, 1);
     }
-#else
-    (void)now;
-#endif
 }
 
 // Stub: flow control is a no-op over WebSocket.
