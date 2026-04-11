@@ -5,6 +5,9 @@
 #include "Drawing.h"
 #include "alarm.h"
 #include <map>
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 void drawBackground(int color) {
     canvas.fillSprite(color);
@@ -118,6 +121,32 @@ void drawStatus() {
     static constexpr int width  = 140;
     static constexpr int height = 36;
 
+#ifdef USE_WIFI
+    if (state == Disconnected) {
+        // Show WiFi connection progress instead of a plain "N/C" badge.
+        int         bgColor;
+        const char* line1;
+        const char* line2;
+        if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;       // dark orange
+            line1   = "AP Setup";
+            line2   = "192.168.4.1";
+        } else if (wifi_is_connected()) {
+            bgColor = YELLOW;       // WiFi up, WebSocket still connecting
+            line1   = "FluidNC";
+            line2   = "Connecting...";
+        } else {
+            bgColor = RED;
+            line1   = "WiFi";
+            line2   = "Connecting...";
+        }
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
+        centered_text(line1, y + height / 2 - 4, BLACK, SMALL);
+        centered_text(line2, y + height / 2 + 12, BLACK, TINY);
+        return;
+    }
+#endif
+
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
         canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
@@ -145,6 +174,27 @@ void drawStatusTiny(int y) {
 void drawStatusSmall(int y) {
     static constexpr int width  = 90;
     static constexpr int height = 25;
+
+#ifdef USE_WIFI
+    if (state == Disconnected) {
+        // Show WiFi connection progress in the compact badge.
+        int         bgColor;
+        const char* label;
+        if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;   // dark orange
+            label   = "AP Mode";
+        } else if (wifi_is_connected()) {
+            bgColor = YELLOW;   // WiFi up, WebSocket still connecting
+            label   = "WiFi OK";
+        } else {
+            bgColor = RED;
+            label   = "WiFi...";
+        }
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
+        centered_text(label, y + height / 2 + 3, BLACK, TINY);
+        return;
+    }
+#endif
 
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {

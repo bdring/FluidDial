@@ -11,6 +11,7 @@
 #include "WiFiConnection.h"
 #include "FluidNCModel.h"
 #include "System.h"
+#include "Scene.h"   // current_scene->reDisplay()
 
 #include <Esp.h>
 #include <WiFi.h>
@@ -152,6 +153,8 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
             _ws_connected = true;
             _last_status_ms = 0;
             dbg_printf("WS: connected to FluidNC at ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
+            // Update the badge immediately; state report from FluidNC will follow shortly.
+            current_scene->reDisplay();
             break;
         }
 
@@ -432,6 +435,8 @@ void wifi_poll() {
         webSocket.setReconnectInterval(3000);  // retry every 3 s on disconnect
         webSocket.enableHeartbeat(15000, 3000, 2);
         _ws_started = true;
+        // WiFi just came up — update badge from "WiFi..." to "WiFi OK".
+        current_scene->reDisplay();
     }
     if (!now_connected && _wifi_was_connected) {
         if (_ws_started) {
