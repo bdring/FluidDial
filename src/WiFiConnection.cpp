@@ -454,7 +454,17 @@ void wifi_poll() {
         webSocket.loop();
     }
 
-    if (!_ws_connected) return;
+    // Animate the connecting badge until FluidNC is fully connected.
+    if (!_ws_connected) {
+        static uint32_t _last_anim_ms = 0;
+        uint32_t        now_ms        = millis();
+        if (now_ms - _last_anim_ms >= 400) {
+            _last_anim_ms = now_ms;
+            current_scene->reDisplay();
+        }
+        return;
+    }
+
     // Explicit status poll every 500 ms.
     // (FluidNC auto-report via $RI is also set when state transitions from
     // Disconnected in show_state()

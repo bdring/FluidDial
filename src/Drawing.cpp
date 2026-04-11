@@ -134,11 +134,13 @@ void drawStatus() {
         } else if (wifi_is_connected()) {
             bgColor = YELLOW;       // WiFi up, WebSocket still connecting
             line1   = "FluidNC";
-            line2   = "Connecting...";
+            static const char* nc_frames[] = { "Connecting", "Connecting.", "Connecting..", "Connecting..." };
+            line2   = nc_frames[(millis() / 400) % 4];
         } else {
             bgColor = RED;
             line1   = "WiFi";
-            line2   = "Connecting...";
+            static const char* wifi_frames[] = { "Scanning", "Scanning.", "Scanning..", "Scanning..." };
+            line2   = wifi_frames[(millis() / 400) % 4];
         }
         canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
         centered_text(line1, y + height / 2 - 4, BLACK, SMALL);
@@ -185,10 +187,12 @@ void drawStatusSmall(int y) {
             label   = "AP Mode";
         } else if (wifi_is_connected()) {
             bgColor = YELLOW;   // WiFi up, WebSocket still connecting
-            label   = "WiFi OK";
+            static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
+            label   = nc_frames[(millis() / 400) % 4];
         } else {
             bgColor = RED;
-            label   = "WiFi...";
+            static const char* wifi_frames[] = { "WiFi", "WiFi.", "WiFi..", "WiFi..." };
+            label   = wifi_frames[(millis() / 400) % 4];
         }
         canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
         centered_text(label, y + height / 2 + 3, BLACK, TINY);
