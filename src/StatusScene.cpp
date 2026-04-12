@@ -29,6 +29,7 @@ public:
         if (arg && strcmp((const char*)arg, "Confirmed") == 0) {
             dbg_printf("StatusScene: sending Ctrl-X soft reset\r\n");
             fnc_realtime(Reset);
+            schedule_action([]() { send_line("$X"); });
         } else {
             dbg_printf("StatusScene: onEntry arg=%s\r\n", arg ? (const char*)arg : "null");
         }
