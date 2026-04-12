@@ -91,7 +91,11 @@ void WiFiSetupScene::onGreenButtonPress() {
 }
 
 void WiFiSetupScene::onDialButtonPress() {
-    activate_scene(&displaySettingsScene);
+    if (wifi_in_ap_mode()) {
+        activate_scene(&menuScene);
+    } else {
+        activate_scene(&displaySettingsScene);
+    }
 }
 
 void WiFiSetupScene::onTouchClick() {
