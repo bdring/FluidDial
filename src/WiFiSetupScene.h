@@ -12,7 +12,7 @@ public:
     void onEntry(void* arg = nullptr) override;
     void onRedButtonPress() override;    // Switch transport (or stop AP)
     void onGreenButtonPress() override;  // AP Setup / Restart
-    void onDialButtonPress() override;   // Back to menu
+    void onDialButtonPress() override;   // Display settings
     void onTouchClick() override;        // Interactive button
     void onStateChange(state_t) override;
     void reDisplay() override;

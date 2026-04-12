@@ -1,0 +1,65 @@
+// 2026 - Figamore
+// DisplaySettingsScene.cpp — lets the user cycle through CYD screen orientations.
+//
+// Turn the encoder to step through all available layouts (rotation × button position).
+
+#ifdef ARDUINO
+
+#include "DisplaySettingsScene.h"
+#include "Drawing.h"
+#include "System.h"
+#include "WiFiSetupScene.h"
+
+static const char* layout_names[] = {
+    "0\xb0  Btns Bottom",   // rotation 0, buttons below
+    "0\xb0  Btns Top",      // rotation 0, buttons above
+    "90\xb0 Btns Right",    // rotation 1, buttons right
+    "90\xb0 Btns Left",     // rotation 1, buttons left
+    "180\xb0 Btns Bottom",  // rotation 2, buttons below
+    "180\xb0 Btns Top",     // rotation 2, buttons above
+    "270\xb0 Btns Left",    // rotation 3, buttons left
+    "270\xb0 Btns Right",   // rotation 3, buttons right
+};
+static const int n_layout_names = sizeof(layout_names) / sizeof(layout_names[0]);
+
+void DisplaySettingsScene::onEntry(void* arg) {
+    reDisplay();
+}
+
+void DisplaySettingsScene::onEncoder(int delta) {
+    next_layout(delta);
+    reDisplay();
+}
+
+void DisplaySettingsScene::onDialButtonPress() {
+    activate_scene(&wifiSetupScene);
+}
+
+void DisplaySettingsScene::onRedButtonPress() {
+    activate_scene(&wifiSetupScene);
+}
+
+void DisplaySettingsScene::reDisplay() {
+    background();
+    drawMenuTitle("Display");
+    drawRect(55, 22, 130, 1, 0, DARKGREY);
+
+    char idx_buf[12];
+    snprintf(idx_buf, sizeof(idx_buf), "%d / %d", layout_num + 1, num_layouts);
+    centered_text(idx_buf, 70, DARKGREY, TINY);
+
+    // Layout name
+    const char* name = (layout_num >= 0 && layout_num < n_layout_names)
+                           ? layout_names[layout_num]
+                           : "Unknown";
+    centered_text(name, 100, WHITE, SMALL);
+
+    centered_text("Turn dial to rotate", 140, LIGHTGREY, TINY);
+
+    drawButtonLegends("Back", "", "Back");
+    refreshDisplay();
+}
+
+DisplaySettingsScene displaySettingsScene;
+
+#endif  // ARDUINO

@@ -11,6 +11,7 @@
 #include "Menu.h"
 #include "System.h"
 #include "Button.h"
+#include "DisplaySettingsScene.h"
 
 extern Scene     menuScene;
 extern const char* git_info;
@@ -90,7 +91,7 @@ void WiFiSetupScene::onGreenButtonPress() {
 }
 
 void WiFiSetupScene::onDialButtonPress() {
-    activate_scene(&menuScene);
+    activate_scene(&displaySettingsScene);
 }
 
 void WiFiSetupScene::onTouchClick() {
@@ -207,7 +208,7 @@ void WiFiSetupScene::drawSettingsView() {
     // ── Button legends ────────────────────────────────────────────────────────
     const char* red_label   = "Back";
     const char* green_label = uart_mode ? "Restart" : "Setup";
-    drawButtonLegends(red_label, green_label, "Info");
+    drawButtonLegends(red_label, green_label, "Display");
 }
 
 void WiFiSetupScene::reDisplay() {
