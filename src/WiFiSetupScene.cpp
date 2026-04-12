@@ -201,7 +201,7 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text("Network", y, DARKGREY, TINY);
         y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
-        y += 22;
+        y += 20;
 
         drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
         y += 14;

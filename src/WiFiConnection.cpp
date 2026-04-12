@@ -605,7 +605,8 @@ void wifi_init() {
     delay(100);
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
-    WiFi.setAutoReconnect(true);
+
+    WiFi.setAutoReconnect(false);
     WiFi.begin(cfg.ssid, cfg.password[0] ? cfg.password : nullptr);
     _wifi_connect_start_ms = millis();
 }
@@ -631,6 +632,9 @@ void wifi_poll() {
             _wifi_retry_at          = 0;
             _wifi_connect_start_ms  = 0;
             _wifi_disconnect_reason = 0;
+            // Re-arm auto-reconnect now that we're up; it was disabled on any
+            // prior failure so drops after a successful session still recover.
+            WiFi.setAutoReconnect(true);
         }
     }
 
@@ -643,34 +647,63 @@ void wifi_poll() {
     }
 
     // Decode the reason code set by the WiFi disconnect event.
+    static const char* const MSG_CHECK_PASS = "Check password";
+    static const char* const MSG_NOT_FOUND  = "Network not found";
+
     if (_wifi_disconnect_reason) {
         uint8_t reason          = _wifi_disconnect_reason;
         _wifi_disconnect_reason = 0;
         dbg_printf("WiFi disconnect reason: %d\n", reason);
 
         if (!_wifi_ever_connected) {
-            if (reason == WIFI_REASON_NO_AP_FOUND) {
-                _wifi_error_msg = "Network not found";
-                _wifi_retry_at  = millis() + WIFI_RETRY_DELAY_MS;
-                current_scene->reDisplay();
-            } else if (reason == WIFI_REASON_AUTH_FAIL    ||
-                       reason == WIFI_REASON_AUTH_EXPIRE  ||
-                       reason == WIFI_REASON_MIC_FAILURE  ||
-                       reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
-                _wifi_error_msg = "Check password";
-                _wifi_retry_at  = millis() + WIFI_RETRY_DELAY_MS;
-                current_scene->reDisplay();
+            const char* new_msg = nullptr;
+            bool        stop_driver = false;
+            bool        allow_retry = false;
+
+            if (reason == WIFI_REASON_AUTH_FAIL          ||
+                reason == WIFI_REASON_AUTH_EXPIRE        ||
+                reason == WIFI_REASON_MIC_FAILURE        ||
+                reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
+                // Auth errors: wrong password can only be fixed by the user —
+                // stop the driver completely and do not schedule any retry.
+                new_msg     = MSG_CHECK_PASS;
+                stop_driver = true;
+                allow_retry = false;
+            } else if (reason == WIFI_REASON_NO_AP_FOUND) {
+                // NO_AP_FOUND fires spuriously during retry rescans even when
+                // the AP is present but rejecting credentials — only show
+                // it if not already identified an auth failure.
+                if (_wifi_error_msg != MSG_CHECK_PASS) {
+                    new_msg     = MSG_NOT_FOUND;
+                    stop_driver = true;   // stop the driver cycle
+                    allow_retry = true;   // network might come back; retry later
+                }
+            }
+
+            if (new_msg) {
+                if (stop_driver) {
+                    WiFi.setAutoReconnect(false);
+                    WiFi.disconnect(false);
+                }
+                bool changed = (_wifi_error_msg != new_msg);
+                _wifi_error_msg = new_msg;
+                // Only arm a retry for not-found; never for wrong password.
+                if (allow_retry && !_wifi_retry_at) {
+                    _wifi_retry_at = millis() + WIFI_RETRY_DELAY_MS;
+                }
+                if (changed) current_scene->reDisplay();
             }
         }
     }
 
-    // Re-issue WiFi.begin() after a failure so the driver tries again.
+    // Re-issue WiFi.begin() after a not-found failure (auth failures never retry).
     if (_wifi_retry_at && millis() >= _wifi_retry_at) {
         _wifi_retry_at         = 0;
-        _wifi_error_msg        = nullptr;   // clear error while retrying
-        _last_wifi_status      = WL_IDLE_STATUS;  // reset so next status change fires
-        _wifi_connect_start_ms = millis();  // reset timeout for the new attempt
+        _wifi_error_msg        = nullptr;
+        _last_wifi_status      = WL_IDLE_STATUS;
+        _wifi_connect_start_ms = millis();
         dbg_printf("WiFi retry: reconnecting to %s\n", _active_cfg.ssid);
+        WiFi.setAutoReconnect(false);  // keep manual control; re-enabled on WL_CONNECTED
         WiFi.disconnect(false);
         delay(100);
         WiFi.begin(_active_cfg.ssid, _active_cfg.password[0] ? _active_cfg.password : nullptr);
