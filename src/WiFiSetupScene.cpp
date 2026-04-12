@@ -133,12 +133,13 @@ void WiFiSetupScene::drawApView() {
 void WiFiSetupScene::drawSettingsView() {
     bool       uart_mode = wifi_use_uart_mode();
     WiFiConfig cfg       = wifi_load_config();
+    bool       ws_ok     = websocket_is_connected();
+    bool       wf_ok     = wifi_is_connected();
 
     // ── Status badge ──────────────────────────────────────────────────────────
     int         badge_fill;
     int         badge_outline;
-    int         badge_text = BLACK;
-    fontnum_t   badge_label_size = SMALL;
+    int         badge_text;
     const char* badge_label;
 
     if (uart_mode) {
@@ -151,58 +152,71 @@ void WiFiSetupScene::drawSettingsView() {
         badge_outline = 0xe02b2b;
         badge_label   = "Not Configured";
         badge_text    = 0xe02b2b;
+    } else if (ws_ok) {
+        badge_fill    = 0x003300;
+        badge_outline = 0x66ff66;
+        badge_label   = "Connected";
+        badge_text    = BLACK;
+    } else if (wf_ok) {
+        // WiFi up — waiting for FluidNC WebSocket
+        static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
+        badge_fill    = 0x332200;
+        badge_outline = YELLOW;
+        badge_label   = nc_frames[(millis() / 400) % 4];
+        badge_text    = YELLOW;
     } else {
-        bool ws_ok          = websocket_is_connected();
-        bool wf_ok          = wifi_is_connected();
-        badge_fill          = ws_ok ? 0x003300 : wf_ok ? YELLOW : RED;
-        badge_outline       = ws_ok ? 0x66ff66 : wf_ok ? 0xccff00 : 0Xe02b67;
-        badge_label         = wifi_status_str();
-        badge_label_size    = wifi_not_ready() ? TINY : SMALL;
+        // WiFi not yet connected
+        static const char* wifi_frames[] = { "WiFi", "WiFi.", "WiFi..", "WiFi..." };
+        badge_fill    = 0x2a0000;
+        badge_outline = 0xe02b2b;
+        badge_label   = wifi_frames[(millis() / 400) % 4];
+        badge_text    = WHITE;
     }
 
-    // Draw badge with padding
     drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, badge_fill, badge_outline);
-    centered_text(badge_label, BY + BH / 2 + 3, badge_text, badge_label_size);
+    centered_text(badge_label, BY + BH / 2 + 3, badge_text, SMALL);
 
     // ── Info section ──────────────────────────────────────────────────────────
-    int y           = CARD_Y0 + 10;
-    int line_height = 16;
+    int y = CARD_Y0;
 
     if (uart_mode) {
-        // UART info
-        y += line_height + 6;
-        drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-        y += line_height;
+        y += 14;
         centered_text("1 Mbaud", y, 0xe02b2b, SMALL);
-        y += line_height + 2;
+        y += 20;
         centered_text("Wired UART", y, WHITE, TINY);
-    } else if (cfg.valid) {
-        // WiFi info
-        centered_text("Connected Network", y, LIGHTGREY, TINY);
-        y += line_height;
-        drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-        y += 12;
-        centered_text(cfg.ssid, y, WHITE, SMALL);
-        y += line_height;
-        centered_text(cfg.fluidnc_ip, y, LIGHTGREY, TINY);
-
-        // Signal strength with visual indicator
-        y += 16;
-        int bars = wifi_signal_bars();
-        const char* bars_str = "○○○○○";
-        int bar_color = RED;
-        if (bars >= 4) { bars_str = "●●●●●"; bar_color = GREEN; }
-        else if (bars == 3) { bars_str = "●●●○○"; bar_color = YELLOW; }
-        else if (bars == 2) { bars_str = "●●○○○"; bar_color = YELLOW; }
-        else if (bars == 1) { bars_str = "●○○○○"; bar_color = RED; }
-
-        centered_text(bars_str, y, bar_color, SMALL);
-    } else {
-        // No config
-        y += line_height;
+    } else if (!cfg.valid) {
+        y += 14;
         centered_text("Press green button", y, 0xe02b2b, TINY);
-        y += line_height;
+        y += 18;
         centered_text("to setup WiFi", y, 0xe02b2b, TINY);
+    } else {
+        // Network label + SSID — always visible so the user knows what we're connecting to
+        centered_text("Network", y, DARKGREY, TINY);
+        y += 16;
+        centered_text(cfg.ssid, y, WHITE, SMALL);
+        y += 22;
+
+        drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
+        y += 14;
+
+        // FluidNC label + IP, coloured by connection phase
+        centered_text("FluidNC", y, DARKGREY, TINY);
+        y += 16;
+        int ip_color = ws_ok ? GREEN : wf_ok ? YELLOW : LIGHTGREY;
+        centered_text(cfg.fluidnc_ip, y, ip_color, SMALL);
+        y += 22;
+
+        if (ws_ok) {
+            // Signal strength — only meaningful once fully connected
+            int         bars     = wifi_signal_bars();
+            const char* bars_str = "○○○○○";
+            int         bar_color = RED;
+            if (bars >= 4)      { bars_str = "●●●●●"; bar_color = GREEN; }
+            else if (bars == 3) { bars_str = "●●●○○"; bar_color = YELLOW; }
+            else if (bars == 2) { bars_str = "●●○○○"; bar_color = YELLOW; }
+            else if (bars == 1) { bars_str = "●○○○○"; bar_color = RED; }
+            centered_text(bars_str, y, bar_color, SMALL);
+        }
     }
 
     // ── Mode-switch button ────────────────────────────────────────────────────
