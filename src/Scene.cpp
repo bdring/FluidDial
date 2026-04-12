@@ -23,13 +23,14 @@ int touchDeltaY;
 std::vector<Scene*> scene_stack;
 
 void activate_scene(Scene* scene, void* arg) {
+    bool prev_show = !current_scene || current_scene->showButtons();
     if (current_scene) {
         current_scene->onExit();
     }
     current_scene = scene;
     current_scene->onEntry(arg);
     current_scene->reDisplay();
-    if (current_scene->showButtons()) {
+    if (current_scene->showButtons() != prev_show) {
         redrawButtons();
     }
 }

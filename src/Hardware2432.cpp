@@ -445,15 +445,17 @@ void init_hardware() {
 int last_locked = -1;
 
 void redrawButtons() {
+    bool show = !current_scene || current_scene->showButtons();
     display.startWrite();
     for (int i = 0; i < n_buttons; i++) {
         Point position = layout->buttonsXY + layout->buttonOffset(i);
-        printf("button position %d,%d\n", position.x, position.y);
         display.fillRect(position.x, position.y, button_w, button_h, BLACK);
-        display.fillCircle(position.x + button_half_wh, position.y + button_half_wh, 28, last_locked == 1 ? DARKGREY : button_colors[i]);
-        if (last_locked != 1) {
-            const char* filename = (i == 0) ? "/red_button.png" : (i == 1) ? "/orange_button.png" : "/green_button.png";
-            display.drawPngFile(LittleFS, filename, position.x + 10, position.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+        if (show) {
+            display.fillCircle(position.x + button_half_wh, position.y + button_half_wh, 28, last_locked == 1 ? DARKGREY : button_colors[i]);
+            if (last_locked != 1) {
+                const char* filename = (i == 0) ? "/red_button.png" : (i == 1) ? "/orange_button.png" : "/green_button.png";
+                display.drawPngFile(LittleFS, filename, position.x + 10, position.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            }
         }
     }
     display.endWrite();
@@ -467,6 +469,7 @@ void show_logo() {
 
 void base_display() {
     initButtons();
+    redrawButtons();
 }
 void next_layout(int delta) {
     layout_num += delta;
