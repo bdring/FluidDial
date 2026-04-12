@@ -74,7 +74,8 @@ void WiFiSetupScene::onModeSwitchButtonPress() {
 
 void WiFiSetupScene::onRedButtonPress() {
     if (wifi_in_ap_mode()) {
-        wifi_stop_ap_and_restart();
+        wifi_stop_ap();
+        reDisplay();
     } else {
         activate_scene(&menuScene);
     }
@@ -91,12 +92,7 @@ void WiFiSetupScene::onGreenButtonPress() {
 }
 
 void WiFiSetupScene::onDialButtonPress() {
-    if (wifi_in_ap_mode()) {
-        // Stop AP without restarting — drop back to the settings view so the
-        // user can see the "Switch to Wired" button and choose a transport.
-        wifi_stop_ap();
-        reDisplay();
-    } else {
+    if (!wifi_in_ap_mode()) {
         activate_scene(&displaySettingsScene);
     }
 }
@@ -131,7 +127,7 @@ void WiFiSetupScene::drawApView() {
     centered_text("192.168.4.1", y, GREEN, SMALL);
 
     // ── Button legends ────────────────────────────────────────────────────────
-    drawButtonLegends("Stop AP", "Restart", "Exit");
+    drawButtonLegends("Exit", "Restart", "");
 }
 
 void WiFiSetupScene::drawSettingsView() {

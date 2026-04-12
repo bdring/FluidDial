@@ -11,14 +11,14 @@
 #include "WiFiSetupScene.h"
 
 static const char* layout_names[] = {
-    "0\xb0  Btns Bottom",   // rotation 0, buttons below
-    "0\xb0  Btns Top",      // rotation 0, buttons above
-    "90\xb0 Btns Right",    // rotation 1, buttons right
-    "90\xb0 Btns Left",     // rotation 1, buttons left
-    "180\xb0 Btns Bottom",  // rotation 2, buttons below
-    "180\xb0 Btns Top",     // rotation 2, buttons above
-    "270\xb0 Btns Left",    // rotation 3, buttons left
-    "270\xb0 Btns Right",   // rotation 3, buttons right
+    "0 deg - Btns Bottom",   // rotation 0, buttons below
+    "0 deg - Btns Top",      // rotation 0, buttons above
+    "90 deg - Btns Right",    // rotation 1, buttons right
+    "90 deg - Btns Left",     // rotation 1, buttons left
+    "180 deg - Btns Bottom",  // rotation 2, buttons below
+    "180 deg - Btns Top",     // rotation 2, buttons above
+    "270 deg - Btns Left",    // rotation 3, buttons left
+    "270 deg - Btns Right",   // rotation 3, buttons right
 };
 static const int n_layout_names = sizeof(layout_names) / sizeof(layout_names[0]);
 
@@ -56,7 +56,7 @@ void DisplaySettingsScene::reDisplay() {
 
     centered_text("Turn dial to rotate", 140, LIGHTGREY, TINY);
 
-    drawButtonLegends("Back", "", "Back");
+    drawButtonLegends("Back", "", "");
     refreshDisplay();
 }
 
