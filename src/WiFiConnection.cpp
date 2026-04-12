@@ -248,13 +248,21 @@ static const char SETUP_HTML[] = R"HTML(
   h2{color:#4CAF50;margin-bottom:4px}
   p.sub{color:#aaa;font-size:14px;margin-bottom:20px}
   label{display:block;margin:14px 0 4px;color:#ccc;font-size:14px}
-  input{width:100%;padding:10px;border-radius:6px;border:1px solid #555;
+  input,select{width:100%;padding:10px;border-radius:6px;border:1px solid #555;
         background:#2a2a2a;color:#eee;font-size:16px}
-  input:focus{outline:none;border-color:#4CAF50}
-  button{margin-top:24px;width:100%;padding:14px;background:#4CAF50;color:#fff;
+  input:focus,select:focus{outline:none;border-color:#4CAF50}
+  .row{display:flex;gap:8px}
+  .row input{flex:1}
+  .scan-btn{padding:10px 14px;background:#2a2a2a;color:#4CAF50;border:1px solid #4CAF50;
+            border-radius:6px;font-size:14px;cursor:pointer;white-space:nowrap;font-weight:bold}
+  .scan-btn:hover{background:#1e3d1e}
+  .scan-btn:disabled{color:#555;border-color:#555;cursor:default}
+  #netList{display:none;margin-top:6px}
+  button[type=submit]{margin-top:24px;width:100%;padding:14px;background:#4CAF50;color:#fff;
          border:none;border-radius:6px;font-size:18px;cursor:pointer;font-weight:bold}
-  button:hover{background:#45a049}
+  button[type=submit]:hover{background:#45a049}
   .note{margin-top:16px;font-size:13px;color:#888;text-align:center}
+  .scan-status{font-size:13px;color:#aaa;margin-top:4px;min-height:18px}
 </style>
 </head>
 <body>
@@ -262,7 +270,14 @@ static const char SETUP_HTML[] = R"HTML(
 <p class="sub">Connect the FluidDial pendant to your WiFi network and FluidNC machine.</p>
 <form method="POST" action="/save">
   <label>WiFi Network Name (SSID)</label>
-  <input type="text" name="ssid" placeholder="YourNetworkName" autocomplete="off" required>
+  <div class="row">
+    <input type="text" name="ssid" id="ssid" placeholder="YourNetworkName" autocomplete="off" required>
+    <button type="button" class="scan-btn" id="scanBtn" onclick="doScan()">Scan</button>
+  </div>
+  <select id="netList" onchange="pickNet(this)">
+    <option value="">-- select a network --</option>
+  </select>
+  <div id="scanStatus" class="scan-status"></div>
   <label>WiFi Password</label>
   <input type="password" name="pass" placeholder="Leave blank for open networks">
   <label>FluidNC IP Address</label>
@@ -271,6 +286,35 @@ static const char SETUP_HTML[] = R"HTML(
   <button type="submit">Save &amp; Connect</button>
 </form>
 <p class="note">The pendant will restart and connect automatically.</p>
+<script>
+function doScan(){
+  var btn=document.getElementById('scanBtn');
+  var lst=document.getElementById('netList');
+  var st=document.getElementById('scanStatus');
+  btn.disabled=true; btn.textContent='Scanning...';
+  st.textContent='Scanning for networks, please wait...';
+  lst.style.display='none';
+  fetch('/scan').then(function(r){return r.json();}).then(function(nets){
+    lst.innerHTML='<option value="">-- select a network --</option>';
+    nets.sort(function(a,b){return b.rssi-a.rssi;});
+    nets.forEach(function(n){
+      var o=document.createElement('option');
+      o.value=n.ssid;
+      o.textContent=n.ssid+(n.secure?' [secured]':'')+'  ('+n.rssi+' dBm)';
+      lst.appendChild(o);
+    });
+    lst.style.display='block';
+    st.textContent=nets.length+' network'+(nets.length!==1?'s':'')+' found.';
+    btn.disabled=false; btn.textContent='Scan';
+  }).catch(function(){
+    st.textContent='Scan failed. Try again.';
+    btn.disabled=false; btn.textContent='Scan';
+  });
+}
+function pickNet(sel){
+  if(sel.value) document.getElementById('ssid').value=sel.value;
+}
+</script>
 </body>
 </html>
 )HTML";
@@ -324,6 +368,36 @@ static void handleSave() {
 
     delay(2000);
     ESP.restart();
+}
+
+static void handleScan() {
+    int n = WiFi.scanNetworks(false, false);  // blocking, no hidden networks
+
+    String json = "[";
+    for (int i = 0; i < n && i < 32; i++) {
+        if (i > 0) json += ",";
+        // Escape backslashes and double-quotes to produce valid JSON.
+        String ssid = WiFi.SSID(i);
+        String safe;
+        safe.reserve(ssid.length());
+        for (int j = 0; j < (int)ssid.length(); j++) {
+            char c = ssid[j];
+            if (c == '\\' || c == '"') safe += '\\';
+            if (c >= 0x20) safe += c;  // drop control characters
+        }
+        json += "{\"ssid\":\"";
+        json += safe;
+        json += "\",\"rssi\":";
+        json += String(WiFi.RSSI(i));
+        json += ",\"secure\":";
+        json += (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) ? "true" : "false";
+        json += "}";
+    }
+    json += "]";
+    WiFi.scanDelete();
+
+    httpServer.sendHeader("Cache-Control", "no-cache");
+    httpServer.send(200, "application/json", json);
 }
 
 static void handleNotFound() {
@@ -383,7 +457,9 @@ void wifi_start_ap_setup() {
 
     WiFi.disconnect(true);
     delay(100);
-    WiFi.mode(WIFI_AP);
+    // WIFI_AP_STA keeps the STA interface active so WiFi.scanNetworks() works
+    // while the AP is running (pure WIFI_AP disables the STA scan engine).
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(WIFI_AP_SSID, (strlen(WIFI_AP_PASS) ? WIFI_AP_PASS : nullptr));
 
     IPAddress apIP(192, 168, 4, 1);
@@ -397,6 +473,7 @@ void wifi_start_ap_setup() {
     httpServer.on("/hotspot-detect.html", HTTP_GET, handleRoot);
     httpServer.on("/ncsi.txt", HTTP_GET, handleRoot);
     httpServer.on("/fwlink", HTTP_GET, handleRoot);
+    httpServer.on("/scan",  HTTP_GET,  handleScan);
     httpServer.on("/save",  HTTP_POST, handleSave);
     httpServer.onNotFound(handleNotFound);
     httpServer.begin();
