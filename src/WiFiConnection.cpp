@@ -172,7 +172,6 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_BIN: {
             // Push every received byte into the ring buffer.
             // GrblParserC's fnc_getchar() will drain it character-by-character.
-            dbg_printf("DBG WS RX: type=%d len=%d data='%.80s'\n", (int)type, (int)length, (char*)payload);
             for (size_t i = 0; i < length; i++) {
                 if (payload[i] == '\r') continue;  // Strip CR
                 rx_push(payload[i]);
