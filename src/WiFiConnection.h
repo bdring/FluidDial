@@ -5,6 +5,8 @@
 
 #ifdef ARDUINO
 
+#include <stdint.h>
+
 struct WiFiConfig {
     char ssid[64];
     char password[64];
@@ -40,5 +42,20 @@ const char* wifi_status_str();
 
 // Returns signal strength as 0–4 bars (0 = no WiFi / disconnected).
 int wifi_signal_bars();
+
+// ── WebSocket transport primitives (used by fnc_putchar/fnc_getchar routing) ──
+// Send one byte to FluidNC via WebSocket.
+void ws_putchar(uint8_t c);
+// Receive one byte from the WebSocket ring buffer (-1 if empty).
+int  ws_getchar();
+
+// ── Runtime transport mode ────────────────────────────────────────────────────
+// When uart_mode is true the WiFi stack is not started and
+// fnc_putchar/fnc_getchar route to the ESP-IDF UART driver instead.
+// The mode is persisted in NVS (namespace "fluidwifi", key "uart_mode").
+bool wifi_use_uart_mode();          // cached after first read
+void wifi_set_uart_mode(bool uart); // write to NVS and update cache
+
+bool wifi_is_first_boot();
 
 #endif  // ARDUINO

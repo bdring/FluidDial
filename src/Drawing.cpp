@@ -122,8 +122,9 @@ void drawStatus() {
     static constexpr int height = 36;
 
 #ifdef USE_WIFI
-    if (state == Disconnected) {
+    if (state == Disconnected && !wifi_use_uart_mode()) {
         // Show WiFi connection progress instead of a plain "N/C" badge.
+        // Not shown in UART mode — fall through to the standard N/C display.
         int         bgColor;
         const char* line1;
         const char* line2;
@@ -178,8 +179,9 @@ void drawStatusSmall(int y) {
     static constexpr int height = 25;
 
 #ifdef USE_WIFI
-    if (state == Disconnected) {
+    if (state == Disconnected && !wifi_use_uart_mode()) {
         // Show WiFi connection progress in the compact badge.
+        // Not shown in UART mode — fall through to the standard N/C display.
         int         bgColor;
         const char* label;
         if (wifi_in_ap_mode()) {

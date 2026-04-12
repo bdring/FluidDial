@@ -6,18 +6,19 @@
 
 class WiFiSetupScene : public Scene {
 public:
-    WiFiSetupScene() : Scene("WiFi") {}
+    WiFiSetupScene() : Scene("Settings") {}
 
     void onEntry(void* arg = nullptr) override;
-    void onRedButtonPress() override;    // Start / stop AP setup
-    void onGreenButtonPress() override;  // Restart ESP
-    void onDialButtonPress() override;   // Back to main menu
-    void onTouchClick() override;        // Same as red button
+    void onRedButtonPress() override;    // Switch transport (or stop AP)
+    void onGreenButtonPress() override;  // AP Setup / Restart
+    void onDialButtonPress() override;   // Back to menu
+    void onTouchClick() override;        // Same as Red
     void onStateChange(state_t) override;
     void reDisplay() override;
 
 private:
-    void drawConnectedView();
+    void switchModeAndRestart();
+    void drawSettingsView();
     void drawApView();
 };
 

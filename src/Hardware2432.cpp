@@ -16,6 +16,10 @@
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
 
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
+
 // This pin is connected to a photoresistor that is ostensibly used
 // for ambient light sensing.  It is possible to repurpose it as a UI
 // lock by connecting a normally-open switch between the photoresistor
@@ -419,7 +423,11 @@ void init_hardware() {
     touch.begin(&display);
 
     init_encoder(enc_a, enc_b);
-#ifndef USE_WIFI
+#ifdef USE_WIFI
+    if (wifi_use_uart_mode()) {
+        init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+    }
+#else
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 #endif
 

@@ -73,7 +73,7 @@ IB controlButton("Macros", &macroMenu, "macrostp.png");
 #ifdef USE_WIFI
 // WiFi scence replaces About button; will reintroduce display orientation later
 extern WiFiSetupScene wifiSetupScene;
-IB setupButton("WiFi", &wifiSetupScene, "abouttp.png");
+IB setupButton("Settings", &wifiSetupScene, "abouttp.png");
 #else
 IB setupButton("About", &aboutScene, "abouttp.png");
 #endif

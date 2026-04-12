@@ -28,7 +28,7 @@
 #define WS_SUBPROTOCOL     "arduino"
 #define FLUIDNC_WS_PORT    80
 #define FLUIDNC_WS_PATH    "/"
-#define HARDCODE_TEST_WIFI 1
+#define HARDCODE_TEST_WIFI 0
 #define TEST_WIFI_SSID     "FluidNC"
 #define TEST_WIFI_PASS     "12345678"
 #define TEST_FLUIDNC_IP    "192.168.0.1"
@@ -42,10 +42,11 @@ static WebSocketsClient webSocket;
 static WebServer        httpServer(80);
 static DNSServer        dnsServer;
 
-static bool _ap_mode       = false;
-static bool _ws_connected  = false;
-static bool _ws_started    = false;
+static bool _ap_mode            = false;
+static bool _ws_connected       = false;
+static bool _ws_started         = false;
 static bool _wifi_was_connected = false;
+static bool _wifi_stack_started = false;  // true only after wifi_init() actually ran
 static WiFiConfig _active_cfg = {};
 static wl_status_t _last_wifi_status = WL_IDLE_STATUS;
 
@@ -110,10 +111,12 @@ static inline int rx_pop() {
     return (unsigned char)c;
 }
 
-// ─── GrblParserC interface ────────────────────────────────────────────────────
+// ─── WebSocket transport primitives ──────────────────────────────────────────
+// These are called by fnc_putchar/fnc_getchar (defined in SystemArduino.cpp)
+// when the active transport is WiFi.
 
-// Called by GrblParserC to send one byte to FluidNC.
-extern "C" void fnc_putchar(uint8_t c) {
+// Send one byte to FluidNC via WebSocket.
+void ws_putchar(uint8_t c) {
     // Skip UART XON/XOFF flow-control bytes (irrelevant over WebSocket).
     if (c == 0x11 || c == 0x13) return;
 
@@ -128,7 +131,6 @@ extern "C" void fnc_putchar(uint8_t c) {
     }
 
     // ASCII realtime commands ('?', '!', '~') sent *outside* a text line.
-    // GrblParserC calls fnc_putchar() with these as standalone bytes.
     if (_tx_len == 0 && (c == '?' || c == '!' || c == '~')) {
         if (_ws_connected) ws_send_bin(&c, 1);
         return;
@@ -144,9 +146,41 @@ extern "C" void fnc_putchar(uint8_t c) {
     }
 }
 
-// Called by GrblParserC to receive one byte from FluidNC.
-extern "C" int fnc_getchar() {
+// Receive one byte from the WebSocket ring buffer (-1 if empty).
+int ws_getchar() {
     return rx_pop();
+}
+
+// ─── Runtime transport mode ───────────────────────────────────────────────────
+
+static int _uart_mode_cached = -1;  // -1 = not yet read from NVS
+
+bool wifi_use_uart_mode() {
+    if (_uart_mode_cached < 0) {
+        Preferences prefs;
+        prefs.begin(PREF_NAMESPACE, false);  // read-write ensures namespace exists
+        _uart_mode_cached = prefs.getBool("uart_mode", false) ? 1 : 0;
+        prefs.end();
+    }
+    return _uart_mode_cached == 1;
+}
+
+void wifi_set_uart_mode(bool uart) {
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.putBool("uart_mode",   uart);
+    prefs.putBool("setup_done",  true);  // clears first-boot flag
+    prefs.end();
+    _uart_mode_cached = uart ? 1 : 0;
+    dbg_printf("Transport mode set to: %s\n", uart ? "UART" : "WiFi");
+}
+
+bool wifi_is_first_boot() {
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, false);
+    bool done = prefs.getBool("setup_done", false);
+    prefs.end();
+    return !done;
 }
 
 // ─── WebSocket event handler ──────────────────────────────────────────────────
@@ -342,9 +376,10 @@ WiFiConfig wifi_load_config() {
 }
 
 void wifi_start_ap_setup() {
-    _ap_mode      = true;
-    _ws_connected = false;
-    _ws_started   = false;
+    _ap_mode            = true;
+    _ws_connected       = false;
+    _ws_started         = false;
+    _wifi_stack_started = true;  // ensure wifi_poll() drives DNS/HTTP server
 
     WiFi.disconnect(true);
     delay(100);
@@ -396,6 +431,7 @@ const char* wifi_ap_ssid() {
 }
 
 const char* wifi_status_str() {
+    if (wifi_use_uart_mode())   return "UART Mode";
     if (_ap_mode)               return "AP Setup Mode";
     if (!wifi_is_connected())   return "Connecting WiFi…";
     if (!_ws_connected)         return "Connecting FluidNC…";
@@ -413,14 +449,25 @@ int wifi_signal_bars() {
 }
 
 void wifi_init() {
-    WiFiConfig cfg = wifi_load_config();
-
-    if (!cfg.valid) {
-        dbg_println("No WiFi config found — starting AP setup mode");
-        wifi_start_ap_setup();
+    if (wifi_use_uart_mode()) {
+        dbg_println("Transport: UART mode — WiFi stack not started");
+        return;
+    }
+    if (wifi_is_first_boot()) {
+        dbg_println("First boot — WiFi deferred until transport is selected");
         return;
     }
 
+    WiFiConfig cfg = wifi_load_config();
+
+    if (!cfg.valid) {
+        // No credentials saved yet — don't auto-start AP.
+        // The user must explicitly press "AP Setup" in Settings.
+        dbg_println("No WiFi credentials — press AP Setup in Settings to configure");
+        return;
+    }
+
+    _wifi_stack_started = true;
     dbg_printf("Connecting to WiFi: %s  FluidNC: %s\n", cfg.ssid, cfg.fluidnc_ip);
     _active_cfg    = cfg;
     _ws_started    = false;
@@ -437,6 +484,9 @@ void wifi_init() {
 }
 
 void wifi_poll() {
+    if (!_wifi_stack_started) return;  // wifi_init() never ran (first boot or UART mode)
+    if (wifi_use_uart_mode()) return;
+
     if (_ap_mode) {
         dnsServer.processNextRequest();
         httpServer.handleClient();
@@ -501,8 +551,5 @@ void wifi_poll() {
         ws_send_bin(&qmark, 1);
     }
 }
-
-// Stub: flow control is a no-op over WebSocket.
-void resetFlowControl() {}
 
 #endif  // ARDUINO

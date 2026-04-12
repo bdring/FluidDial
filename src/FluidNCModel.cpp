@@ -14,7 +14,7 @@ extern Scene statusScene;
 
 // local copies of status items
 const char*        my_state_string    = "N/C";
-state_t            state              = Idle;
+state_t            state              = Disconnected;  // correct: we are disconnected until FluidNC responds
 int                n_axes             = 3;
 pos_t              myAxes[6]          = { 0 };
 bool               myLimitSwitches[6] = { false };
