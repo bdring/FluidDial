@@ -191,8 +191,9 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text("to setup WiFi", y, 0xe02b2b, TINY);
     } else {
         // Network label + SSID — always visible so the user knows what we're connecting to
+        y +=10;
         centered_text("Network", y, DARKGREY, TINY);
-        y += 16;
+        y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
         y += 22;
 
@@ -200,8 +201,8 @@ void WiFiSetupScene::drawSettingsView() {
         y += 14;
 
         // FluidNC label + IP, coloured by connection phase
-        centered_text("FluidNC", y, DARKGREY, TINY);
-        y += 16;
+        centered_text("FluidNC Address", y, DARKGREY, TINY);
+        y += 20;
         int ip_color = ws_ok ? GREEN : wf_ok ? YELLOW : LIGHTGREY;
         centered_text(cfg.fluidnc_ip, y, ip_color, SMALL);
         y += 22;
@@ -236,7 +237,18 @@ void WiFiSetupScene::drawSettingsView() {
 
 void WiFiSetupScene::reDisplay() {
     background();
-    centered_text("Connection Settings", 12);
+
+    const char* title;
+    if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_load_config().valid) {
+        title = "Connection Settings";
+    } else if (websocket_is_connected()) {
+        title = "Connection Established";
+    } else if (wifi_is_connected()) {
+        title = " Connecting to FluidNC";
+    } else {
+        title = "Connecting to WiFi";
+    }
+    centered_text(title, 12);
     drawRect(55, 22, 130, 1, 0, DARKGREY);
 
     if (wifi_in_ap_mode()) {
