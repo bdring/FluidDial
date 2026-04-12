@@ -273,6 +273,13 @@ static void handleSave() {
     pass.trim();
     ip.trim();
 
+    String cleanIp;
+    for (int i = 0; i < (int)ip.length(); i++) {
+        char c = ip[i];
+        if ((c >= '0' && c <= '9') || c == '.') cleanIp += c;
+    }
+    ip = cleanIp;
+
     if (ssid.length() == 0 || ip.length() == 0) {
         httpServer.send(400, "text/plain", "SSID and IP are required");
         return;
@@ -324,6 +331,8 @@ WiFiConfig wifi_load_config() {
     prefs.end();
 
     if (ssid.length() > 0 && ip.length() > 0) {
+        dbg_printf("NVS loaded: ssid='%s' (len=%d) ip='%s' (len=%d)\n",
+                   ssid.c_str(), ssid.length(), ip.c_str(), ip.length());
         strncpy(cfg.ssid,      ssid.c_str(), sizeof(cfg.ssid)      - 1);
         strncpy(cfg.password,  pass.c_str(), sizeof(cfg.password)  - 1);
         strncpy(cfg.fluidnc_ip, ip.c_str(), sizeof(cfg.fluidnc_ip) - 1);
@@ -412,13 +421,15 @@ void wifi_init() {
         return;
     }
 
-    dbg_printf("Connecting to WiFi: %s\n", cfg.ssid);
+    dbg_printf("Connecting to WiFi: %s  FluidNC: %s\n", cfg.ssid, cfg.fluidnc_ip);
     _active_cfg    = cfg;
     _ws_started    = false;
     _ws_connected  = false;
     _wifi_was_connected = false;
     _last_wifi_status = WL_IDLE_STATUS;
     WiFi.persistent(false);
+    WiFi.disconnect(true);  // Ensure clean driver state (especially after AP mode).
+    delay(100);
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
