@@ -56,6 +56,7 @@ static uint32_t         _wifi_retry_at            = 0;        // millis() target
 static volatile uint8_t _wifi_disconnect_reason   = 0;        // set by WiFi event, read in wifi_poll()
 static bool             _wifi_ever_connected      = false;    // true once WL_CONNECTED seen; blocks false-positive on drops
 static uint32_t         _wifi_connect_start_ms    = 0;        // millis() when WiFi.begin() was last issued
+static uint8_t          _handshake_timeout_count  = 0;        // consecutive 4-way handshake timeouts; real auth fail after threshold
 
 // Ring buffer for characters received from FluidNC via WebSocket.
 // Written in the WS callback, read by fnc_getchar() (both on the main task).
@@ -643,6 +644,7 @@ void wifi_init() {
     _wifi_disconnect_reason  = 0;
     _wifi_ever_connected     = false;
     _wifi_connect_start_ms   = 0;  // set after WiFi.begin() below
+    _handshake_timeout_count = 0;
 
     static bool _event_registered = false;
     if (!_event_registered) {
@@ -677,10 +679,11 @@ void wifi_poll() {
         _last_wifi_status = wifi_status;
 
         if (wifi_status == WL_CONNECTED) {
-            _wifi_ever_connected    = true;
-            _wifi_error_msg         = nullptr;
-            _wifi_retry_at          = 0;
-            _wifi_connect_start_ms  = 0;
+            _wifi_ever_connected       = true;
+            _wifi_error_msg            = nullptr;
+            _wifi_retry_at             = 0;
+            _wifi_connect_start_ms     = 0;
+            _handshake_timeout_count   = 0;
             _wifi_disconnect_reason = 0;
             // Re-arm auto-reconnect now that we're up; it was disabled on any
             // prior failure so drops after a successful session still recover.
@@ -710,15 +713,27 @@ void wifi_poll() {
             bool        stop_driver = false;
             bool        allow_retry = false;
 
-            if (reason == WIFI_REASON_AUTH_FAIL          ||
-                reason == WIFI_REASON_AUTH_EXPIRE        ||
-                reason == WIFI_REASON_MIC_FAILURE        ||
-                reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
-                // Auth errors: wrong password can only be fixed by the user —
-                // stop the driver completely and do not schedule any retry.
-                new_msg     = MSG_CHECK_PASS;
+            if (reason == WIFI_REASON_AUTH_FAIL   ||
+                reason == WIFI_REASON_AUTH_EXPIRE  ||
+                reason == WIFI_REASON_MIC_FAILURE) {                new_msg     = MSG_CHECK_PASS;
                 stop_driver = true;
                 allow_retry = false;
+            } else if (reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
+                // Handle cold-boot handshake timeout.
+                // Retry up to 3 times before concluding it is an actual auth failure.
+                _handshake_timeout_count++;
+                if (_handshake_timeout_count >= 3) {
+                    new_msg     = MSG_CHECK_PASS;
+                    stop_driver = true;
+                    allow_retry = false;
+                } else {
+                    // Silent retry after a short delay — do not show an error yet.
+                    stop_driver = false;
+                    allow_retry = true;
+                    if (!_wifi_retry_at) {
+                        _wifi_retry_at = millis() + 2000;
+                    }
+                }
             } else if (reason == WIFI_REASON_NO_AP_FOUND) {
                 // NO_AP_FOUND fires spuriously during retry rescans even when
                 // the AP is present but rejecting credentials — only show
