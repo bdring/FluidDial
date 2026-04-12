@@ -414,6 +414,14 @@ void wifi_stop_ap_and_restart() {
     ESP.restart();
 }
 
+void wifi_stop_ap() {
+    httpServer.stop();
+    dnsServer.stop();
+    WiFi.softAPdisconnect(true);
+    _ap_mode            = false;
+    _wifi_stack_started = false;
+}
+
 bool wifi_is_connected() {
     return WiFi.status() == WL_CONNECTED;
 }
@@ -461,9 +469,11 @@ void wifi_init() {
     WiFiConfig cfg = wifi_load_config();
 
     if (!cfg.valid) {
-        // No credentials saved yet — don't auto-start AP.
-        // The user must explicitly press "AP Setup" in Settings.
-        dbg_println("No WiFi credentials — press AP Setup in Settings to configure");
+        // No credentials saved yet — auto-start AP so the user can configure
+        // via browser immediately (captive portal at 192.168.4.1).
+        dbg_println("No WiFi credentials — starting AP setup mode automatically");
+        wifi_start_ap_setup();
+        current_scene->reDisplay();  // switch scene from "not configured" to AP view
         return;
     }
 

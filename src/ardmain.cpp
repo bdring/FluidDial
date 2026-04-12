@@ -52,6 +52,11 @@ void setup() {
     if (wifi_is_first_boot()) {
         _first_boot_active = true;
         activate_scene(&firstBootScene);
+    } else if (!wifi_use_uart_mode() && !wifi_load_config().valid) {
+        // WiFi mode selected but no credentials configured yet.
+        // Land in WiFiSetupScene; wifi_init() (deferred to loop) will
+        // auto-start AP so the user can set credentials via browser.
+        activate_scene(&wifiSetupScene);
     } else {
         activate_scene(menu);
     }

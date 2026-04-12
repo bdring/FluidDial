@@ -92,7 +92,10 @@ void WiFiSetupScene::onGreenButtonPress() {
 
 void WiFiSetupScene::onDialButtonPress() {
     if (wifi_in_ap_mode()) {
-        activate_scene(&menuScene);
+        // Stop AP without restarting — drop back to the settings view so the
+        // user can see the "Switch to Wired" button and choose a transport.
+        wifi_stop_ap();
+        reDisplay();
     } else {
         activate_scene(&displaySettingsScene);
     }

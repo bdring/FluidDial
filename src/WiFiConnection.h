@@ -32,6 +32,10 @@ void wifi_start_ap_setup();
 // Stop the AP / HTTP server and restart (called after saving config).
 void wifi_stop_ap_and_restart();
 
+// Stop the AP / HTTP server without restarting (used when the user wants
+// to navigate back to the settings view to switch transport mode).
+void wifi_stop_ap();
+
 // Persistent credential storage (NVS via Preferences).
 void       wifi_save_config(const char* ssid, const char* password, const char* ip);
 WiFiConfig wifi_load_config();
