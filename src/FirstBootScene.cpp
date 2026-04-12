@@ -19,8 +19,8 @@ static constexpr int BTN_W = 160;
 static constexpr int BTN_H = 45;
 static constexpr int BTN_X = (240 - BTN_W) / 2;  // Centered
 
-static constexpr int UART_BTN_Y = 100;
-static constexpr int WIFI_BTN_Y = 160;
+static constexpr int UART_BTN_Y = 105;
+static constexpr int WIFI_BTN_Y = 165;
 
 class FirstBootScene : public Scene {
     uint32_t _entry_ms = 0;
@@ -75,13 +75,13 @@ public:
         drawRect(55, 22, 130, 1, 0, DARKGREY);
 
         // ── Main question ──────────────────────────────────────────────────────
-        wrapped_text("Select connection mode", 70, 200, WHITE, SMALL);
+        wrapped_text("Connection Mode", 80, 200, ORANGE, SMALL);
 
         // ── Buttons (stacked vertically) ────────────────────────────────────────
-        uartBtn.set(BTN_X, UART_BTN_Y, BTN_W, BTN_H, "← UART",
+        uartBtn.set(BTN_X, UART_BTN_Y, BTN_W, BTN_H, "Wired",
                     0x001a4d, 0x4da6ff, 0x4da6ff, [this]() { onUartPress(); });
 
-        wifiBtn.set(BTN_X, WIFI_BTN_Y, BTN_W, BTN_H, "WiFi →",
+        wifiBtn.set(BTN_X, WIFI_BTN_Y, BTN_W, BTN_H, "WiFi",
                     0x003300, 0x66ff66, 0x66ff66, [this]() { onWifiPress(); });
 
         // ── Footer ─────────────────────────────────────────────────────────────

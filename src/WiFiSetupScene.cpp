@@ -13,13 +13,13 @@
 #include "Button.h"
 #include "DisplaySettingsScene.h"
 
-extern Scene     menuScene;
+extern Scene       menuScene;
 extern const char* git_info;
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
-static constexpr int BX = 20,  BY  = 28,  BW  = 200, BH  = 34;  // status badge
-static constexpr int CX = 15,  CW  = 210, CH  = 28,  CI  = 8;   // info cards
+static constexpr int BX = 20, BY = 28, BW = 200, BH = 34;       // status badge
+static constexpr int CX = 15, CW = 210, CH = 28, CI = 8;        // info cards
 static constexpr int SBX = 20, SBY = 166, SBW = 200, SBH = 36;  // switch button
 
 static constexpr int CARD_Y0    = 68;
@@ -30,7 +30,7 @@ static constexpr int CARD_PITCH = CH + 4;  // 32 px per card row
 static void drawCard(int y, const char* label, const char* value, int val_color = WHITE) {
     drawOutlinedRect(CX, y, CW, CH, NAVY, WHITE);
     int mid = y + CH / 2 + 2;
-    text(label, CX + CI,      mid, DARKGREY,  TINY,  middle_left);
+    text(label, CX + CI, mid, DARKGREY, TINY, middle_left);
     text(value, CX + CW - CI, mid, val_color, SMALL, middle_right);
 }
 
@@ -120,13 +120,13 @@ void WiFiSetupScene::drawApView() {
 
     y += line_height;
     drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-    
+
     // IP section
     y += line_height + 8;
     centered_text("Open Browser To:", y, LIGHTGREY, TINY);
     y += line_height;
     centered_text("192.168.4.1", y, GREEN, SMALL);
-    
+
     // ── Button legends ────────────────────────────────────────────────────────
     drawButtonLegends("Stop AP", "Restart", "Exit");
 }
@@ -136,40 +136,44 @@ void WiFiSetupScene::drawSettingsView() {
     WiFiConfig cfg       = wifi_load_config();
 
     // ── Status badge ──────────────────────────────────────────────────────────
-    int        badge_fill;
-    int        badge_text = BLACK;
+    int         badge_fill;
+    int         badge_outline;
+    int         badge_text = BLACK;
     const char* badge_label;
 
     if (uart_mode) {
-        badge_fill  = BLUE;
-        badge_label = "UART Mode";
-        badge_text  = WHITE;
+        badge_fill    = 0x001a4d;
+        badge_outline = 0x4da6ff;
+        badge_label   = "UART Mode";
+        badge_text    = 0x4da6ff;
     } else if (!cfg.valid) {
-        badge_fill  = RED;
-        badge_label = "Not Configured";
-        badge_text  = WHITE;
+        badge_fill    = 0x4d0000;
+        badge_outline = 0xe02b2b;
+        badge_label   = "Not Configured";
+        badge_text    = 0xe02b2b;
     } else {
-        bool ws_ok  = websocket_is_connected();
-        bool wf_ok  = wifi_is_connected();
-        badge_fill  = ws_ok ? GREEN : wf_ok ? YELLOW : RED;
-        badge_label = wifi_status_str();
+        bool ws_ok    = websocket_is_connected();
+        bool wf_ok    = wifi_is_connected();
+        badge_fill    = ws_ok ? 0x003300 : wf_ok ? YELLOW : RED;
+        badge_outline = ws_ok ? 0x66ff66 : wf_ok ? 0xccff00 : 0Xe02b67;
+        badge_label   = wifi_status_str();
     }
-    
+
     // Draw badge with padding
-    drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, badge_fill, badge_fill);
+    drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, badge_fill, badge_outline);
     centered_text(badge_label, BY + BH / 2 + 3, badge_text, SMALL);
 
     // ── Info section ──────────────────────────────────────────────────────────
-    int y = CARD_Y0 + 10;
+    int y           = CARD_Y0 + 10;
     int line_height = 16;
 
     if (uart_mode) {
         // UART info
-        y += line_height;
+        y += line_height + 6;
         drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-        y += 12;
-        centered_text("1 Mbaud", y, CYAN, SMALL);
         y += line_height;
+        centered_text("1 Mbaud", y, 0xe02b2b, SMALL);
+        y += line_height + 2;
         centered_text("Wired UART", y, WHITE, TINY);
     } else if (cfg.valid) {
         // WiFi info
@@ -180,7 +184,7 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text(cfg.ssid, y, WHITE, SMALL);
         y += line_height;
         centered_text(cfg.fluidnc_ip, y, LIGHTGREY, TINY);
-        
+
         // Signal strength with visual indicator
         y += 16;
         int bars = wifi_signal_bars();
@@ -190,23 +194,23 @@ void WiFiSetupScene::drawSettingsView() {
         else if (bars == 3) { bars_str = "●●●○○"; bar_color = YELLOW; }
         else if (bars == 2) { bars_str = "●●○○○"; bar_color = YELLOW; }
         else if (bars == 1) { bars_str = "●○○○○"; bar_color = RED; }
-        
+
         centered_text(bars_str, y, bar_color, SMALL);
     } else {
         // No config
         y += line_height;
-        centered_text("Press Green button", y, ORANGE, TINY);
+        centered_text("Press green button", y, 0xe02b2b, TINY);
         y += line_height;
-        centered_text("to setup WiFi", y, ORANGE, TINY);
+        centered_text("to setup WiFi", y, 0xe02b2b, TINY);
     }
 
     // ── Mode-switch button ────────────────────────────────────────────────────
     {
-        const char* sw_label = uart_mode ? "Switch to WiFi" : "Switch to UART";
-        int         sw_color = uart_mode ? GREEN : BLUE;
-        
-        modeSwitchBtn.set(SBX, SBY, SBW, SBH, sw_label, NAVY, sw_color, sw_color,
-            [this]() { onModeSwitchButtonPress(); });
+        const char* sw_label      = uart_mode ? "Switch to WiFi" : "Switch to Wired";
+        int         sw_fill       = uart_mode ? 0x003300: 0x001a4d;
+        int         sw_outline    = uart_mode ? 0x66ff66: 0x4da6ff;
+
+        modeSwitchBtn.set(SBX, SBY, SBW, SBH, sw_label, sw_fill, sw_outline, sw_outline, [this]() { onModeSwitchButtonPress(); });
     }
 
     // ── Button legends ────────────────────────────────────────────────────────
