@@ -56,16 +56,14 @@ public:
 
         // ── WiFi option ────────────────────────────────────────────────────────
         drawOutlinedRect(CARD_X, WIFI_CARD_Y, CARD_W, CARD_H, NAVY, GREEN);
-        centered_text("WiFi",               WIFI_CARD_Y + 24, GREEN,     MEDIUM);
-        centered_text("Wireless WebSocket", WIFI_CARD_Y + 46, LIGHTGREY, SMALL);
+        centered_text("WiFi",               WIFI_CARD_Y + 30, GREEN,     MEDIUM);
 
         // ── UART option ────────────────────────────────────────────────────────
         drawOutlinedRect(CARD_X, UART_CARD_Y, CARD_W, CARD_H, NAVY, RED);
-        centered_text("UART",               UART_CARD_Y + 24, RED,       MEDIUM);
-        centered_text("Wired serial cable", UART_CARD_Y + 46, LIGHTGREY, SMALL);
+        centered_text("UART",               UART_CARD_Y + 30, RED,       MEDIUM);
 
         // ── Footer ─────────────────────────────────────────────────────────────
-        centered_text("Change later in Settings.", 200, DARKGREY, TINY);
+        centered_text("Change be changed later", 200, DARKGREY, TINY);
 
         drawButtonLegends("UART", "WiFi", "");
         refreshDisplay();

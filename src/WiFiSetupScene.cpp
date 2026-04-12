@@ -10,13 +10,14 @@
 #include "Drawing.h"
 #include "Menu.h"
 #include "System.h"
+#include "Button.h"
 
 extern Scene     menuScene;
 extern const char* git_info;
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
-static constexpr int BX = 50,  BY  = 28,  BW  = 140, BH  = 34;  // status badge
+static constexpr int BX = 20,  BY  = 28,  BW  = 200, BH  = 34;  // status badge
 static constexpr int CX = 15,  CW  = 210, CH  = 28,  CI  = 8;   // info cards
 static constexpr int SBX = 20, SBY = 166, SBW = 200, SBH = 36;  // switch button
 
@@ -62,6 +63,14 @@ void WiFiSetupScene::switchModeAndRestart() {
     ESP.restart();
 }
 
+void WiFiSetupScene::onModeSwitchButtonPress() {
+    if (wifi_in_ap_mode()) {
+        wifi_stop_ap_and_restart();
+    } else {
+        switchModeAndRestart();
+    }
+}
+
 void WiFiSetupScene::onRedButtonPress() {
     if (wifi_in_ap_mode()) {
         wifi_stop_ap_and_restart();
@@ -85,26 +94,36 @@ void WiFiSetupScene::onDialButtonPress() {
 }
 
 void WiFiSetupScene::onTouchClick() {
-    if (wifi_in_ap_mode()) {
-        wifi_stop_ap_and_restart();
-    } else {
-        switchModeAndRestart();
-    }
+    modeSwitchBtn.handleTouch(touchX, touchY);
 }
 
 // ─── Drawing ──────────────────────────────────────────────────────────────────
 
 void WiFiSetupScene::drawApView() {
-    drawOutlinedRect(BX, BY, BW, BH, 0x8400 /* dark orange */, WHITE);
+    // ── Status badge ──────────────────────────────────────────────────────────
+    drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, 0x8400, 0x8400);  // dark orange
     centered_text("AP Setup Mode", BY + BH / 2 + 3, WHITE, SMALL);
 
-    int y = CARD_Y0;
-    drawCard(y,     "Connect to", wifi_ap_ssid(), CYAN);  y += CARD_PITCH;
-    drawCard(y,     "Browse to",  "192.168.4.1",  GREEN); y += CH + 14;
+    // ── AP Info ────────────────────────────────────────────────────────────────
+    int y = CARD_Y0 + 10;
+    int line_height = 24;
 
-    centered_text("Fill in WiFi + FluidNC IP,", y,      LIGHTGREY, TINY);
-    centered_text("then tap Save.",              y + 16, LIGHTGREY, TINY);
-
+    // SSID section
+    centered_text("Connect to Network", y, LIGHTGREY, TINY);
+    y += line_height;
+    drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
+    y += 12;
+    centered_text(wifi_ap_ssid(), y, CYAN, SMALL);
+    
+    // IP section
+    y += line_height + 8;
+    centered_text("Open Browser", y, LIGHTGREY, TINY);
+    y += line_height;
+    drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
+    y += 12;
+    centered_text("192.168.4.1", y, GREEN, SMALL);
+    
+    // ── Button legends ────────────────────────────────────────────────────────
     drawButtonLegends("Stop AP", "Restart", "Menu");
 }
 
@@ -131,41 +150,67 @@ void WiFiSetupScene::drawSettingsView() {
         badge_fill  = ws_ok ? GREEN : wf_ok ? YELLOW : RED;
         badge_label = wifi_status_str();
     }
-    drawOutlinedRect(BX, BY, BW, BH, badge_fill, WHITE);
+    
+    // Draw badge with padding
+    drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, badge_fill, badge_fill);
     centered_text(badge_label, BY + BH / 2 + 3, badge_text, SMALL);
 
-    // ── Info cards ────────────────────────────────────────────────────────────
-    int y = CARD_Y0;
+    // ── Info section ──────────────────────────────────────────────────────────
+    int y = CARD_Y0 + 10;
+    int line_height = 24;
 
     if (uart_mode) {
-        drawCard(y, "Baud Rate",  "1 Mbaud", CYAN);  y += CARD_PITCH;
-        drawCard(y, "Transport",  "Wired UART");
+        // UART info
+        centered_text("Serial Connection", y, LIGHTGREY, TINY);
+        y += line_height;
+        drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
+        y += 12;
+        centered_text("1 Mbaud", y, CYAN, SMALL);
+        y += line_height;
+        centered_text("Wired UART", y, WHITE, TINY);
     } else if (cfg.valid) {
-        drawCardAuto(y, "Network",  cfg.ssid);           y += CARD_PITCH;
-        drawCard(y,     "FluidNC",  cfg.fluidnc_ip);     y += CARD_PITCH;
-
-        char sigbuf[24];
-        int  bars = wifi_signal_bars();
-        snprintf(sigbuf, sizeof(sigbuf), "%s (%d/4)", signal_str(bars), bars);
-        drawCard(y, "Signal", sigbuf);
+        // WiFi info
+        centered_text("Connected Network", y, LIGHTGREY, TINY);
+        y += line_height;
+        drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
+        y += 12;
+        centered_text(cfg.ssid, y, WHITE, SMALL);
+        y += line_height;
+        centered_text(cfg.fluidnc_ip, y, LIGHTGREY, TINY);
+        
+        // Signal strength with visual indicator
+        y += 16;
+        int bars = wifi_signal_bars();
+        const char* bars_str = "○○○○○";
+        int bar_color = RED;
+        if (bars >= 4) { bars_str = "●●●●●"; bar_color = GREEN; }
+        else if (bars == 3) { bars_str = "●●●○○"; bar_color = YELLOW; }
+        else if (bars == 2) { bars_str = "●●○○○"; bar_color = YELLOW; }
+        else if (bars == 1) { bars_str = "●○○○○"; bar_color = RED; }
+        
+        centered_text(bars_str, y, bar_color, SMALL);
     } else {
-        // WiFi mode but no credentials stored yet
-        centered_text("No WiFi credentials saved.", CARD_Y0 + 12, LIGHTGREY, SMALL);
-        centered_text("Press Green to run AP Setup", CARD_Y0 + 38, LIGHTGREY, TINY);
-        centered_text("and configure your network.", CARD_Y0 + 54, LIGHTGREY, TINY);
+        // No config
+        y += line_height + 8;
+        drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
+        y += 12;
+        centered_text("Press Green button", y, LIGHTGREY, TINY);
+        y += line_height - 4;
+        centered_text("to configure WiFi", y, LIGHTGREY, TINY);
     }
 
     // ── Mode-switch button ────────────────────────────────────────────────────
     {
         const char* sw_label = uart_mode ? "Switch to WiFi" : "Switch to UART";
         int         sw_color = uart_mode ? GREEN : BLUE;
-        drawOutlinedRect(SBX, SBY, SBW, SBH, NAVY, sw_color);
-        centered_text(sw_label, SBY + SBH / 2 + 3, sw_color, SMALL);
+        
+        modeSwitchBtn.set(SBX, SBY, SBW, SBH, sw_label, NAVY, sw_color, sw_color,
+            [this]() { onModeSwitchButtonPress(); });
     }
 
     // ── Button legends ────────────────────────────────────────────────────────
-    const char* red_label   = uart_mode ? "Use WiFi"  : "Use UART";
-    const char* green_label = uart_mode ? "Restart"   : "AP Setup";
+    const char* red_label   = uart_mode ? "WiFi" : "UART";
+    const char* green_label = uart_mode ? "Restart" : "Setup";
     drawButtonLegends(red_label, green_label, "Menu");
 }
 
