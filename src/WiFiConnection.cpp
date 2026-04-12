@@ -117,8 +117,12 @@ extern "C" void fnc_putchar(uint8_t c) {
     // Skip UART XON/XOFF flow-control bytes (irrelevant over WebSocket).
     if (c == 0x11 || c == 0x13) return;
 
-    // Extended single-byte realtime commands: Ctrl-X and 0x80–0x9F.
-    if (c == 0x18 || (c >= 0x80 && c <= 0x9F)) {
+    // Extended single-byte realtime commands: Ctrl-X, 0x80–0x9F, and the
+    // IO-extender commands 0xB0–0xB3 (ACK=0xB2, NAK=0xB3).  FluidNC uses
+    // ACK/NAK flow control when streaming JSON file listings, even over
+    // WebSocket — without it the first chunk arrives and FluidNC stalls
+    // waiting for acknowledgement, leaving the file list empty.
+    if (c == 0x18 || (c >= 0x80 && c <= 0x9F) || (c >= 0xB0 && c <= 0xB3)) {
         if (_ws_connected) ws_send_bin(&c, 1);
         return;
     }
@@ -168,6 +172,7 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_BIN: {
             // Push every received byte into the ring buffer.
             // GrblParserC's fnc_getchar() will drain it character-by-character.
+            dbg_printf("DBG WS RX: type=%d len=%d data='%.80s'\n", (int)type, (int)length, (char*)payload);
             for (size_t i = 0; i < length; i++) {
                 if (payload[i] == '\r') continue;  // Strip CR
                 rx_push(payload[i]);
@@ -477,7 +482,8 @@ void wifi_poll() {
 
     // Explicit status poll every 500 ms.
     // (FluidNC auto-report via $RI is also set when state transitions from
-    // Disconnected in show_state()
+    // Disconnected in show_state(), but we poll here as a belt-and-suspenders
+    // measure until the first status arrives.)
     uint32_t now = millis();
     if (now - _last_status_ms >= STATUS_POLL_MS) {
         _last_status_ms = now;

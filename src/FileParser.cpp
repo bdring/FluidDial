@@ -556,9 +556,62 @@ void init_listener() {
 }
 
 void request_file_list(const char* dirname) {
+    dbg_printf("DBG request_file_list: sending $Files/ListGCode=%s\n", dirname);
     send_linef("$Files/ListGCode=%s", dirname);
     // parser.reset();
     parser_needs_reset = true;
+}
+
+// ── Plain-JSON receiver ───────────────────────────────────────────────────────
+// Large payloads arrive split across several WebSocket frames; the WS receiver appends '\n' to each, so
+// GrblParserC delivers them as separate lines to handle_other().
+// Accumulate fragments until the outermost JSON object is complete (brace depth -> 0), then dispatch to handle_json().
+
+static std::string _json_accum;
+
+static bool json_accum_complete() {
+    int  depth  = 0;
+    bool in_str = false;
+    bool esc    = false;
+    for (char c : _json_accum) {
+        if (esc)       { esc = false; continue; }
+        if (c == '\\') { esc = true;  continue; }
+        if (c == '"')  { in_str = !in_str; continue; }
+        if (!in_str) {
+            if      (c == '{') ++depth;
+            else if (c == '}') { if (--depth == 0) return true; }
+        }
+    }
+    return false;
+}
+
+// Returns true if the line was consumed as JSON
+bool receive_plain_json(const char* line) {
+    bool looks_like_new_msg = (line[0] == '<' || line[0] == '['
+                               || strncmp(line, "ok",    2) == 0
+                               || strncmp(line, "error:", 6) == 0
+                               || strcmp(line, "PING") == 0);
+
+    // If a new message type interrupts an in-progress accumulation, discard.
+    if (!_json_accum.empty() && looks_like_new_msg) {
+        dbg_printf("DBG JSON accum: discarding partial JSON before '%s'\n", line);
+        _json_accum.clear();
+        return false;
+    }
+
+    // Accept the line if it starts a JSON object or continues one.
+    if (line[0] != '{' && _json_accum.empty()) {
+        return false;
+    }
+
+    _json_accum += line;
+
+    if (json_accum_complete()) {
+        dbg_printf("DBG JSON accum: complete, len=%d, dispatching\n", (int)_json_accum.size());
+        handle_json(_json_accum.c_str());
+        _json_accum.clear();
+    }
+    return true;
 }
 
 void init_file_list() {
@@ -581,6 +634,7 @@ void parser_parse_line(const char* line) {
 }
 
 extern "C" void handle_json(const char* line) {
+    dbg_printf("DBG handle_json: len=%d first100=%.100s\n", (int)strlen(line), line);
     if (parser_needs_reset) {
         parser_needs_reset = false;
         parser.setListener(pInitialListener);
@@ -630,6 +684,7 @@ void handle_radio_mode(char* command, char* arguments) {
 }
 
 extern "C" void handle_msg(char* command, char* arguments) {
+    dbg_printf("DBG handle_msg: cmd='%s' args='%.80s'\n", command, arguments);
     if (strcmp(command, "Homed") == 0) {
         char c;
         while ((c = *arguments++) != '\0') {

@@ -203,19 +203,33 @@ const char* mode_string() {
 state_t previous_state;
 bool    awaiting_alarm = false;
 
+// Called once when status report received after being disconnected.
+// Use schedule_action() to defer execution to dispatch_events() in the main loop where the parser is idle and _report is clean.
+static void connect_init() {
+    dbg_printf("DBG connect_init: starting\n");
+#ifndef USE_WIFI
+    fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off (UART only)
+#endif
+    send_line("$G");
+    dbg_printf("DBG connect_init: sent $G #1\n");
+    send_line("$G");
+    dbg_printf("DBG connect_init: sent $G #2\n");
+    send_line("$RI=200");
+    dbg_printf("DBG connect_init: sent $RI=200\n");
+    init_file_list();
+    dbg_printf("DBG connect_init: sent file list request\n");
+    detect_homing_info();
+    dbg_printf("DBG connect_init: done\n");
+}
+
 extern "C" void show_state(const char* state_string) {
+    dbg_printf("DBG show_state: '%s' (cur=%d)\n", state_string, (int)state);
     previous_state = state;
     state_t new_state;
     if (decode_state_string(state_string, new_state) && state != new_state) {
         if (state == Disconnected) {
-#ifndef USE_WIFI
-            fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off
-            send_line("$G");                     // Refresh GCode modes
-            send_line("$G");                     // Refresh GCode modes
-            send_line("$RI=200");
-            init_file_list();
-            detect_homing_info();
-#endif
+            dbg_printf("DBG show_state: scheduling connect_init\n");
+            schedule_action(connect_init);
         }
         state = new_state;
         if (state == Alarm && lastAlarm == 0) {  // Unknown
@@ -228,6 +242,11 @@ extern "C" void show_state(const char* state_string) {
 }
 
 extern "C" void handle_other(char* line) {
+    // Intercept plain-JSON responses (FluidNC sends {"files":[...]} etc. without the [MSG:JSON:...] wrapper, sometimes split across frames).
+    if (receive_plain_json(line)) {
+        return;
+    }
+    dbg_printf("DBG handle_other: '%s'\n", line);
     if (*line == '$') {
         parse_dollar(line);
         return;
@@ -244,6 +263,7 @@ extern "C" void handle_other(char* line) {
 }
 
 extern "C" void show_error(int error) {
+    dbg_printf("DBG show_error: %d\n", error);
     errorExpire = milliseconds() + 1000;
     lastError   = error;
     current_scene->reDisplay();
