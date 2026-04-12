@@ -138,6 +138,7 @@ void WiFiSetupScene::drawSettingsView() {
     int         badge_fill;
     int         badge_outline;
     int         badge_text = BLACK;
+    fontnum_t   badge_label_size = SMALL;
     const char* badge_label;
 
     if (uart_mode) {
@@ -151,16 +152,17 @@ void WiFiSetupScene::drawSettingsView() {
         badge_label   = "Not Configured";
         badge_text    = 0xe02b2b;
     } else {
-        bool ws_ok    = websocket_is_connected();
-        bool wf_ok    = wifi_is_connected();
-        badge_fill    = ws_ok ? 0x003300 : wf_ok ? YELLOW : RED;
-        badge_outline = ws_ok ? 0x66ff66 : wf_ok ? 0xccff00 : 0Xe02b67;
-        badge_label   = wifi_status_str();
+        bool ws_ok          = websocket_is_connected();
+        bool wf_ok          = wifi_is_connected();
+        badge_fill          = ws_ok ? 0x003300 : wf_ok ? YELLOW : RED;
+        badge_outline       = ws_ok ? 0x66ff66 : wf_ok ? 0xccff00 : 0Xe02b67;
+        badge_label         = wifi_status_str();
+        badge_label_size    = wifi_not_ready() ? TINY : SMALL;
     }
 
     // Draw badge with padding
     drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, badge_fill, badge_outline);
-    centered_text(badge_label, BY + BH / 2 + 3, badge_text, SMALL);
+    centered_text(badge_label, BY + BH / 2 + 3, badge_text, badge_label_size);
 
     // ── Info section ──────────────────────────────────────────────────────────
     int y           = CARD_Y0 + 10;

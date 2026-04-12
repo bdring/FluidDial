@@ -441,9 +441,14 @@ const char* wifi_ap_ssid() {
 const char* wifi_status_str() {
     if (wifi_use_uart_mode())   return "UART Mode";
     if (_ap_mode)               return "AP Setup Mode";
-    if (!wifi_is_connected())   return "Connecting WiFi…";
-    if (!_ws_connected)         return "Connecting FluidNC…";
+    if (!wifi_is_connected())   return "Connecting to WiFi";
+    if (!_ws_connected)         return "Connecting to FluidNC";
     return "Connected";
+}
+
+const bool wifi_not_ready() {
+
+    return (!wifi_is_connected() || !_ws_connected);
 }
 
 int wifi_signal_bars() {

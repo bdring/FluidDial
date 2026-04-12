@@ -43,7 +43,7 @@ WiFiConfig wifi_load_config();
 // Convenience accessors for display.
 const char* wifi_ap_ssid();
 const char* wifi_status_str();
-
+const bool wifi_not_ready();
 // Returns signal strength as 0–4 bars (0 = no WiFi / disconnected).
 int wifi_signal_bars();
 
