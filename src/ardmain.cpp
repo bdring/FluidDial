@@ -27,9 +27,9 @@ void setup() {
     display.setBrightness(aboutScene.getBrightness());
 
     show_logo();
-    delay_ms(2000);  // view the logo and wait for the debug port to connect
+    delay_ms(1000);  // view the logo and wait for the debug port to connect
 
-    base_display();
+    // base_display();
 
     dbg_printf("FluidNC Pendant %s\n", git_info);
 
@@ -68,7 +68,8 @@ void loop() {
             _wifi_initialized = true;
             wifi_init();
         }
-    wifi_poll();
+        wifi_poll();
+    }
 #endif
     fnc_poll();         // Parse incoming bytes from FluidNC (UART or WebSocket)
     dispatch_events();  // Handle dial, touch, buttons

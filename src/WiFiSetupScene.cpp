@@ -75,7 +75,7 @@ void WiFiSetupScene::onRedButtonPress() {
     if (wifi_in_ap_mode()) {
         wifi_stop_ap_and_restart();
     } else {
-        switchModeAndRestart();
+        activate_scene(&menuScene);
     }
 }
 
@@ -105,26 +105,25 @@ void WiFiSetupScene::drawApView() {
     centered_text("AP Setup Mode", BY + BH / 2 + 3, WHITE, SMALL);
 
     // ── AP Info ────────────────────────────────────────────────────────────────
-    int y = CARD_Y0 + 10;
+    int y = CARD_Y0 + 14;
     int line_height = 24;
 
     // SSID section
-    centered_text("Connect to Network", y, LIGHTGREY, TINY);
+    centered_text("Connect to SSID:", y, LIGHTGREY, TINY);
+    y += line_height;
+    centered_text(wifi_ap_ssid(), y, CYAN, SMALL);
+
     y += line_height;
     drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-    y += 12;
-    centered_text(wifi_ap_ssid(), y, CYAN, SMALL);
     
     // IP section
     y += line_height + 8;
-    centered_text("Open Browser", y, LIGHTGREY, TINY);
+    centered_text("Open Browser To:", y, LIGHTGREY, TINY);
     y += line_height;
-    drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-    y += 12;
     centered_text("192.168.4.1", y, GREEN, SMALL);
     
     // ── Button legends ────────────────────────────────────────────────────────
-    drawButtonLegends("Stop AP", "Restart", "Menu");
+    drawButtonLegends("Stop AP", "Restart", "Exit");
 }
 
 void WiFiSetupScene::drawSettingsView() {
@@ -157,11 +156,10 @@ void WiFiSetupScene::drawSettingsView() {
 
     // ── Info section ──────────────────────────────────────────────────────────
     int y = CARD_Y0 + 10;
-    int line_height = 24;
+    int line_height = 16;
 
     if (uart_mode) {
         // UART info
-        centered_text("Serial Connection", y, LIGHTGREY, TINY);
         y += line_height;
         drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
         y += 12;
@@ -191,12 +189,10 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text(bars_str, y, bar_color, SMALL);
     } else {
         // No config
-        y += line_height + 8;
-        drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
-        y += 12;
-        centered_text("Press Green button", y, LIGHTGREY, TINY);
-        y += line_height - 4;
-        centered_text("to configure WiFi", y, LIGHTGREY, TINY);
+        y += line_height;
+        centered_text("Press Green button", y, ORANGE, TINY);
+        y += line_height;
+        centered_text("to setup WiFi", y, ORANGE, TINY);
     }
 
     // ── Mode-switch button ────────────────────────────────────────────────────
@@ -209,14 +205,14 @@ void WiFiSetupScene::drawSettingsView() {
     }
 
     // ── Button legends ────────────────────────────────────────────────────────
-    const char* red_label   = uart_mode ? "WiFi" : "UART";
+    const char* red_label   = "Back";
     const char* green_label = uart_mode ? "Restart" : "Setup";
-    drawButtonLegends(red_label, green_label, "Menu");
+    drawButtonLegends(red_label, green_label, "Info");
 }
 
 void WiFiSetupScene::reDisplay() {
     background();
-    drawMenuTitle(name());
+    centered_text("Connection Settings", 12);
     drawRect(55, 22, 130, 1, 0, DARKGREY);
 
     if (wifi_in_ap_mode()) {

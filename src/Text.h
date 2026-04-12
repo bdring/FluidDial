@@ -42,3 +42,4 @@ void text(const char* msg, Point xy, int color, fontnum_t fontnum = TINY, int da
 void text(const std::string& msg, Point xy, int color, fontnum_t fontnum = TINY, int datum = middle_center);
 
 void centered_text(const char* msg, int y, int color = WHITE, fontnum_t fontnum = TINY);
+void wrapped_text(const char* msg, int y, int w, int color = WHITE, fontnum_t fontnum = TINY);

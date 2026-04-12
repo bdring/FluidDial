@@ -82,4 +82,4 @@ void base_display();
 void set_layout(int n);
 void next_layout(int delta);
 
-bool ui_locked();
+bool ui_locked(bool redrawButtonsFlag = true);

@@ -535,11 +535,13 @@ struct button_debounce_t {
 bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
 
-bool ui_locked() {
+bool ui_locked(bool redrawButtonsFlag) {
     bool locked = digitalRead(lockout_pin);
     if ((int)locked != last_locked) {
         last_locked = locked;
-        redrawButtons();
+        if (redrawButtonsFlag) {
+            redrawButtons();
+        }
     }
     return locked;
 }

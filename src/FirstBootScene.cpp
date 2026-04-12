@@ -6,25 +6,41 @@
 
 #ifdef ARDUINO
 
-#include "Scene.h"
-#include "Drawing.h"
-#include "WiFiConnection.h"
+#    include "Scene.h"
+#    include "Drawing.h"
+#    include "Button.h"
+#    include "WiFiConnection.h"
 
-#include <Esp.h>
+#    include <Esp.h>
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
-static constexpr int CARD_X = 28;
-static constexpr int CARD_W = 184;
-static constexpr int CARD_H = 66;
+static constexpr int BTN_W = 160;
+static constexpr int BTN_H = 45;
+static constexpr int BTN_X = (240 - BTN_W) / 2;  // Centered
 
-static constexpr int WIFI_CARD_Y = 50;
-static constexpr int UART_CARD_Y = 124;
+static constexpr int UART_BTN_Y = 100;
+static constexpr int WIFI_BTN_Y = 160;
 
 class FirstBootScene : public Scene {
     uint32_t _entry_ms = 0;
+    Button wifiBtn, uartBtn;
 
     bool selectable() { return (millis() - _entry_ms) >= 800; }
+
+    void onWifiPress() {
+        if (!selectable())
+            return;
+        wifi_set_uart_mode(false);  // WiFi / WebSocket
+        ESP.restart();
+    }
+
+    void onUartPress() {
+        if (!selectable())
+            return;
+        wifi_set_uart_mode(true);  // UART / serial cable
+        ESP.restart();
+    }
 
 public:
     FirstBootScene() : Scene("Setup") {}
@@ -35,14 +51,16 @@ public:
     }
 
     void onGreenButtonPress() override {
-        if (!selectable()) return;
+        if (!selectable())
+            return;
         wifi_set_uart_mode(false);  // WiFi / WebSocket
         ESP.restart();
     }
 
     void onRedButtonPress() override {
-        if (!selectable()) return;
-        wifi_set_uart_mode(true);   // UART / serial cable
+        if (!selectable())
+            return;
+        wifi_set_uart_mode(true);  // UART / serial cable
         ESP.restart();
     }
 
@@ -54,19 +72,30 @@ public:
         drawMenuTitle("Setup");
         drawRect(55, 22, 130, 1, 0, DARKGREY);
 
-        // ── WiFi option ────────────────────────────────────────────────────────
-        drawOutlinedRect(CARD_X, WIFI_CARD_Y, CARD_W, CARD_H, NAVY, GREEN);
-        centered_text("WiFi",               WIFI_CARD_Y + 30, GREEN,     MEDIUM);
+        // ── Main question ──────────────────────────────────────────────────────
+        wrapped_text("Select connection mode", 70, 200, WHITE, SMALL);
 
-        // ── UART option ────────────────────────────────────────────────────────
-        drawOutlinedRect(CARD_X, UART_CARD_Y, CARD_W, CARD_H, NAVY, RED);
-        centered_text("UART",               UART_CARD_Y + 30, RED,       MEDIUM);
+        // ── Buttons (stacked vertically) ────────────────────────────────────────
+        uartBtn.set(BTN_X, UART_BTN_Y, BTN_W, BTN_H, "← UART",
+                    0x001a4d, 0x4da6ff, 0x4da6ff, [this]() { onUartPress(); });
+
+        wifiBtn.set(BTN_X, WIFI_BTN_Y, BTN_W, BTN_H, "WiFi →",
+                    0x003300, 0x66ff66, 0x66ff66, [this]() { onWifiPress(); });
 
         // ── Footer ─────────────────────────────────────────────────────────────
-        centered_text("Change be changed later", 200, DARKGREY, TINY);
+        centered_text("This can be changed later", 230, DARKGREY, TINY);
 
-        drawButtonLegends("UART", "WiFi", "");
+        // Hide physical button area (cover with black rectangles)
+        drawRect(0, 270, 80, 50, 0, BLACK);      // Red button area
+        drawRect(80, 270, 80, 50, 0, BLACK);     // Orange button area
+        drawRect(160, 270, 80, 50, 0, BLACK);    // Green button area
+ 
         refreshDisplay();
+    }
+
+    void onTouchClick() override {
+        wifiBtn.handleTouch(touchX, touchY);
+        uartBtn.handleTouch(touchX, touchY);
     }
 };
 
