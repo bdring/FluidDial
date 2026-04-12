@@ -12,6 +12,15 @@
 
 #include <Esp.h>
 
+// ─── Geometry ─────────────────────────────────────────────────────────────────
+
+static constexpr int CARD_X = 28;
+static constexpr int CARD_W = 184;
+static constexpr int CARD_H = 66;
+
+static constexpr int WIFI_CARD_Y = 50;
+static constexpr int UART_CARD_Y = 124;
+
 class FirstBootScene : public Scene {
     uint32_t _entry_ms = 0;
 
@@ -22,7 +31,7 @@ public:
 
     void onEntry(void* arg = nullptr) override {
         _entry_ms = millis();
-        reDisplay();
+        set_disconnected_state();  // prevent dispatch_events() redirect to menuScene
     }
 
     void onGreenButtonPress() override {
@@ -45,21 +54,18 @@ public:
         drawMenuTitle("Setup");
         drawRect(55, 22, 130, 1, 0, DARKGREY);
 
-        centered_text("First boot — choose how", 42, LIGHTGREY, TINY);
-        centered_text("FluidDial talks to FluidNC:", 56, LIGHTGREY, TINY);
+        // ── WiFi option ────────────────────────────────────────────────────────
+        drawOutlinedRect(CARD_X, WIFI_CARD_Y, CARD_W, CARD_H, NAVY, GREEN);
+        centered_text("WiFi",               WIFI_CARD_Y + 24, GREEN,     MEDIUM);
+        centered_text("Wireless WebSocket", WIFI_CARD_Y + 46, LIGHTGREY, SMALL);
 
-        // WiFi option — outlined in GREEN to match the Green button
-        drawOutlinedRect(25, 72, 190, 46, NAVY, GREEN);
-        centered_text("WiFi  (Green button)", 90, GREEN, SMALL);
-        centered_text("Wireless via WebSocket", 106, LIGHTGREY, TINY);
+        // ── UART option ────────────────────────────────────────────────────────
+        drawOutlinedRect(CARD_X, UART_CARD_Y, CARD_W, CARD_H, NAVY, RED);
+        centered_text("UART",               UART_CARD_Y + 24, RED,       MEDIUM);
+        centered_text("Wired serial cable", UART_CARD_Y + 46, LIGHTGREY, SMALL);
 
-        // UART option — outlined in RED to match the Red button
-        drawOutlinedRect(25, 124, 190, 46, NAVY, RED);
-        centered_text("UART  (Red button)", 142, RED, SMALL);
-        centered_text("Wired serial cable", 158, LIGHTGREY, TINY);
-
-        centered_text("You can change this later", 182, DARKGREY, TINY);
-        centered_text("in Settings.", 196, DARKGREY, TINY);
+        // ── Footer ─────────────────────────────────────────────────────────────
+        centered_text("Change later in Settings.", 200, DARKGREY, TINY);
 
         drawButtonLegends("UART", "WiFi", "");
         refreshDisplay();
