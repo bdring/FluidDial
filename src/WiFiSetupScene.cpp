@@ -186,7 +186,7 @@ void WiFiSetupScene::drawSettingsView() {
     int y = CARD_Y0;
 
     if (uart_mode) {
-        y += 14;
+        y += 28;
         centered_text("1 Mbaud", y, 0xe02b2b, SMALL);
         y += 20;
         centered_text("Wired UART", y, WHITE, TINY);
