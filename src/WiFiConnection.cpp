@@ -15,6 +15,7 @@
 
 #include <Esp.h>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <WebSocketsClient.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -68,6 +69,52 @@ static int     _tx_len = 0;
 
 // Timers.
 static uint32_t _last_status_ms = 0;
+
+// ─── Async hostname resolution ────────────────────────────────────────────────
+static volatile bool _dns_resolving    = false;  // background task is in flight
+static volatile bool _dns_done         = false;  // task finished; read on main task
+static volatile bool _dns_ok           = false;  // resolution succeeded
+static char          _dns_result_str[40] = {};   // resolved IP string (written by task)
+
+static bool is_dotted_decimal(const char* s) {
+    for (const char* p = s; *p; p++) {
+        if (!((*p >= '0' && *p <= '9') || *p == '.')) return false;
+    }
+    return true;
+}
+
+static void onWsEvent(WStype_t type, uint8_t* payload, size_t length);
+
+static void dnsResolveTask(void* /*param*/) {
+    IPAddress ip;
+    // hostByName() blocks until the mDNS/DNS reply arrives or the stack times
+    // out — running it on a background task keeps the main loop responsive.
+    bool ok = (WiFi.hostByName(_active_cfg.fluidnc_ip, ip) == 1);
+    if (ok) {
+        ip.toString().toCharArray(_dns_result_str, sizeof(_dns_result_str));
+    }
+    _dns_ok        = ok;
+    _dns_done      = true;   // written last — signals main task after result is ready
+    _dns_resolving = false;
+    vTaskDelete(nullptr);
+}
+
+static void start_dns_resolve() {
+    _dns_done      = false;
+    _dns_ok        = false;
+    _dns_resolving = true;
+    dbg_printf("Resolving hostname (async): %s\n", _active_cfg.fluidnc_ip);
+    xTaskCreate(dnsResolveTask, "dns_resolve", 4096, nullptr, 1, nullptr);
+}
+
+static void ws_begin(const char* host) {
+    dbg_printf("Starting WebSocket: ws://%s:%d%s\n", host, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
+    webSocket.begin(host, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH, WS_SUBPROTOCOL);
+    webSocket.onEvent(onWsEvent);
+    webSocket.setReconnectInterval(3000);
+    webSocket.enableHeartbeat(15000, 3000, 2);
+    _ws_started = true;
+}
 
 static const char* wifi_status_name(wl_status_t status) {
     switch (status) {
@@ -286,9 +333,9 @@ static const char SETUP_HTML[] = R"HTML(
   <div id="scanStatus" class="scan-status"></div>
   <label>WiFi Password</label>
   <input type="password" name="pass" placeholder="Leave blank for open networks">
-  <label>FluidNC IP Address</label>
-  <input type="text" name="ip" placeholder="192.168.1.100"
-         pattern="^(\d{1,3}\.){3}\d{1,3}$" required>
+  <label>FluidNC Address (IP or hostname)</label>
+  <input type="text" name="ip" placeholder="192.168.1.100 or fluidnc.local"
+         autocomplete="off" required>
   <button type="submit">Save &amp; Connect</button>
 </form>
 <p class="note">The pendant will restart and connect automatically.</p>
@@ -360,7 +407,10 @@ static void handleSave() {
     String cleanIp;
     for (int i = 0; i < (int)ip.length(); i++) {
         char c = ip[i];
-        if ((c >= '0' && c <= '9') || c == '.') cleanIp += c;
+        if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') || c == '.' || c == '-') {
+            cleanIp += c;
+        }
     }
     ip = cleanIp;
 
@@ -714,12 +764,17 @@ void wifi_poll() {
     if (now_connected && !_wifi_was_connected) {
         dbg_printf("WiFi connected — IP: %s\n",
                    WiFi.localIP().toString().c_str());
-        dbg_printf("Starting WebSocket: ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
-        webSocket.begin(_active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH, WS_SUBPROTOCOL);
-        webSocket.onEvent(onWsEvent);
-        webSocket.setReconnectInterval(3000);  // retry every 3 s on disconnect
-        webSocket.enableHeartbeat(15000, 3000, 2);
-        _ws_started = true;
+        // Initialise mDNS so ".local" names resolve via the lwIP mDNS resolver.
+        if (!MDNS.begin("fluiddial")) {
+            dbg_println("mDNS init failed — .local hostnames may not resolve");
+        }
+        if (is_dotted_decimal(_active_cfg.fluidnc_ip)) {
+            // Plain IP address — start WebSocket immediately.
+            ws_begin(_active_cfg.fluidnc_ip);
+        } else if (!_dns_resolving) {
+            // Hostname — resolve asynchronously; ws_begin() runs when done.
+            start_dns_resolve();
+        }
         // WiFi just came up — update badge from "WiFi..." to "WiFi OK".
         current_scene->reDisplay();
     }
@@ -728,11 +783,28 @@ void wifi_poll() {
             webSocket.disconnect();
             _ws_started = false;
         }
+        _dns_done     = false;  // discard any in-flight DNS result
         _ws_connected = false;
         set_disconnected_state();
         dbg_println("WiFi lost");
     }
     _wifi_was_connected = now_connected;
+
+    // Handle async DNS completion (hostname -> IP resolution).
+    // Only act if WiFi is still up and the WebSocket hasn't already started.
+    if (_dns_done && !_ws_started && now_connected) {
+        bool ok = _dns_ok;
+        _dns_done = false;
+        if (ok) {
+            dbg_printf("Hostname resolved: %s -> %s\n",
+                       _active_cfg.fluidnc_ip, _dns_result_str);
+            ws_begin(_dns_result_str);
+        } else {
+            dbg_printf("Hostname resolution failed: %s\n", _active_cfg.fluidnc_ip);
+            _wifi_error_msg = "Host not found";
+        }
+        current_scene->reDisplay();
+    }
 
     if (_ws_started) {
         // Drive the WebSocket state machine only after WiFi is up.
