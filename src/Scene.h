@@ -61,6 +61,8 @@ public:
     virtual void onEntry(void* arg = nullptr) {}
     virtual void onExit() {}
 
+    virtual bool showButtons() { return true; }
+
     virtual void onFileLines(int firstline, const std::vector<std::string>& lines) {}
     virtual void onFilesList() {}
 

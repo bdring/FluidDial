@@ -29,6 +29,9 @@ void activate_scene(Scene* scene, void* arg) {
     current_scene = scene;
     current_scene->onEntry(arg);
     current_scene->reDisplay();
+    if (current_scene->showButtons()) {
+        redrawButtons();
+    }
 }
 void push_scene(Scene* scene, void* arg) {
     scene_stack.push_back(current_scene);

@@ -12,6 +12,7 @@
 #include "Hardware2432.hpp"
 #include "Drawing.h"
 #include "NVS.h"
+#include "Scene.h"
 
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
@@ -466,7 +467,6 @@ void show_logo() {
 
 void base_display() {
     initButtons();
-    redrawButtons();
 }
 void next_layout(int delta) {
     layout_num += delta;
@@ -539,7 +539,7 @@ bool ui_locked(bool redrawButtonsFlag) {
     bool locked = digitalRead(lockout_pin);
     if ((int)locked != last_locked) {
         last_locked = locked;
-        if (redrawButtonsFlag) {
+        if (redrawButtonsFlag && current_scene && current_scene->showButtons()) {
             redrawButtons();
         }
     }

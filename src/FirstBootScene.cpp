@@ -64,6 +64,8 @@ public:
         ESP.restart();
     }
 
+    bool showButtons() override { return false; }
+
     // Dial is intentionally a no-op — user must pick a transport.
     void onDialButtonPress() override {}
 
@@ -84,11 +86,6 @@ public:
 
         // ── Footer ─────────────────────────────────────────────────────────────
         centered_text("This can be changed later", 230, DARKGREY, TINY);
-
-        // Hide physical button area (cover with black rectangles)
-        drawRect(0, 270, 80, 50, 0, BLACK);      // Red button area
-        drawRect(80, 270, 80, 50, 0, BLACK);     // Orange button area
-        drawRect(160, 270, 80, 50, 0, BLACK);    // Green button area
  
         refreshDisplay();
     }
