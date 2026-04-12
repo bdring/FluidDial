@@ -35,6 +35,10 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 
 #ifdef USE_M5
 #    include "M5Unified.h"
+#    ifndef ARDUINO
+// Provide Arduino-compatible millis() free function for native (SDL) builds
+static inline uint32_t millis() { return m5gfx::millis(); }
+#    endif
 #endif  // USE_M5
 
 extern LGFX_Device&     display;

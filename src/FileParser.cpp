@@ -426,7 +426,7 @@ public:
 } fileLinesListener;
 
 bool is_file(const char* str, const char* filename) {
-    char* s = strstr(str, filename);
+    const char* s = strstr(str, filename);
     return s && strlen(s) == strlen(filename);
 }
 
@@ -684,7 +684,7 @@ extern "C" void handle_msg(char* command, char* arguments) {
         char c;
         while ((c = *arguments++) != '\0') {
             const char* letters = "XYZABCUVW";
-            char*       pos     = strchr(letters, c);
+            const char* pos     = strchr(letters, c);
             if (pos) {
                 set_axis_homed(pos - letters);
             }
