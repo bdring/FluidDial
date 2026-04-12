@@ -47,6 +47,10 @@ const bool wifi_not_ready();
 // Returns signal strength as 0–4 bars (0 = no WiFi / disconnected).
 int wifi_signal_bars();
 
+const char* wifi_last_error();
+
+WiFiConfig wifi_active_config();
+
 // ── WebSocket transport primitives (used by fnc_putchar/fnc_getchar routing) ──
 // Send one byte to FluidNC via WebSocket.
 void ws_putchar(uint8_t c);

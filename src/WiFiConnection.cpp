@@ -35,6 +35,7 @@
 #define RX_BUF_SIZE        2048
 #define TX_BUF_SIZE        512
 #define STATUS_POLL_MS     500         // Send '?' every 500 ms while connected
+#define WIFI_RETRY_DELAY_MS 15000     // Retry WiFi.begin() this long after a failure
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,12 @@ static bool _ws_started         = false;
 static bool _wifi_was_connected = false;
 static bool _wifi_stack_started = false;  // true only after wifi_init() actually ran
 static WiFiConfig _active_cfg = {};
-static wl_status_t _last_wifi_status = WL_IDLE_STATUS;
+static wl_status_t      _last_wifi_status        = WL_IDLE_STATUS;
+static const char*      _wifi_error_msg           = nullptr;  // human-readable failure, cleared on success
+static uint32_t         _wifi_retry_at            = 0;        // millis() target for the next WiFi.begin() retry
+static volatile uint8_t _wifi_disconnect_reason   = 0;        // set by WiFi event, read in wifi_poll()
+static bool             _wifi_ever_connected      = false;    // true once WL_CONNECTED seen; blocks false-positive on drops
+static uint32_t         _wifi_connect_start_ms    = 0;        // millis() when WiFi.begin() was last issued
 
 // Ring buffer for characters received from FluidNC via WebSocket.
 // Written in the WS callback, read by fnc_getchar() (both on the main task).
@@ -528,6 +534,15 @@ const bool wifi_not_ready() {
     return (!wifi_is_connected() || !_ws_connected);
 }
 
+const char* wifi_last_error() {
+    return _wifi_error_msg;
+}
+
+// Returns the config that was loaded at wifi_init() time — no NVS read.
+WiFiConfig wifi_active_config() {
+    return _active_cfg;
+}
+
 int wifi_signal_bars() {
     if (!wifi_is_connected()) return 0;
     int rssi = WiFi.RSSI();
@@ -536,6 +551,13 @@ int wifi_signal_bars() {
     if (rssi >= -75) return 2;   // Fair
     if (rssi >= -85) return 1;   // Weak
     return 0;                    // Very weak
+}
+
+// ─── WiFi event handler ───────────────────────────────────────────────────────
+// Called from the WiFi task — only set a flag; UI work happens in wifi_poll().
+
+static void onWiFiDisconnect(WiFiEvent_t event, WiFiEventInfo_t info) {
+    _wifi_disconnect_reason = info.wifi_sta_disconnected.reason;
 }
 
 void wifi_init() {
@@ -561,11 +583,23 @@ void wifi_init() {
 
     _wifi_stack_started = true;
     dbg_printf("Connecting to WiFi: %s  FluidNC: %s\n", cfg.ssid, cfg.fluidnc_ip);
-    _active_cfg    = cfg;
-    _ws_started    = false;
-    _ws_connected  = false;
-    _wifi_was_connected = false;
-    _last_wifi_status = WL_IDLE_STATUS;
+    _active_cfg              = cfg;
+    _ws_started              = false;
+    _ws_connected            = false;
+    _wifi_was_connected      = false;
+    _last_wifi_status        = WL_IDLE_STATUS;
+    _wifi_error_msg          = nullptr;
+    _wifi_retry_at           = 0;
+    _wifi_disconnect_reason  = 0;
+    _wifi_ever_connected     = false;
+    _wifi_connect_start_ms   = 0;  // set after WiFi.begin() below
+
+    static bool _event_registered = false;
+    if (!_event_registered) {
+        WiFi.onEvent(onWiFiDisconnect, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+        _event_registered = true;
+    }
+
     WiFi.persistent(false);
     WiFi.disconnect(true);  // Ensure clean driver state (especially after AP mode).
     delay(100);
@@ -573,6 +607,7 @@ void wifi_init() {
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
     WiFi.begin(cfg.ssid, cfg.password[0] ? cfg.password : nullptr);
+    _wifi_connect_start_ms = millis();
 }
 
 void wifi_poll() {
@@ -589,6 +624,56 @@ void wifi_poll() {
     if (wifi_status != _last_wifi_status) {
         dbg_printf("WiFi status: %s (%d)\n", wifi_status_name(wifi_status), wifi_status);
         _last_wifi_status = wifi_status;
+
+        if (wifi_status == WL_CONNECTED) {
+            _wifi_ever_connected    = true;
+            _wifi_error_msg         = nullptr;
+            _wifi_retry_at          = 0;
+            _wifi_connect_start_ms  = 0;
+            _wifi_disconnect_reason = 0;
+        }
+    }
+
+    // Early-timeout: show a generic message while the handshake is still in progress
+    static constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 8000;
+    if (!_wifi_ever_connected && !_wifi_error_msg && _wifi_connect_start_ms &&
+        (millis() - _wifi_connect_start_ms) > WIFI_CONNECT_TIMEOUT_MS) {
+        _wifi_error_msg = "Cannot connect";
+        current_scene->reDisplay();
+    }
+
+    // Decode the reason code set by the WiFi disconnect event.
+    if (_wifi_disconnect_reason) {
+        uint8_t reason          = _wifi_disconnect_reason;
+        _wifi_disconnect_reason = 0;
+        dbg_printf("WiFi disconnect reason: %d\n", reason);
+
+        if (!_wifi_ever_connected) {
+            if (reason == WIFI_REASON_NO_AP_FOUND) {
+                _wifi_error_msg = "Network not found";
+                _wifi_retry_at  = millis() + WIFI_RETRY_DELAY_MS;
+                current_scene->reDisplay();
+            } else if (reason == WIFI_REASON_AUTH_FAIL    ||
+                       reason == WIFI_REASON_AUTH_EXPIRE  ||
+                       reason == WIFI_REASON_MIC_FAILURE  ||
+                       reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) {
+                _wifi_error_msg = "Check password";
+                _wifi_retry_at  = millis() + WIFI_RETRY_DELAY_MS;
+                current_scene->reDisplay();
+            }
+        }
+    }
+
+    // Re-issue WiFi.begin() after a failure so the driver tries again.
+    if (_wifi_retry_at && millis() >= _wifi_retry_at) {
+        _wifi_retry_at         = 0;
+        _wifi_error_msg        = nullptr;   // clear error while retrying
+        _last_wifi_status      = WL_IDLE_STATUS;  // reset so next status change fires
+        _wifi_connect_start_ms = millis();  // reset timeout for the new attempt
+        dbg_printf("WiFi retry: reconnecting to %s\n", _active_cfg.ssid);
+        WiFi.disconnect(false);
+        delay(100);
+        WiFi.begin(_active_cfg.ssid, _active_cfg.password[0] ? _active_cfg.password : nullptr);
     }
 
     // Detect WiFi reconnects so the WebSocket can recover.

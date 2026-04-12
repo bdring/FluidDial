@@ -132,7 +132,7 @@ void WiFiSetupScene::drawApView() {
 
 void WiFiSetupScene::drawSettingsView() {
     bool       uart_mode = wifi_use_uart_mode();
-    WiFiConfig cfg       = wifi_load_config();
+    WiFiConfig cfg       = wifi_active_config();  // cached — no NVS read on every frame
     bool       ws_ok     = websocket_is_connected();
     bool       wf_ok     = wifi_is_connected();
 
@@ -164,8 +164,14 @@ void WiFiSetupScene::drawSettingsView() {
         badge_outline = YELLOW;
         badge_label   = nc_frames[(millis() / 400) % 4];
         badge_text    = YELLOW;
+    } else if (wifi_last_error()) {
+        // WiFi connection failed (wrong password / network not found)
+        badge_fill    = 0x4d0000;
+        badge_outline = RED;
+        badge_label   = "WiFi Error";
+        badge_text    = WHITE;
     } else {
-        // WiFi not yet connected
+        // WiFi not yet connected — still trying
         static const char* wifi_frames[] = { "WiFi", "WiFi.", "WiFi..", "WiFi..." };
         badge_fill    = 0x2a0000;
         badge_outline = 0xe02b2b;
@@ -200,12 +206,21 @@ void WiFiSetupScene::drawSettingsView() {
         drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
         y += 14;
 
-        // FluidNC label + IP, coloured by connection phase
-        centered_text("FluidNC Address", y, DARKGREY, TINY);
-        y += 20;
-        int ip_color = ws_ok ? GREEN : wf_ok ? YELLOW : LIGHTGREY;
-        centered_text(cfg.fluidnc_ip, y, ip_color, SMALL);
-        y += 22;
+        if (wifi_last_error()) {
+            // Show the failure reason instead of the FluidNC IP
+            centered_text("WiFi Error", y, DARKGREY, TINY);
+            y += 20;
+            centered_text(wifi_last_error(), y, RED, SMALL);
+            y += 20;
+            centered_text("Retrying...", y, 0x888888, TINY);
+        } else {
+            // FluidNC label + IP, coloured by connection phase
+            centered_text("FluidNC Address", y, DARKGREY, TINY);
+            y += 20;
+            int ip_color = ws_ok ? GREEN : wf_ok ? YELLOW : LIGHTGREY;
+            centered_text(cfg.fluidnc_ip, y, ip_color, SMALL);
+            y += 22;
+        }
 
         if (ws_ok) {
             // Signal strength — only meaningful once fully connected
@@ -239,7 +254,7 @@ void WiFiSetupScene::reDisplay() {
     background();
 
     const char* title;
-    if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_load_config().valid) {
+    if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_active_config().valid) {
         title = "Connection Settings";
     } else if (websocket_is_connected()) {
         title = "Connection Established";
