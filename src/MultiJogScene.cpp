@@ -30,8 +30,6 @@ private:
     bool         _cancelling    = false;
     bool         _cancel_held   = false;
     bool         _continuous    = false;
-    LGFX_Sprite* _bg_image      = nullptr;
-
     // MPG jog rate-limiting: accumulate encoder ticks and send at most one
     // jog command per MPG_INTERVAL_MS to avoid flooding FluidNC's planner queue.
     static const uint32_t MPG_INTERVAL_MS = 30;
@@ -62,9 +60,49 @@ public:
         return -1;  // No axis is selected
     }
 
+    void drawJogBg() {
+        // Recreate jogbg.png with drawing primitives — faster than rendering png which was causing heap issues with WiFi and overall sluggishness :(
+        const int cx = 120, cy = 120;
+        const int R  = 113;   // outer circle radius
+        const int ri = 40;    // inner (center circle) radius
+        const int hw = 3;     // half-width of separator bands (parallel edges)
+        const uint16_t zone_color = 0x1928;  // dark navy blue (RGB565)
+        const uint16_t sep_color  = 0x3186;  // dark grey
+
+        // Fill entire outer disc with blue, then overlay separators + center
+        canvas.fillCircle(cx, cy, R, zone_color);
+
+        // Outer rim
+        for (int i = 0; i < 3; i++) {
+            canvas.drawCircle(cx, cy, R - i, sep_color);
+        }
+
+        for (int sx = -1; sx <= 1; sx += 2) {
+            for (int sy = -1; sy <= 1; sy += 2) {
+                // along the diagonal
+                int ax = (int)(sx * 0.7071f * R);
+                int ay = (int)(sy * 0.7071f * R);
+                // perpendicular offset for band width
+                int px = (int)(-sy * 0.7071f * hw);
+                int py = (int)( sx * 0.7071f * hw);
+                // Rectangle corners: center±perp to edge±perp
+                canvas.fillTriangle(cx + px, cy + py, cx - px, cy - py,
+                                    cx + ax + px, cy + ay + py, sep_color);
+                canvas.fillTriangle(cx - px, cy - py, cx + ax - px, cy + ay - py,
+                                    cx + ax + px, cy + ay + py, sep_color);
+            }
+        }
+
+        // Center circle
+        canvas.fillCircle(cx, cy, ri, sep_color);
+
+        // "Help" hint in center
+        centered_text("Help", cy + 4, zone_color, TINY);
+    }
+
     void reDisplay() {
         background();
-        drawBackground(_bg_image);
+        drawJogBg();
         drawMenuTitle(current_scene->name());
         drawStatus();
 
@@ -109,7 +147,6 @@ public:
             zero_axes();
         }
         if (initPrefs()) {
-            _bg_image = createPngBackground("/jogbg.png");
             for (size_t axis = 0; axis < 3; axis++) {
                 getPref("DistanceDigit", axis, &_dist_index[axis]);
             }
