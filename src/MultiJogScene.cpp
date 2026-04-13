@@ -63,14 +63,22 @@ public:
     void drawJogBg() {
         // Recreate jogbg.png with drawing primitives — faster than rendering png which was causing heap issues with WiFi and overall sluggishness :(
         const int cx = 120, cy = 120;
-        const int R  = 114;   // outer circle radius
+        const int R  = 119;   // outer circle radius
         const int ri = 50;    // inner (center circle) radius
         const int hw = 3;     // half-width of separator bands (parallel edges)
-        const uint16_t zone_color = 0x1a4d;  // nicer blue
-        const uint16_t sep_color  = 0x0000;  // black
+        const uint16_t zone_color    = 0x1a4d;  // nicer blue
+        const uint16_t sep_color     = 0x0000;  // black
+        const uint16_t outline_color = 0x8410;
 
         // Fill entire outer disc with blue, then overlay separators + center
         canvas.fillCircle(cx, cy, R, zone_color);
+
+        // Outer circle outline
+        canvas.drawCircle(cx, cy, R, outline_color);
+
+        // Wedges' inner radii outlines:
+        canvas.drawCircle(cx, cy, ri + 1, outline_color);
+
 
         for (int sx = -1; sx <= 1; sx += 2) {
             for (int sy = -1; sy <= 1; sy += 2) {
@@ -85,17 +93,29 @@ public:
                                     cx + ax + px, cy + ay + py, sep_color);
                 canvas.fillTriangle(cx - px, cy - py, cx + ax - px, cy + ay - py,
                                     cx + ax + px, cy + ay + py, sep_color);
+                // Outline the separator edges
+                int oax = (int)(sx * 0.71f * R);
+                int oay = (int)(sy * 0.71f * R);
+                int opx = (int)(-sy * 0.71f * hw);
+                int opy = (int)( sx * 0.71f * hw);
+                canvas.drawLine(cx + opx, cy + opy, cx + oax + opx, cy + oay + opy, outline_color);
+                canvas.drawLine(cx - opx, cy - opy, cx + oax - opx, cy + oay - opy, outline_color);
             }
         }
+
 
         // Center circle void
         canvas.fillCircle(cx, cy, ri, sep_color);
 
+
         // Concentric circle
-        canvas.fillCircle(cx, cy, ri - hw * 2, zone_color);
+        canvas.fillCircle(cx, cy, ri - hw * 1.5, zone_color);
+
+        // Inner circle outline
+        canvas.drawCircle(cx, cy, ri - hw * 1.5, outline_color);
 
         // "Help" hint in center
-        centered_text("Help", cy + 4, 0x0000, MEDIUM);
+        centered_text("Help", cy + 4, BLACK, MEDIUM);
     }
 
     void reDisplay() {

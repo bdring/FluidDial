@@ -44,7 +44,11 @@ void setup() {
     extern Scene* initMenus();
     Scene* menu = initMenus();
 
-#ifdef USE_WIFI
+    // For debugging certain views without setting WiFi/UART transports
+#ifdef DEV_SKIP_TO_SCENE
+    extern Scene multiJogScene;
+    activate_scene(&multiJogScene);
+#elif defined(USE_WIFI)
     // On first boot (no transport mode saved yet) show the setup wizard
     // immediately — before the main menu — so the user is never silently
     // dropped into WiFi mode.  The wizard restarts the device on selection,
