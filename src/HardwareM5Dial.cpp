@@ -139,6 +139,10 @@ bool ui_locked(bool redrawButtonsFlag) {
     return false;
 }
 
+int num_layouts = 1;
+int32_t layout_num = 0;
+void redrawButtons() {}
+
 #include <driver/rtc_io.h>
 // The M5 Library is broken with respect to deep sleep on M5 Dial
 // so we have to do it ourselves.  The problem is that the WAKE
