@@ -21,6 +21,25 @@ extern const char* git_info;
 
 extern AboutScene aboutScene;
 
+#ifdef USE_WIFI
+extern Scene menuScene;
+extern WiFiSetupScene wifiSetupScene;
+
+void first_boot_complete() {
+    _first_boot_active = false;
+
+    if (wifi_use_uart_mode()) {
+        fnc_realtime(StatusReport);
+        activate_scene(&menuScene);
+    } else {
+        // WiFi mode — credentials don't exist yet on a true first boot,
+        // so go straight to the WiFi setup scene.  wifi_init() will run
+        // on the next loop() iteration and auto-start the AP.
+        activate_scene(&wifiSetupScene);
+    }
+}
+#endif
+
 void setup() {
     init_system();
 
@@ -51,8 +70,8 @@ void setup() {
 #elif defined(USE_WIFI)
     // On first boot (no transport mode saved yet) show the setup wizard
     // immediately — before the main menu — so the user is never silently
-    // dropped into WiFi mode.  The wizard restarts the device on selection,
-    // so wifi_init() is deferred until the next normal boot.
+    // dropped into WiFi mode.  first_boot_complete() handles the
+    // transition once the user picks a transport.
     if (wifi_is_first_boot()) {
         _first_boot_active = true;
         activate_scene(&firstBootScene);

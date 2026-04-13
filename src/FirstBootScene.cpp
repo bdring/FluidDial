@@ -2,7 +2,7 @@
 // FirstBootScene.cpp — one-time setup wizard shown on first boot.
 //
 // Asks the user to choose WiFi (WebSocket) or UART (serial cable).
-// Choice is saved to NVS, then the ESP restarts into normal operation.
+// Choice is saved to NVS, then transitions directly to the appropriate scene.
 
 #ifdef ARDUINO
 
@@ -11,7 +11,7 @@
 #    include "Button.h"
 #    include "WiFiConnection.h"
 
-#    include <Esp.h>
+extern void first_boot_complete();
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
@@ -32,14 +32,14 @@ class FirstBootScene : public Scene {
         if (!selectable())
             return;
         wifi_set_uart_mode(false);  // WiFi / WebSocket
-        ESP.restart();
+        first_boot_complete();
     }
 
     void onUartPress() {
         if (!selectable())
             return;
         wifi_set_uart_mode(true);  // UART / serial cable
-        ESP.restart();
+        first_boot_complete();
     }
 
 public:
@@ -54,14 +54,14 @@ public:
         if (!selectable())
             return;
         wifi_set_uart_mode(false);  // WiFi / WebSocket
-        ESP.restart();
+        first_boot_complete();
     }
 
     void onRedButtonPress() override {
         if (!selectable())
             return;
         wifi_set_uart_mode(true);  // UART / serial cable
-        ESP.restart();
+        first_boot_complete();
     }
 
     bool showButtons() override { return false; }
