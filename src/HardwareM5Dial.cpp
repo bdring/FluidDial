@@ -135,7 +135,7 @@ void ackBeep() {
     speaker.tone(1800, 50);
 }
 
-bool ui_locked() {
+bool ui_locked(bool redrawButtonsFlag) {
     return false;
 }
 

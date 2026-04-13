@@ -457,6 +457,8 @@ nvs_handle_t nvs_init(const char* name) {
     return strdup(dname);
 }
 
-bool ui_locked() {
+bool ui_locked(bool redrawButtonsFlag) {
     return false;
 }
+
+void redrawButtons() {}
