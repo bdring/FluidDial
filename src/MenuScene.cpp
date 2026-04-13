@@ -109,6 +109,13 @@ public:
             enableIcons();
         }
     }
+    void onTouchClick() override {
+        if (touchIsCenter() && state == Alarm) {
+            push_scene(&statusScene);
+            return;
+        }
+        PieMenu::onTouchClick();
+    }
     void onStateChange(state_t old_state) override {
         if (state != Disconnected) {
             enableIcons();
