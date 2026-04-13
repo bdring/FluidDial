@@ -46,8 +46,8 @@ void setup() {
 
     // For debugging certain views without setting WiFi/UART transports
 #ifdef DEV_SKIP_TO_SCENE
-    extern Scene multiJogScene;
-    activate_scene(&multiJogScene);
+    extern Scene DEV_SKIP_TO_SCENE;
+    activate_scene(&DEV_SKIP_TO_SCENE);
 #elif defined(USE_WIFI)
     // On first boot (no transport mode saved yet) show the setup wizard
     // immediately — before the main menu — so the user is never silently
