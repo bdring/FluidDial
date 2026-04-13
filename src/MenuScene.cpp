@@ -19,6 +19,7 @@ static const char* menu_help_text[] = { "FluidDial",
                                         "Authors: @bdring,@Mitch",
                                         "Bradley,@bDuthieDev,",
                                         "@Design8Studio",
+                                        "WiFi by @Figamore",
                                         NULL };
 
 // PieMenu axisMenu("Axes", buttonRadius);

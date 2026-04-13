@@ -14,7 +14,7 @@ public:
         int pos = 20;
         for (; line = *msg, line; ++msg) {
             centered_text(line, pos, WHITE, TINY);
-            pos += 28;
+            pos += 26;
         }
         drawButtonLegends("", "", "Back");
         refreshDisplay();

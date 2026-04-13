@@ -156,7 +156,7 @@ void WiFiSetupScene::drawSettingsView() {
         badge_fill    = 0x003300;
         badge_outline = 0x66ff66;
         badge_label   = "Connected";
-        badge_text    = BLACK;
+        badge_text    = 0x66ff66;
     } else if (wf_ok) {
         // WiFi up — waiting for FluidNC WebSocket
         static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
@@ -221,18 +221,6 @@ void WiFiSetupScene::drawSettingsView() {
             centered_text(cfg.fluidnc_ip, y, ip_color, SMALL);
             y += 22;
         }
-
-        if (ws_ok) {
-            // Signal strength — only meaningful once fully connected
-            int         bars     = wifi_signal_bars();
-            const char* bars_str = "○○○○○";
-            int         bar_color = RED;
-            if (bars >= 4)      { bars_str = "●●●●●"; bar_color = GREEN; }
-            else if (bars == 3) { bars_str = "●●●○○"; bar_color = YELLOW; }
-            else if (bars == 2) { bars_str = "●●○○○"; bar_color = YELLOW; }
-            else if (bars == 1) { bars_str = "●○○○○"; bar_color = RED; }
-            centered_text(bars_str, y, bar_color, SMALL);
-        }
     }
 
     // ── Mode-switch button ────────────────────────────────────────────────────
@@ -257,7 +245,7 @@ void WiFiSetupScene::reDisplay() {
     if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_active_config().valid) {
         title = "Connection Settings";
     } else if (websocket_is_connected()) {
-        title = "Connection Established";
+        title = " Connected to FluidNC";
     } else if (wifi_is_connected()) {
         title = " Connecting to FluidNC";
     } else {
