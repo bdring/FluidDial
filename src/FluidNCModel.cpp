@@ -227,7 +227,6 @@ extern "C" void show_state(const char* state_string) {
         if (state == Alarm && lastAlarm == 0) {  // Unknown
             send_line("$A");                     // Get last alarm
             awaiting_alarm = true;
-            return;
         }
         act_on_state_change();
     }
