@@ -11,7 +11,7 @@
 #    include <LittleFS.h>
 constexpr static const int UPDATE_RATE_MS = 30;  // minimum refresh rate in milliseconds
 extern Stream&             debugPort;
-void                       init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
+void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 #endif  // ARDUINO
 
 #ifdef USE_LOVYANGFX
@@ -35,6 +35,10 @@ void                       init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 
 #ifdef USE_M5
 #    include "M5Unified.h"
+#    ifndef ARDUINO
+// Provide Arduino-compatible millis() free function for native (SDL) builds
+static inline uint32_t millis() { return m5gfx::millis(); }
+#    endif
 #endif  // USE_M5
 
 extern LGFX_Device&     display;
@@ -77,5 +81,8 @@ inline int display_short_side() {
 void base_display();
 void set_layout(int n);
 void next_layout(int delta);
+extern int32_t layout_num;
+extern int num_layouts;
+void redrawButtons();
 
-bool ui_locked();
+bool ui_locked(bool redrawButtonsFlag = true);

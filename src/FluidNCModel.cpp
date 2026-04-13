@@ -14,7 +14,7 @@ extern Scene statusScene;
 
 // local copies of status items
 const char*        my_state_string    = "N/C";
-state_t            state              = Idle;
+state_t            state              = Disconnected;  // correct: we are disconnected until FluidNC responds
 int                n_axes             = 3;
 pos_t              myAxes[6]          = { 0 };
 bool               myLimitSwitches[6] = { false };
@@ -203,29 +203,40 @@ const char* mode_string() {
 state_t previous_state;
 bool    awaiting_alarm = false;
 
+// Called once when status report received after being disconnected.
+// Use schedule_action() to defer execution to dispatch_events() in the main loop where the parser is idle and _report is clean.
+static void connect_init() {
+#ifndef USE_WIFI
+    fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off (UART only)
+#endif
+    send_line("$G");                     // Refresh GCode modes
+    send_line("$G");                     // Refresh GCode modes
+    send_line("$RI=200");                // Enable auto-reporting every 200 ms
+    init_file_list();                    // Request SD file list
+    detect_homing_info();                // Probe axis homing state
+}
+
 extern "C" void show_state(const char* state_string) {
     previous_state = state;
     state_t new_state;
     if (decode_state_string(state_string, new_state) && state != new_state) {
         if (state == Disconnected) {
-            fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off
-            send_line("$G");                     // Refresh GCode modes
-            send_line("$G");                     // Refresh GCode modes
-            send_line("$RI=200");
-            init_file_list();
-            detect_homing_info();
+            schedule_action(connect_init);
         }
         state = new_state;
         if (state == Alarm && lastAlarm == 0) {  // Unknown
             send_line("$A");                     // Get last alarm
             awaiting_alarm = true;
-            return;
         }
         act_on_state_change();
     }
 }
 
 extern "C" void handle_other(char* line) {
+    // Intercept plain-JSON responses (FluidNC sends {"files":[...]} etc. without the [MSG:JSON:...] wrapper, sometimes split across frames).
+    if (receive_plain_json(line)) {
+        return;
+    }
     if (*line == '$') {
         parse_dollar(line);
         return;

@@ -7,11 +7,15 @@ extern void loop();
 
 char* comname;
 int   main(int argc, char** argv) {
+#ifdef WINDOWS
     if (argc != 2) {
         printf("Usage: %s COMn\n", argv[0]);
         exit(1);
     }
     comname = argv[1];
+#else
+    comname = (argc >= 2) ? argv[1] : NULL;
+#endif
 
     setup();
 

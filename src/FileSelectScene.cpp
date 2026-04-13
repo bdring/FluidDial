@@ -13,6 +13,10 @@ extern Scene filePreviewScene;
 
 extern Scene& jogScene;
 
+class FileSelectScene;
+static FileSelectScene* pending_file_select_scene = nullptr;
+static void request_current_file_list();
+
 class FileSelectScene : public Scene {
 private:
     int              _selected_file = 0;
@@ -45,6 +49,10 @@ public:
         // a first time only thing, because files are already loaded
         if (prevSelect.size() == 0) {
             prevSelect.push_back(0);
+        }
+        if (fileVector.empty()) {
+            pending_file_select_scene = this;
+            schedule_action(request_current_file_list);
         }
     }
 
@@ -168,6 +176,14 @@ public:
     // clang-format on
 
     void onRightFlick() { activate_scene(&jogScene); }
+
+    void requestCurrentDirectory() {
+        if (dirLevel == 0) {
+            init_file_list();
+        } else {
+            request_file_list(dirName.c_str());
+        }
+    }
 
     void showFiles() {
         // canvas.createSprite(240, 240);
@@ -323,4 +339,12 @@ public:
         showFiles();
     }
 };
+
+static void request_current_file_list() {
+    if (pending_file_select_scene) {
+        pending_file_select_scene->requestCurrentDirectory();
+        pending_file_select_scene = nullptr;
+    }
+}
+
 FileSelectScene fileSelectScene;

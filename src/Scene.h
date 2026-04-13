@@ -56,9 +56,12 @@ public:
     virtual void onLimitsChange() {}
     virtual void onMessage(char* command, char* arguments) {}
     virtual void onEncoder(int delta) {}
+    virtual void onPoll() {}
     virtual void reDisplay() {}
     virtual void onEntry(void* arg = nullptr) {}
     virtual void onExit() {}
+
+    virtual bool showButtons() { return true; }
 
     virtual void onFileLines(int firstline, const std::vector<std::string>& lines) {}
     virtual void onFilesList() {}

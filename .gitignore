@@ -5,3 +5,4 @@ src/version.*
 *~
 junk
 release
+.DS_Store

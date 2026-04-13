@@ -2,6 +2,7 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Scene.h"
+#include "ConfirmScene.h"
 
 extern Scene menuScene;
 
@@ -22,6 +23,17 @@ public:
     StatusScene() : Scene("Status") {}
 
     void onExit() override {}
+
+    void onEntry(void* arg) override {
+        // Returned from ConfirmScene — execute the deferred soft reset.
+        if (arg && strcmp((const char*)arg, "Confirmed") == 0) {
+            dbg_printf("StatusScene: sending Ctrl-X soft reset\r\n");
+            fnc_realtime(Reset);
+            schedule_action([]() { send_line("$X"); });
+        } else {
+            dbg_printf("StatusScene: onEntry arg=%s\r\n", arg ? (const char*)arg : "null");
+        }
+    }
 
     void onDialButtonPress() {
         if (state == Cycle || state == Hold) {
@@ -61,9 +73,8 @@ public:
         switch (state) {
             case Alarm:
                 if (alarm_is_critical()) {
-                    // Critical alarm that must be hard-cleared with a CTRL-X reset
-                    // since streaming execution of GCode is blocked
-                    fnc_realtime(Reset);
+                    // Soft reset loses work offsets — ask the user to confirm first.
+                    push_scene(&confirmScene, (void*)"Soft Reset?\nOffsets will be lost");
                 } else {
                     // Non-critical alarm that can be soft-cleared
                     send_line("$X");
@@ -80,8 +91,14 @@ public:
 
     bool alarm_is_homing() { return lastAlarm == 14 || (lastAlarm >= 6 && lastAlarm <= 9); }
     bool alarm_is_critical() {
-        // HardLimit or SoftLimit or SpindleControl or HardStop
-        return lastAlarm == 1 || lastAlarm == 2 || lastAlarm == 10 || lastAlarm == 13;
+        switch (lastAlarm) {
+            case 4: case 5:                  // Probe fail
+            case 6: case 7: case 8: case 9: // Homing fail
+            case 14:                         // Unhomed
+                return false;
+            default:
+                return true;
+        }
     }
     void onGreenButtonPress() {
         switch (state) {

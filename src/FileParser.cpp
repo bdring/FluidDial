@@ -426,7 +426,7 @@ public:
 } fileLinesListener;
 
 bool is_file(const char* str, const char* filename) {
-    char* s = strstr(str, filename);
+    const char* s = strstr(str, filename);
     return s && strlen(s) == strlen(filename);
 }
 
@@ -561,6 +561,58 @@ void request_file_list(const char* dirname) {
     parser_needs_reset = true;
 }
 
+// ── Plain-JSON receiver ───────────────────────────────────────────────────────
+// Large payloads arrive split across several WebSocket frames; the WS receiver appends '\n' to each, so
+// GrblParserC delivers them as separate lines to handle_other().
+// Accumulate fragments until the outermost JSON object is complete (brace depth -> 0), then dispatch to handle_json().
+
+static std::string _json_accum;
+
+static bool json_accum_complete() {
+    int  depth  = 0;
+    bool in_str = false;
+    bool esc    = false;
+    for (char c : _json_accum) {
+        if (esc)       { esc = false; continue; }
+        if (c == '\\') { esc = true;  continue; }
+        if (c == '"')  { in_str = !in_str; continue; }
+        if (!in_str) {
+            if      (c == '{') ++depth;
+            else if (c == '}') { if (--depth == 0) return true; }
+        }
+    }
+    return false;
+}
+
+static bool is_non_json_protocol_message(const char* line) {
+    return line[0] == '<'
+           || strncmp(line, "ok",     2) == 0
+           || strncmp(line, "error:", 6) == 0
+           || strcmp(line, "PING") == 0;
+}
+
+// Returns true if the line was consumed as JSON
+bool receive_plain_json(const char* line) {
+    // Discard non-JSON messages that interrupt an in-progress accumulation
+    if (!_json_accum.empty() && is_non_json_protocol_message(line)) {
+        _json_accum.clear();
+        return false;
+    }
+
+    // Accept the line if it starts a JSON object or continues one.
+    if (line[0] != '{' && _json_accum.empty()) {
+        return false;
+    }
+
+    _json_accum += line;
+
+    if (json_accum_complete()) {
+        handle_json(_json_accum.c_str());
+        _json_accum.clear();
+    }
+    return true;
+}
+
 void init_file_list() {
     init_listener();
     request_file_list("/sd");
@@ -634,7 +686,7 @@ extern "C" void handle_msg(char* command, char* arguments) {
         char c;
         while ((c = *arguments++) != '\0') {
             const char* letters = "XYZABCUVW";
-            char*       pos     = strchr(letters, c);
+            const char* pos     = strchr(letters, c);
             if (pos) {
                 set_axis_homed(pos - letters);
             }

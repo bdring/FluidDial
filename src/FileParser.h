@@ -34,3 +34,4 @@ extern std::string wifi_mode, wifi_ip, wifi_connected, wifi_ssid;
 
 void init_listener();
 void init_file_list();
+bool receive_plain_json(const char* line);

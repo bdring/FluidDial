@@ -12,9 +12,14 @@
 #include "Hardware2432.hpp"
 #include "Drawing.h"
 #include "NVS.h"
+#include "Scene.h"
 
 #include <driver/uart.h>
 #include "hal/uart_hal.h"
+
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 // This pin is connected to a photoresistor that is ostensibly used
 // for ambient light sensing.  It is possible to repurpose it as a UI
@@ -65,8 +70,6 @@ LGFX_Device  xdisplay;
 LGFX_Device& display = xdisplay;
 
 LGFX_Sprite canvas(&display);
-LGFX_Sprite buttons[3] = { &display, &display, &display };
-LGFX_Sprite locked_button(&display);
 
 uint8_t base_rotation = 2;
 
@@ -379,38 +382,10 @@ void choose_board() {
 #endif
 
 void initButton(int n) {
-    buttons[n].setColorDepth(display.getColorDepth());
-    buttons[n].createSprite(button_w, button_h);
-    buttons[n].fillRect(0, 0, 80, 80, BLACK);
-    const int   radius = 28;
-    const char* filename;
-    int         color;
-    switch (n) {
-        case 0:
-            color    = RED;
-            filename = "/red_button.png";
-            break;
-        case 1:
-            color    = YELLOW;
-            filename = "/orange_button.png";
-            break;
-        case 2:
-            color    = GREEN;
-            filename = "/green_button.png";
-            break;
-    }
-    buttons[n].fillCircle(button_half_wh, button_half_wh, radius, color);
-    // If the image file exists the image will overwrite the circle
-    buttons[n].drawPngFile(LittleFS, filename, 10, 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+    (void)n;
 }
 
 void initLockedButton() {
-    locked_button.setColorDepth(display.getColorDepth());
-    locked_button.createSprite(button_w, button_h);
-
-    locked_button.fillRect(0, 0, button_w, button_h, BLACK);
-    const int radius = 28;
-    locked_button.fillCircle(button_half_wh, button_half_wh, radius, DARKGREY);
 }
 
 static void initButtons() {
@@ -449,7 +424,13 @@ void init_hardware() {
     touch.begin(&display);
 
     init_encoder(enc_a, enc_b);
+#ifdef USE_WIFI
+    if (wifi_use_uart_mode()) {
+        init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+    }
+#else
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+#endif
 
     touch.setFlickThresh(10);
 
@@ -464,12 +445,18 @@ void init_hardware() {
 int last_locked = -1;
 
 void redrawButtons() {
+    bool show = !current_scene || current_scene->showButtons();
     display.startWrite();
     for (int i = 0; i < n_buttons; i++) {
         Point position = layout->buttonsXY + layout->buttonOffset(i);
-        printf("button position %d,%d\n", position.x, position.y);
-        auto& sprite = last_locked == 1 ? locked_button : buttons[i];
-        sprite.pushSprite(position.x, position.y);
+        display.fillRect(position.x, position.y, button_w, button_h, BLACK);
+        if (show) {
+            display.fillCircle(position.x + button_half_wh, position.y + button_half_wh, 28, last_locked == 1 ? DARKGREY : button_colors[i]);
+            if (last_locked != 1) {
+                const char* filename = (i == 0) ? "/red_button.png" : (i == 1) ? "/orange_button.png" : "/green_button.png";
+                display.drawPngFile(LittleFS, filename, position.x + 10, position.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+            }
+        }
     }
     display.endWrite();
 }
@@ -551,11 +538,13 @@ struct button_debounce_t {
 bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
 
-bool ui_locked() {
+bool ui_locked(bool redrawButtonsFlag) {
     bool locked = digitalRead(lockout_pin);
     if ((int)locked != last_locked) {
         last_locked = locked;
-        redrawButtons();
+        if (redrawButtonsFlag && current_scene && current_scene->showButtons()) {
+            redrawButtons();
+        }
     }
     return locked;
 }

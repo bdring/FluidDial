@@ -7,6 +7,9 @@
 #include "M5GFX.h"
 #include "Drawing.h"
 #include "HardwareM5Dial.hpp"
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 LGFX_Device&       display = M5Dial.Display;
 LGFX_Sprite        canvas(&M5Dial.Display);
@@ -39,7 +42,13 @@ void init_hardware() {
     // at the other end to anything you want and it will still work.
     USBSerial.begin();
 
+#ifdef USE_WIFI
+    if (wifi_use_uart_mode()) {
+        init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+    }
+#else
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+#endif
 
     // Setup external GPIOs as buttons
     lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);
@@ -126,9 +135,13 @@ void ackBeep() {
     speaker.tone(1800, 50);
 }
 
-bool ui_locked() {
+bool ui_locked(bool redrawButtonsFlag) {
     return false;
 }
+
+int num_layouts = 1;
+int32_t layout_num = 0;
+void redrawButtons() {}
 
 #include <driver/rtc_io.h>
 // The M5 Library is broken with respect to deep sleep on M5 Dial

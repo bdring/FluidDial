@@ -30,7 +30,11 @@ private:
     bool         _cancelling    = false;
     bool         _cancel_held   = false;
     bool         _continuous    = false;
-    LGFX_Sprite* _bg_image      = nullptr;
+    // MPG jog rate-limiting: accumulate encoder ticks and send at most one
+    // jog command per MPG_INTERVAL_MS to avoid flooding FluidNC's planner queue.
+    static const uint32_t MPG_INTERVAL_MS = 30;
+    int      _mpg_accum   = 0;
+    uint32_t _last_mpg_ms = 0;
 
 public:
     MultiJogScene() : Scene("Jog", 4, jog_help_text) {}
@@ -56,9 +60,67 @@ public:
         return -1;  // No axis is selected
     }
 
+    void drawJogBg() {
+        // Recreate jogbg.png with drawing primitives — faster than rendering png which was causing heap issues with WiFi and overall sluggishness :(
+        const int cx = 120, cy = 120;
+        const int R  = 119;   // outer circle radius
+        const int ri = 50;    // inner (center circle) radius
+        const int hw = 3;     // half-width of separator bands (parallel edges)
+        const uint16_t zone_color    = 0x1a4d;  // nicer blue
+        const uint16_t sep_color     = 0x0000;  // black
+        const uint16_t outline_color = 0x8410;
+
+        // Fill entire outer disc with blue, then overlay separators + center
+        canvas.fillCircle(cx, cy, R, zone_color);
+
+        // Outer circle outline
+        canvas.drawCircle(cx, cy, R, outline_color);
+
+        // Wedges' inner radii outlines:
+        canvas.drawCircle(cx, cy, ri + 1, outline_color);
+
+
+        for (int sx = -1; sx <= 1; sx += 2) {
+            for (int sy = -1; sy <= 1; sy += 2) {
+                // along the diagonal
+                int ax = (int)(sx * 0.72f * R);
+                int ay = (int)(sy * 0.72f * R);
+                // perpendicular offset for band width
+                int px = (int)(-sy * 0.72f * hw);
+                int py = (int)( sx * 0.72f * hw);
+                // Rectangle corners: center±perp to edge±perp
+                canvas.fillTriangle(cx + px, cy + py, cx - px, cy - py,
+                                    cx + ax + px, cy + ay + py, sep_color);
+                canvas.fillTriangle(cx - px, cy - py, cx + ax - px, cy + ay - py,
+                                    cx + ax + px, cy + ay + py, sep_color);
+                // Outline the separator edges
+                int oax = (int)(sx * 0.71f * R);
+                int oay = (int)(sy * 0.71f * R);
+                int opx = (int)(-sy * 0.71f * hw);
+                int opy = (int)( sx * 0.71f * hw);
+                canvas.drawLine(cx + opx, cy + opy, cx + oax + opx, cy + oay + opy, outline_color);
+                canvas.drawLine(cx - opx, cy - opy, cx + oax - opx, cy + oay - opy, outline_color);
+            }
+        }
+
+
+        // Center circle void
+        canvas.fillCircle(cx, cy, ri, sep_color);
+
+
+        // Concentric circle
+        canvas.fillCircle(cx, cy, ri - hw * 1.5, zone_color);
+
+        // Inner circle outline
+        canvas.drawCircle(cx, cy, ri - hw * 1.5, outline_color);
+
+        // "Help" hint in center
+        centered_text("Help", cy + 4, BLACK, MEDIUM);
+    }
+
     void reDisplay() {
         background();
-        drawBackground(_bg_image);
+        drawJogBg();
         drawMenuTitle(current_scene->name());
         drawStatus();
 
@@ -103,7 +165,6 @@ public:
             zero_axes();
         }
         if (initPrefs()) {
-            _bg_image = createPngBackground("/jogbg.png");
             for (size_t axis = 0; axis < 3; axis++) {
                 getPref("DistanceDigit", axis, &_dist_index[axis]);
             }
@@ -362,10 +423,25 @@ public:
         cancel_jog();
     }
 
-    void onEncoder(int delta) {
-        if (delta != 0) {
-            start_mpg_jog(delta);
+    void flush_mpg() {
+        if (_mpg_accum == 0) {
+            return;
         }
+        uint32_t now = millis();
+        if ((now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
+            start_mpg_jog(_mpg_accum);
+            _mpg_accum   = 0;
+            _last_mpg_ms = now;
+        }
+    }
+
+    void onEncoder(int delta) {
+        _mpg_accum += delta;
+        flush_mpg();
+    }
+
+    void onPoll() override {
+        flush_mpg();
     }
 
     void onDROChange() {

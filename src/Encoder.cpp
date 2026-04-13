@@ -1,9 +1,41 @@
-
 #include "Encoder.h"
-#include "sdkconfig.h"
-#include "driver/pcnt.h"
+
+#ifdef ARDUINO
+#    include <Arduino.h>
+#endif
+
+#ifndef USE_LOVYANGFX
+#    include "sdkconfig.h"
+#    include "driver/pcnt.h"
+#endif
 #include "driver/gpio.h"
 
+namespace {
+#ifdef USE_LOVYANGFX
+constexpr int8_t quadrature_lut[16] = {
+    0, -1, 1, 0,
+    1, 0, 0, -1,
+    -1, 0, 0, 1,
+    0, 1, -1, 0,
+};
+
+int     encoder_a_pin    = -1;
+int     encoder_b_pin    = -1;
+int16_t encoder_count    = 0;
+uint8_t encoder_state    = 0;
+
+uint8_t read_encoder_state() {
+    if (encoder_a_pin < 0 || encoder_b_pin < 0) {
+        return 0;
+    }
+    return (digitalRead(encoder_a_pin) << 1) | digitalRead(encoder_b_pin);
+}
+#else
+bool pcnt_ready = false;
+#endif
+}
+
+#ifndef USE_LOVYANGFX
 /* clang-format: off */
 void init_encoder(int a_pin, int b_pin) {
     pcnt_config_t enc_config = {
@@ -21,14 +53,20 @@ void init_encoder(int a_pin, int b_pin) {
         .unit    = PCNT_UNIT_0,
         .channel = PCNT_CHANNEL_0,
     };
-    pcnt_unit_config(&enc_config);
+    if (pcnt_unit_config(&enc_config) != ESP_OK) {
+        printf("PCNT init failed on encoder A pin %d\n", a_pin);
+        return;
+    }
 
     enc_config.pulse_gpio_num = b_pin;
     enc_config.ctrl_gpio_num  = a_pin;
     enc_config.channel        = PCNT_CHANNEL_1;
     enc_config.pos_mode       = PCNT_COUNT_DEC;  //Count Only On Falling-Edges
     enc_config.neg_mode       = PCNT_COUNT_INC;  // Discard Rising-Edge
-    pcnt_unit_config(&enc_config);
+    if (pcnt_unit_config(&enc_config) != ESP_OK) {
+        printf("PCNT init failed on encoder B pin %d\n", b_pin);
+        return;
+    }
 
     pcnt_set_filter_value(PCNT_UNIT_0, 250);  // Filter Runt Pulses
 
@@ -40,10 +78,33 @@ void init_encoder(int a_pin, int b_pin) {
     pcnt_counter_pause(PCNT_UNIT_0);  // Initial PCNT init
     pcnt_counter_clear(PCNT_UNIT_0);
     pcnt_counter_resume(PCNT_UNIT_0);
+    pcnt_ready = true;
 }
 
 int16_t get_encoder() {
+    if (!pcnt_ready) {
+        return 0;
+    }
     int16_t count;
     pcnt_get_counter_value(PCNT_UNIT_0, &count);
     return count;
 }
+#else
+void init_encoder(int a_pin, int b_pin) {
+    encoder_a_pin = a_pin;
+    encoder_b_pin = b_pin;
+
+    pinMode(encoder_a_pin, INPUT_PULLUP);
+    pinMode(encoder_b_pin, INPUT_PULLUP);
+
+    encoder_count = 0;
+    encoder_state = read_encoder_state();
+}
+
+int16_t get_encoder() {
+    uint8_t next_state = read_encoder_state();
+    encoder_count += quadrature_lut[(encoder_state << 2) | next_state];
+    encoder_state = next_state;
+    return encoder_count;
+}
+#endif

@@ -5,6 +5,9 @@
 #include "Drawing.h"
 #include "alarm.h"
 #include <map>
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 void drawBackground(int color) {
     canvas.fillSprite(color);
@@ -118,6 +121,35 @@ void drawStatus() {
     static constexpr int width  = 140;
     static constexpr int height = 36;
 
+#ifdef USE_WIFI
+    if (state == Disconnected && !wifi_use_uart_mode()) {
+        // Show WiFi connection progress instead of a plain "N/C" badge.
+        // Not shown in UART mode — fall through to the standard N/C display.
+        int         bgColor;
+        const char* line1;
+        const char* line2;
+        if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;       // dark orange
+            line1   = "AP Setup";
+            line2   = "192.168.4.1";
+        } else if (wifi_is_connected()) {
+            bgColor = YELLOW;       // WiFi up, WebSocket still connecting
+            line1   = "FluidNC";
+            static const char* nc_frames[] = { "Connecting", "Connecting.", "Connecting..", "Connecting..." };
+            line2   = nc_frames[(millis() / 400) % 4];
+        } else {
+            bgColor = RED;
+            line1   = "WiFi";
+            static const char* wifi_frames[] = { "Scanning", "Scanning.", "Scanning..", "Scanning..." };
+            line2   = wifi_frames[(millis() / 400) % 4];
+        }
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
+        centered_text(line1, y + height / 2 - 4, BLACK, SMALL);
+        centered_text(line2, y + height / 2 + 12, BLACK, TINY);
+        return;
+    }
+#endif
+
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
         canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
@@ -145,6 +177,30 @@ void drawStatusTiny(int y) {
 void drawStatusSmall(int y) {
     static constexpr int width  = 90;
     static constexpr int height = 25;
+
+#ifdef USE_WIFI
+    if (state == Disconnected && !wifi_use_uart_mode()) {
+        // Show WiFi connection progress in the compact badge.
+        // Not shown in UART mode — fall through to the standard N/C display.
+        int         bgColor;
+        const char* label;
+        if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;   // dark orange
+            label   = "AP Mode";
+        } else if (wifi_is_connected()) {
+            bgColor = YELLOW;   // WiFi up, WebSocket still connecting
+            static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
+            label   = nc_frames[(millis() / 400) % 4];
+        } else {
+            bgColor = RED;
+            static const char* wifi_frames[] = { "WiFi", "WiFi.", "WiFi..", "WiFi..." };
+            label   = wifi_frames[(millis() / 400) % 4];
+        }
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
+        centered_text(label, y + height / 2 + 3, BLACK, TINY);
+        return;
+    }
+#endif
 
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
@@ -267,7 +323,32 @@ void drawMenuTitle(const char* name) {
     centered_text(name, 12);
 }
 
+#ifdef USE_WIFI
+// Draw a 4-bar WiFi signal indicator in the top-left corner / arc.
+static void drawWiFiSignalOverlay() {
+    if (!wifi_is_connected()) return;   // No indicator while scanning / AP mode
+
+    int bars = wifi_signal_bars();      // 0–4
+
+    // Bar geometry: 4 columns, bottom-aligned, heights grow left → right.
+    static constexpr int W   = 3;                   // bar width  (px)
+    static constexpr int GAP = 2;                   // gap between bars (px)
+    static const     int H[] = { 4, 7, 10, 13 };   // heights: weak → strong
+
+    int x0    = round_display ? 31 : 5;
+    int y_bot = round_display ? 45 : 20;
+
+    for (int i = 0; i < 4; i++) {
+        int color = (i < bars) ? GREEN : DARKGREY;
+        canvas.fillRect(x0 + i * (W + GAP), y_bot - H[i], W, H[i], color);
+    }
+}
+#endif
+
 void refreshDisplay() {
+#ifdef USE_WIFI
+    drawWiFiSignalOverlay();
+#endif
     display.startWrite();
     canvas.pushSprite(sprite_offset.x, sprite_offset.y);
     display.endWrite();
