@@ -16,7 +16,7 @@ public:
             centered_text(_msg.substr(0, nl).c_str(), 108, 0x4da6ff, SMALL);
             centered_text(_msg.substr(nl + 1).c_str(), 132, 0x4da6ff, SMALL);
         } else {
-            centered_text(_msg.c_str(), 120, BLACK, MEDIUM);
+            centered_text(_msg.c_str(), 120, 0x4da6ff, MEDIUM);
         }
 
         drawButtonLegends("No", "Yes", "Back");
