@@ -3,6 +3,9 @@
 
 #include "Scene.h"
 #include "System.h"
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 #ifndef ARDUINO
 #    include <sys/stat.h>
@@ -184,6 +187,9 @@ void dispatch_events() {
     if (!fnc_is_connected()) {
         if (state != Disconnected) {
             set_disconnected_state();
+#ifdef USE_WIFI
+            wifi_force_ws_reconnect();
+#endif
             extern Scene menuScene;
             activate_at_top_level(&menuScene);
         }

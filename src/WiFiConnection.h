@@ -23,6 +23,10 @@ void wifi_poll();
 
 bool wifi_is_connected();       // ESP32 STA joined the network
 bool websocket_is_connected();  // WebSocket connection to FluidNC is up
+
+// Force-close the WebSocket so it can reconnect cleanly.
+// Called when fnc_is_connected() declares FluidNC unresponsive.
+void wifi_force_ws_reconnect();
 bool wifi_in_ap_mode();         // Running as access point for initial setup
 
 // Start a captive-portal AP named "FluidDial".

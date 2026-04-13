@@ -120,7 +120,7 @@ static void ws_begin(const char* host) {
     webSocket.begin(host, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH, WS_SUBPROTOCOL);
     webSocket.onEvent(onWsEvent);
     webSocket.setReconnectInterval(3000);
-    webSocket.enableHeartbeat(15000, 3000, 2);
+    webSocket.enableHeartbeat(5000, 2000, 1);
     _ws_started = true;
 }
 
@@ -605,6 +605,16 @@ bool wifi_is_connected() {
 
 bool websocket_is_connected() {
     return _ws_connected;
+}
+
+void wifi_force_ws_reconnect() {
+    if (_ws_started) {
+        webSocket.disconnect();
+        _ws_connected = false;
+        // Leave _ws_started true — WebSocketsClient will auto-reconnect
+        // on the next webSocket.loop() via setReconnectInterval().
+        dbg_println("WS: force-closed for reconnect");
+    }
 }
 
 bool wifi_in_ap_mode() {
