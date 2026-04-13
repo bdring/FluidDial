@@ -404,11 +404,28 @@ static const char SAVED_HTML[] = R"HTML(
 
 // ─── HTTP request handlers ────────────────────────────────────────────────────
 
+static String htmlEscape(const String& input) {
+    String escaped;
+    escaped.reserve(input.length());
+    for (size_t i = 0; i < input.length(); ++i) {
+        char c = input[i];
+        switch (c) {
+            case '&':  escaped += F("&amp;");  break;
+            case '<':  escaped += F("&lt;");   break;
+            case '>':  escaped += F("&gt;");   break;
+            case '"':  escaped += F("&quot;"); break;
+            case '\'': escaped += F("&#39;");  break;
+            default:   escaped += c;           break;
+        }
+    }
+    return escaped;
+}
+
 static void handleRoot() {
     WiFiConfig cfg = wifi_load_config();
     String page = SETUP_HTML;
-    page.replace("%SSID_VAL%", cfg.valid ? String(cfg.ssid) : "");
-    page.replace("%IP_VAL%",   cfg.valid ? String(cfg.fluidnc_ip) : "");
+    page.replace("%SSID_VAL%", cfg.valid ? htmlEscape(String(cfg.ssid)) : "");
+    page.replace("%IP_VAL%",   cfg.valid ? htmlEscape(String(cfg.fluidnc_ip)) : "");
     httpServer.send(200, "text/html", page);
 }
 
