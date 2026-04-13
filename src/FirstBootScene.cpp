@@ -19,7 +19,7 @@ static constexpr int BTN_W = 160;
 static constexpr int BTN_H = 45;
 static constexpr int BTN_X = (240 - BTN_W) / 2;  // Centered
 
-static constexpr int UART_BTN_Y = 105;
+static constexpr int UART_BTN_Y = 95;
 static constexpr int WIFI_BTN_Y = 165;
 
 class FirstBootScene : public Scene {
@@ -75,7 +75,7 @@ public:
         drawRect(55, 22, 130, 1, 0, DARKGREY);
 
         // ── Main question ──────────────────────────────────────────────────────
-        wrapped_text("Connection Mode", 80, 200, ORANGE, SMALL);
+        wrapped_text("Connection Mode", 70, 200, ORANGE, SMALL);
 
         // ── Buttons (stacked vertically) ────────────────────────────────────────
         uartBtn.set(BTN_X, UART_BTN_Y, BTN_W, BTN_H, "Wired",

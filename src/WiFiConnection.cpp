@@ -317,6 +317,9 @@ static const char SETUP_HTML[] = R"HTML(
   button[type=submit]:hover{background:#45a049}
   .note{margin-top:16px;font-size:13px;color:#888;text-align:center}
   .scan-status{font-size:13px;color:#aaa;margin-top:4px;min-height:18px}
+  .eye-btn{padding:10px 12px;background:#2a2a2a;color:#aaa;border:1px solid #555;
+           border-radius:6px;font-size:18px;cursor:pointer;line-height:1}
+  .eye-btn:hover{color:#4CAF50;border-color:#4CAF50}
 </style>
 </head>
 <body>
@@ -325,7 +328,7 @@ static const char SETUP_HTML[] = R"HTML(
 <form method="POST" action="/save">
   <label>WiFi Network Name (SSID)</label>
   <div class="row">
-    <input type="text" name="ssid" id="ssid" placeholder="YourNetworkName" autocomplete="off" required>
+    <input type="text" name="ssid" id="ssid" placeholder="YourNetworkName" autocomplete="off" required value="%SSID_VAL%">
     <button type="button" class="scan-btn" id="scanBtn" onclick="doScan()">Scan</button>
   </div>
   <select id="netList" onchange="pickNet(this)">
@@ -333,10 +336,13 @@ static const char SETUP_HTML[] = R"HTML(
   </select>
   <div id="scanStatus" class="scan-status"></div>
   <label>WiFi Password</label>
-  <input type="password" name="pass" placeholder="Leave blank for open networks">
+  <div class="row">
+    <input type="text" name="pass" id="pass" placeholder="Leave blank for open networks">
+    <button type="button" class="eye-btn" id="eyeBtn" onclick="togglePass()">&#x1F441;</button>
+  </div>
   <label>FluidNC Address (IP or hostname)</label>
   <input type="text" name="ip" placeholder="192.168.1.100 or fluidnc.local"
-         autocomplete="off" required>
+         autocomplete="off" required value="%IP_VAL%">
   <button type="submit">Save &amp; Connect</button>
 </form>
 <p class="note">The pendant will restart and connect automatically.</p>
@@ -368,6 +374,12 @@ function doScan(){
 function pickNet(sel){
   if(sel.value) document.getElementById('ssid').value=sel.value;
 }
+function togglePass(){
+  var p=document.getElementById('pass');
+  var b=document.getElementById('eyeBtn');
+  if(p.type==='text'){p.type='password';b.style.color='#555';}
+  else{p.type='text';b.style.color='#aaa';}
+}
 </script>
 </body>
 </html>
@@ -393,7 +405,11 @@ static const char SAVED_HTML[] = R"HTML(
 // ─── HTTP request handlers ────────────────────────────────────────────────────
 
 static void handleRoot() {
-    httpServer.send(200, "text/html", SETUP_HTML);
+    WiFiConfig cfg = wifi_load_config();
+    String page = SETUP_HTML;
+    page.replace("%SSID_VAL%", cfg.valid ? String(cfg.ssid) : "");
+    page.replace("%IP_VAL%",   cfg.valid ? String(cfg.fluidnc_ip) : "");
+    httpServer.send(200, "text/html", page);
 }
 
 static void handleSave() {
