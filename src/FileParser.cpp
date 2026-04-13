@@ -584,15 +584,17 @@ static bool json_accum_complete() {
     return false;
 }
 
+static bool is_non_json_protocol_message(const char* line) {
+    return line[0] == '<'
+           || strncmp(line, "ok",     2) == 0
+           || strncmp(line, "error:", 6) == 0
+           || strcmp(line, "PING") == 0;
+}
+
 // Returns true if the line was consumed as JSON
 bool receive_plain_json(const char* line) {
-    bool looks_like_new_msg = (line[0] == '<' || line[0] == '['
-                               || strncmp(line, "ok",    2) == 0
-                               || strncmp(line, "error:", 6) == 0
-                               || strcmp(line, "PING") == 0);
-
-    // If a new message type interrupts an in-progress accumulation, discard.
-    if (!_json_accum.empty() && looks_like_new_msg) {
+    // Discard non-JSON messages that interrupt an in-progress accumulation
+    if (!_json_accum.empty() && is_non_json_protocol_message(line)) {
         _json_accum.clear();
         return false;
     }
