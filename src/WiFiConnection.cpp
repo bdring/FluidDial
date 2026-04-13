@@ -37,6 +37,7 @@
 #define TX_BUF_SIZE        512
 #define STATUS_POLL_MS     500         // Send '?' every 500 ms while connected
 #define WIFI_RETRY_DELAY_MS 15000     // Retry WiFi.begin() this long after a failure
+#define DNS_RETRY_DELAY_MS  5000     // Retry hostname resolution this long after a failure
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ static volatile bool _dns_resolving    = false;  // background task is in flight
 static volatile bool _dns_done         = false;  // task finished; read on main task
 static volatile bool _dns_ok           = false;  // resolution succeeded
 static char          _dns_result_str[40] = {};   // resolved IP string (written by task)
+static uint32_t      _dns_retry_at       = 0;    // millis() target for next DNS retry (0 = no retry pending)
 
 static bool is_dotted_decimal(const char* s) {
     for (const char* p = s; *p; p++) {
@@ -592,6 +594,9 @@ void wifi_stop_ap() {
     WiFi.softAPdisconnect(true);
     _ap_mode            = false;
     _wifi_stack_started = false;
+
+    // Re-initiate the STA connection that was torn down by wifi_start_ap_setup().
+    wifi_init();
 }
 
 bool wifi_is_connected() {
@@ -683,6 +688,7 @@ void wifi_init() {
     _wifi_ever_connected     = false;
     _wifi_connect_start_ms   = 0;  // set after WiFi.begin() below
     _handshake_timeout_count = 0;
+    _dns_retry_at            = 0;
 
     static bool _event_registered = false;
     if (!_event_registered) {
@@ -826,6 +832,7 @@ void wifi_poll() {
             ws_begin(_active_cfg.fluidnc_ip);
         } else if (!_dns_resolving) {
             // Hostname — resolve asynchronously; ws_begin() runs when done.
+            _dns_retry_at = 0;  // cancel any pending retry from a prior failure
             start_dns_resolve();
         }
         // WiFi just came up — update badge from "WiFi..." to "WiFi OK".
@@ -853,9 +860,22 @@ void wifi_poll() {
                        _active_cfg.fluidnc_ip, _dns_result_str);
             ws_begin(_dns_result_str);
         } else {
-            dbg_printf("Hostname resolution failed: %s\n", _active_cfg.fluidnc_ip);
+            dbg_printf("Hostname resolution failed: %s — retrying in %d ms\n",
+                       _active_cfg.fluidnc_ip, DNS_RETRY_DELAY_MS);
             _wifi_error_msg = "Host not found";
+            _dns_retry_at   = millis() + DNS_RETRY_DELAY_MS;
         }
+        current_scene->reDisplay();
+    }
+
+    // Retry DNS resolution after a failed attempt (ie: FluidNC may not have
+    // started its mDNS responder yet when both devices boot together).
+    if (_dns_retry_at && !_dns_resolving && !_ws_started && now_connected
+        && millis() >= _dns_retry_at) {
+        _dns_retry_at   = 0;
+        _wifi_error_msg = nullptr;
+        dbg_printf("DNS retry: resolving %s\n", _active_cfg.fluidnc_ip);
+        start_dns_resolve();
         current_scene->reDisplay();
     }
 
