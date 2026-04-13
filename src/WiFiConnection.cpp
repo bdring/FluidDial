@@ -105,7 +105,12 @@ static void start_dns_resolve() {
     _dns_ok        = false;
     _dns_resolving = true;
     dbg_printf("Resolving hostname (async): %s\n", _active_cfg.fluidnc_ip);
-    xTaskCreate(dnsResolveTask, "dns_resolve", 4096, nullptr, 1, nullptr);
+    BaseType_t task_created = xTaskCreate(dnsResolveTask, "dns_resolve", 4096, nullptr, 1, nullptr);
+    if (task_created != pdPASS) {
+        _dns_resolving = false;
+        _wifi_error_msg = "DNS resolve task start failed";
+        dbg_printf("Failed to start DNS resolve task\n");
+    }
 }
 
 static void ws_begin(const char* host) {
