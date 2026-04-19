@@ -12,6 +12,8 @@ struct Button {
     int         text_color;
     std::function<void()> onPress;
 
+    fontnum_t font = SMALL;
+
     Button() : x(0), y(0), w(0), h(0), label(""), fill_color(NAVY),
                outline_color(WHITE), text_color(WHITE), onPress(nullptr) {}
 
@@ -34,7 +36,7 @@ struct Button {
      */
     void draw() const {
         drawOutlinedRect(x, y, w, h, fill_color, outline_color);
-        centered_text(label, y + h / 2 + 3, text_color, SMALL);
+        centered_text(label, y + h / 2 + 3, text_color, font);
     }
 
     /**
