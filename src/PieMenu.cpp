@@ -72,6 +72,12 @@ void PieMenu::menuBackground() {
     background();
     text(selectedItem()->name(), { 0, -15 }, WHITE, SMALL);
     drawStatusSmall(90);
+#ifdef USE_WIFI
+    if (round_display) {
+        // On M5 Dial, show WiFi signal centered just above the status badge (y=90).
+        drawWiFiSignalBars((display_short_side() - 18) / 2, 85);
+    }
+#endif
 }
 
 void PieMenu::onTouchFlick() {

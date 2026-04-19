@@ -324,24 +324,25 @@ void drawMenuTitle(const char* name) {
 }
 
 #ifdef USE_WIFI
-// Draw a 4-bar WiFi signal indicator in the top-left corner / arc.
-static void drawWiFiSignalOverlay() {
+// Draw a 4-bar WiFi signal indicator at the given position.
+void drawWiFiSignalBars(int x0, int y_bot) {
     if (!wifi_is_connected()) return;   // No indicator while scanning / AP mode
 
     int bars = wifi_signal_bars();      // 0–4
 
-    // Bar geometry: 4 columns, bottom-aligned, heights grow left → right.
     static constexpr int W   = 3;                   // bar width  (px)
     static constexpr int GAP = 2;                   // gap between bars (px)
     static const     int H[] = { 4, 7, 10, 13 };   // heights: weak → strong
-
-    int x0    = round_display ? 31 : 5;
-    int y_bot = round_display ? 45 : 20;
 
     for (int i = 0; i < 4; i++) {
         int color = (i < bars) ? GREEN : DARKGREY;
         canvas.fillRect(x0 + i * (W + GAP), y_bot - H[i], W, H[i], color);
     }
+}
+
+static void drawWiFiSignalOverlay() {
+    if (round_display) return;   // M5 Dial: WiFi indicator only shown in menu scene
+    drawWiFiSignalBars(5, 20);
 }
 #endif
 
