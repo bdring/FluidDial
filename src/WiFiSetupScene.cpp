@@ -109,11 +109,13 @@ void WiFiSetupScene::onTouchClick() {
 
 void WiFiSetupScene::drawApView() {
     // ── Status badge ──────────────────────────────────────────────────────────
+    int by = round_display ? BY + 5 : BY - 3;
     int bx = round_display ? 55 : BX;
     int bw = round_display ? 130 : BW;
     int bh = round_display ? 24 : BH;
-    drawOutlinedRect(bx - 5, BY + 5, bw + 10, bh + 6, 0x8400, 0x8400);  // dark orange
-    centered_text("AP Mode", BY + bh / 2 + 10, WHITE, SMALL);
+    int ty = round_display ? BY + bh / 2 + 10 : BY + bh / 2 + 3;
+    drawOutlinedRect(bx - 5, by, bw + 10, bh + 6, 0x8400, 0x8400);  // dark orange
+    centered_text("AP Mode", ty, WHITE, SMALL);
 
     // ── AP Info ────────────────────────────────────────────────────────────────
     int y = CARD_Y0 + 14;
@@ -187,10 +189,12 @@ void WiFiSetupScene::drawSettingsView() {
     }
 
     int bx = round_display ? 55 : BX;
+    int by = round_display ? BY + 6 : BY - 3;
     int bw = round_display ? 130 : BW;
     int bh = round_display ? 24 : BH;
-    drawOutlinedRect(bx - 5, BY + 6, bw + 10, bh + 6, badge_fill, badge_outline);
-    centered_text(badge_label, BY + bh / 2 + 9, badge_text, SMALL);
+    int ty = round_display ? BY + bh / 2 + 9 : BY + bh / 2 + 3;
+    drawOutlinedRect(bx - 5, by, bw + 10, bh + 6, badge_fill, badge_outline);
+    centered_text(badge_label, ty, badge_text, SMALL);
 
     // ── Info section ──────────────────────────────────────────────────────────
     int y = CARD_Y0;
@@ -207,11 +211,11 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text("to setup WiFi", y, 0xe02b2b, TINY);
     } else {
         // Network label + SSID — always visible so the user knows what we're connecting to
-        y +=8;
+        y += (round_display ? 8 : 10);
         centered_text("Network", y, DARKGREY, TINY);
         y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
-        y += 14;
+        y += (round_display ? 14 : 20);
 
         drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
         y += 14;
@@ -241,8 +245,9 @@ void WiFiSetupScene::drawSettingsView() {
 
         int sbx = round_display ? 40 : SBX;
         int sbw = round_display ? 160 : SBW;
+        int sby = round_display ? SBY : SBY + 6;
         modeSwitchBtn.font = round_display ? TINY : SMALL;
-        modeSwitchBtn.set(sbx, SBY, sbw, SBH, sw_label, sw_fill, sw_outline, sw_outline, [this]() { onModeSwitchButtonPress(); });
+        modeSwitchBtn.set(sbx, sby, sbw, SBH, sw_label, sw_fill, sw_outline, sw_outline, [this]() { onModeSwitchButtonPress(); });
     }
 
     // ── Button legends ────────────────────────────────────────────────────────

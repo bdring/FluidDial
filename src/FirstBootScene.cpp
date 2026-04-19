@@ -78,15 +78,18 @@ public:
         wrapped_text("Connection Mode", 70, 200, ORANGE, SMALL);
 
         // ── Buttons (stacked vertically) ────────────────────────────────────────
-        uartBtn.set(BTN_X, UART_BTN_Y, BTN_W, BTN_H, "Wired",
+        int uart_btn_y = round_display ? UART_BTN_Y - 6 : UART_BTN_Y;
+        int wifi_btn_y = round_display ? WIFI_BTN_Y - 16 : WIFI_BTN_Y;
+        uartBtn.set(BTN_X, uart_btn_y, BTN_W, BTN_H, "Wired",
                     0x001a4d, 0x4da6ff, 0x4da6ff, [this]() { onUartPress(); });
 
-        wifiBtn.set(BTN_X, WIFI_BTN_Y, BTN_W, BTN_H, "WiFi",
+        wifiBtn.set(BTN_X, wifi_btn_y, BTN_W, BTN_H, "WiFi",
                     0x003300, 0x66ff66, 0x66ff66, [this]() { onWifiPress(); });
 
         // ── Footer ─────────────────────────────────────────────────────────────
-        centered_text("This can be changed later", 230, DARKGREY, TINY);
- 
+        if (!round_display) {
+            centered_text("This can be changed later", 230, DARKGREY, TINY);
+        } 
         refreshDisplay();
     }
 

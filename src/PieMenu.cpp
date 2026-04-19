@@ -70,12 +70,12 @@ int PieMenu::touchedItem(int x, int y) {
 }
 void PieMenu::menuBackground() {
     background();
-    text(selectedItem()->name(), { 0, -15 }, WHITE, SMALL);
-    drawStatusSmall(90);
+    text(selectedItem()->name(), { 0, round_display ? -20 : -15 }, WHITE, SMALL);
+    drawStatusSmall(round_display ? 95 : 90);
 #ifdef USE_WIFI
     if (round_display) {
         // On M5 Dial, show WiFi signal centered just above the status badge (y=90).
-        drawWiFiSignalBars((display_short_side() - 18) / 2, 85);
+        drawWiFiSignalBars((display_short_side() - 18) / 2, 87);
     }
 #endif
 }
