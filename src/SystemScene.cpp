@@ -16,10 +16,10 @@ struct SysItem {
 };
 
 static const SysItem items[] = {
-    { "Display",  "Screen orientation" },
-    { "Restart",  "Reboot pendant"     },
+    { "Restart",  ""                   },
+    { "Display",  "Adjust orientation" },
 #ifdef USE_M5
-    { "Sleep",    "Red button to wake" },
+    { "Sleep",    "Press red to wake"  },
 #endif
 };
 static const int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
@@ -44,12 +44,12 @@ void SystemScene::onEncoder(int delta) {
 void SystemScene::activateSelected() {
     switch (_selected) {
         case 0:
-            activate_scene(&displaySettingsScene);
-            break;
-        case 1:
 #ifdef ARDUINO
             esp_restart();
 #endif
+            break;
+        case 1:
+            activate_scene(&displaySettingsScene);
             break;
 #ifdef USE_M5
         case 2:
@@ -79,11 +79,15 @@ void SystemScene::reDisplay() {
         bool sel = (i == _selected);
 
         if (sel) {
-            drawOutlinedRect(20, y - 2, 200, ITEM_H - 4, 0x001a4d, 0x4da6ff);
+            drawOutlinedRect(30, y - 2, 180, ITEM_H - 4, 0x001a4d, 0x4da6ff);
         }
 
-        centered_text(items[i].label,    y + 12, sel ? WHITE    : LIGHTGREY, SMALL);
-        centered_text(items[i].sublabel, y + 28, sel ? 0x4da6ff : DARKGREY,  TINY);
+        bool has_sub = items[i].sublabel[0] != '\0';
+        int  label_y = has_sub ? y + 12 : y + ITEM_H / 2;
+        centered_text(items[i].label,    label_y, sel ? WHITE    : LIGHTGREY, SMALL);
+        if (has_sub) {
+            centered_text(items[i].sublabel, y + 32, sel ? 0x4da6ff : DARKGREY, TINY);
+        }
     }
 
     drawButtonLegends("Back", "Select", "");
