@@ -20,7 +20,7 @@ extern const char* git_info;
 
 static constexpr int BX = 20, BY = 28, BW = 200, BH = 34;       // status badge
 static constexpr int CX = 15, CW = 210, CH = 28, CI = 8;        // info cards
-static constexpr int SBX = 20, SBY = 166, SBW = 200, SBH = 36;  // switch button
+static constexpr int SBX = 20, SBY = 160, SBW = 200, SBH = 36;  // switch button
 
 static constexpr int CARD_Y0    = 68;
 static constexpr int CARD_PITCH = CH + 4;  // 32 px per card row
@@ -189,8 +189,8 @@ void WiFiSetupScene::drawSettingsView() {
     int bx = round_display ? 55 : BX;
     int bw = round_display ? 130 : BW;
     int bh = round_display ? 24 : BH;
-    drawOutlinedRect(bx - 5, BY - 3, bw + 10, bh + 6, badge_fill, badge_outline);
-    centered_text(badge_label, BY + bh / 2 + 3, badge_text, SMALL);
+    drawOutlinedRect(bx - 5, BY + 6, bw + 10, bh + 6, badge_fill, badge_outline);
+    centered_text(badge_label, BY + bh / 2 + 9, badge_text, SMALL);
 
     // ── Info section ──────────────────────────────────────────────────────────
     int y = CARD_Y0;
@@ -207,11 +207,11 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text("to setup WiFi", y, 0xe02b2b, TINY);
     } else {
         // Network label + SSID — always visible so the user knows what we're connecting to
-        y +=10;
+        y +=8;
         centered_text("Network", y, DARKGREY, TINY);
         y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
-        y += 20;
+        y += 14;
 
         drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
         y += 14;
