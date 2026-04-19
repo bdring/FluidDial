@@ -112,8 +112,8 @@ void WiFiSetupScene::drawApView() {
     int bx = round_display ? 55 : BX;
     int bw = round_display ? 130 : BW;
     int bh = round_display ? 24 : BH;
-    drawOutlinedRect(bx - 5, BY - 3, bw + 10, bh + 6, 0x8400, 0x8400);  // dark orange
-    centered_text("AP Setup Mode", BY + bh / 2 + 3, WHITE, SMALL);
+    drawOutlinedRect(bx - 5, BY + 5, bw + 10, bh + 6, 0x8400, 0x8400);  // dark orange
+    centered_text("AP Mode", BY + bh / 2 + 10, WHITE, SMALL);
 
     // ── AP Info ────────────────────────────────────────────────────────────────
     int y = CARD_Y0 + 14;
@@ -128,7 +128,7 @@ void WiFiSetupScene::drawApView() {
     drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
 
     // IP section
-    y += line_height + 8;
+    y += line_height + 4;
     centered_text("Open Browser To:", y, LIGHTGREY, TINY);
     y += line_height;
     centered_text("192.168.4.1", y, GREEN, SMALL);
