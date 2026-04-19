@@ -14,8 +14,8 @@ struct WiFiConfig {
     bool valid;
 };
 
-// Initialise WiFi. If no credentials saved, starts AP setup mode.
-void wifi_init();
+// Initialise WiFi. If no credentials saved and auto_ap is true, starts AP setup mode.
+void wifi_init(bool auto_ap = true);
 
 // Must be called from main loop() — processes WebSocket events,
 // DNS and HTTP requests in AP mode, ping timers, etc.

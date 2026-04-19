@@ -15,6 +15,7 @@ public:
     void onDialButtonPress() override;
     void onGreenButtonPress() override;
     void onRedButtonPress() override;
+    void onTouchClick() override;
     void reDisplay() override;
 
 private:

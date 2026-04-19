@@ -295,9 +295,9 @@ void redrawButtons() {}
 // These let the WiFi scenes compile and render on the SDL simulator.
 // All networking is no-op; status values are fixed to show a connected state.
 
-static WiFiConfig _preview_cfg = { "Preview SSID", "", "192.168.1.100", true };
+static WiFiConfig _preview_cfg = { "Preview SSID", "", "192.168.1.100", false };
 
-void        wifi_init()                    {}
+void        wifi_init(bool)               {}
 void        wifi_poll()                    {}
 bool        wifi_is_connected()            { return true; }
 bool        websocket_is_connected()       { return true; }

@@ -24,8 +24,12 @@ static const SysItem items[] = {
 };
 static const int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
 
-static constexpr int ITEM_H   = 48;
-static constexpr int START_Y  = 50;
+static constexpr int ITEM_H_ROUND     = 48;
+static constexpr int ITEM_PITCH_ROUND = 48;
+static constexpr int ITEM_H_CYD       = 48;
+static constexpr int ITEM_PITCH_CYD   = 72;
+static constexpr int START_Y_ROUND    = 50;
+static constexpr int START_Y_CYD      = 60;
 
 int SystemScene::itemCount() { return N_ITEMS; }
 
@@ -69,21 +73,40 @@ void SystemScene::onDialButtonPress()  { activateSelected(); }
 void SystemScene::onGreenButtonPress() { activateSelected(); }
 void SystemScene::onRedButtonPress()   { activate_scene(&wifiSetupScene); }
 
+void SystemScene::onTouchClick() {
+    int item_h    = round_display ? ITEM_H_ROUND    : ITEM_H_CYD;
+    int item_pitch = round_display ? ITEM_PITCH_ROUND : ITEM_PITCH_CYD;
+    int start_y   = round_display ? START_Y_ROUND   : START_Y_CYD;
+    for (int i = 0; i < N_ITEMS; i++) {
+        int y = start_y + i * item_pitch;
+        if (touchX >= 30 && touchX <= 210 && touchY >= y - 2 && touchY < y + item_h - 4) {
+            _selected = i;
+            reDisplay();
+            activateSelected();
+            return;
+        }
+    }
+}
+
 void SystemScene::reDisplay() {
+    int item_h     = round_display ? ITEM_H_ROUND    : ITEM_H_CYD;
+    int item_pitch = round_display ? ITEM_PITCH_ROUND : ITEM_PITCH_CYD;
+    int start_y    = round_display ? START_Y_ROUND   : START_Y_CYD;
+
     background();
     drawMenuTitle("System");
     drawRect(55, 22, 130, 1, 0, DARKGREY);
 
     for (int i = 0; i < N_ITEMS; i++) {
-        int  y   = START_Y + i * ITEM_H;
+        int  y   = start_y + i * item_pitch;
         bool sel = (i == _selected);
 
         if (sel) {
-            drawOutlinedRect(30, y - 2, 180, ITEM_H - 4, 0x001a4d, 0x4da6ff);
+            drawOutlinedRect(30, y - 2, 180, item_h - 4, 0x001a4d, 0x4da6ff);
         }
 
         bool has_sub = items[i].sublabel[0] != '\0';
-        int  label_y = has_sub ? y + 12 : y + ITEM_H / 2;
+        int  label_y = has_sub ? y + 12 : y + item_h / 2;
         centered_text(items[i].label,    label_y, sel ? WHITE    : LIGHTGREY, SMALL);
         if (has_sub) {
             centered_text(items[i].sublabel, y + 32, sel ? 0x4da6ff : DARKGREY, TINY);

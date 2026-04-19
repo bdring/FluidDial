@@ -194,7 +194,7 @@ void WiFiSetupScene::drawSettingsView() {
     int bh = round_display ? 24 : BH;
     int ty = round_display ? BY + bh / 2 + 9 : BY + bh / 2 + 3;
     drawOutlinedRect(bx - 5, by, bw + 10, bh + 6, badge_fill, badge_outline);
-    centered_text(badge_label, ty, badge_text, SMALL);
+    centered_text(badge_label, ty, badge_text, round_display ? TINY : SMALL);
 
     // ── Info section ──────────────────────────────────────────────────────────
     int y = CARD_Y0;
