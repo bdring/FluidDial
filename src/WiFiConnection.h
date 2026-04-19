@@ -3,7 +3,7 @@
 // WiFi/WebSocket connection layer for FluidDial
 // Replaces UART (fnc_putchar/fnc_getchar) with WebSocket transport
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #include <stdint.h>
 
@@ -70,4 +70,4 @@ void wifi_set_uart_mode(bool uart); // write to NVS and update cache
 
 bool wifi_is_first_boot();
 
-#endif  // ARDUINO
+#endif  // USE_WIFI

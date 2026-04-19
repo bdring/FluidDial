@@ -3,7 +3,7 @@
 //
 // Shows connection status and offers AP-mode setup.
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #include "WiFiSetupScene.h"
 #include "WiFiConnection.h"
@@ -11,7 +11,7 @@
 #include "Menu.h"
 #include "System.h"
 #include "Button.h"
-#include "DisplaySettingsScene.h"
+#include "SystemScene.h"
 
 extern Scene       menuScene;
 extern const char* git_info;
@@ -61,7 +61,9 @@ void WiFiSetupScene::onStateChange(state_t){ reDisplay(); }
 
 void WiFiSetupScene::switchModeAndRestart() {
     wifi_set_uart_mode(!wifi_use_uart_mode());
+#ifdef ARDUINO
     ESP.restart();
+#endif
 }
 
 void WiFiSetupScene::onModeSwitchButtonPress() {
@@ -87,13 +89,15 @@ void WiFiSetupScene::onGreenButtonPress() {
         wifi_start_ap_setup();
         reDisplay();
     } else {
+#ifdef ARDUINO
         ESP.restart();
+#endif
     }
 }
 
 void WiFiSetupScene::onDialButtonPress() {
     if (!wifi_in_ap_mode()) {
-        activate_scene(&displaySettingsScene);
+        activate_scene(&systemScene);
     }
 }
 
@@ -235,7 +239,7 @@ void WiFiSetupScene::drawSettingsView() {
     // ── Button legends ────────────────────────────────────────────────────────
     const char* red_label   = "Back";
     const char* green_label = uart_mode ? "Restart" : "Setup";
-    drawButtonLegends(red_label, green_label, "Display");
+    drawButtonLegends(red_label, green_label, "More");
 }
 
 void WiFiSetupScene::reDisplay() {
@@ -266,4 +270,4 @@ void WiFiSetupScene::reDisplay() {
 
 WiFiSetupScene wifiSetupScene;
 
-#endif  // ARDUINO
+#endif  // USE_WIFI

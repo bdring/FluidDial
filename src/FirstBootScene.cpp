@@ -4,7 +4,7 @@
 // Asks the user to choose WiFi (WebSocket) or UART (serial cable).
 // Choice is saved to NVS, then transitions directly to the appropriate scene.
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #    include "Scene.h"
 #    include "Drawing.h"
@@ -98,4 +98,4 @@ public:
 
 FirstBootScene firstBootScene;
 
-#endif  // ARDUINO
+#endif  // USE_WIFI
