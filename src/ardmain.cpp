@@ -5,6 +5,9 @@
 #include "FileParser.h"
 #include "Scene.h"
 #include "AboutScene.h"
+#ifdef USE_M5
+#    include "BrightnessScene.h"
+#endif
 
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
@@ -43,7 +46,11 @@ void first_boot_complete() {
 void setup() {
     init_system();
 
+#ifdef USE_M5
+    display.setBrightness(brightnessScene.getBrightness());
+#else
     display.setBrightness(aboutScene.getBrightness());
+#endif
 
     show_logo();
     delay_ms(1000);  // view the logo and wait for the debug port to connect
