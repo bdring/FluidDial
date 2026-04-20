@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #include "Scene.h"
 #include "Button.h"
@@ -27,4 +27,4 @@ private:
 
 extern WiFiSetupScene wifiSetupScene;
 
-#endif  // ARDUINO
+#endif  // USE_WIFI

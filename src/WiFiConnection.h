@@ -3,7 +3,7 @@
 // WiFi/WebSocket connection layer for FluidDial
 // Replaces UART (fnc_putchar/fnc_getchar) with WebSocket transport
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #include <stdint.h>
 
@@ -14,8 +14,8 @@ struct WiFiConfig {
     bool valid;
 };
 
-// Initialise WiFi. If no credentials saved, starts AP setup mode.
-void wifi_init();
+// Initialise WiFi. If no credentials saved and auto_ap is true, starts AP setup mode.
+void wifi_init(bool auto_ap = true);
 
 // Must be called from main loop() — processes WebSocket events,
 // DNS and HTTP requests in AP mode, ping timers, etc.
@@ -23,6 +23,10 @@ void wifi_poll();
 
 bool wifi_is_connected();       // ESP32 STA joined the network
 bool websocket_is_connected();  // WebSocket connection to FluidNC is up
+
+// Force-close the WebSocket so it can reconnect cleanly.
+// Called when fnc_is_connected() declares FluidNC unresponsive.
+void wifi_force_ws_reconnect();
 bool wifi_in_ap_mode();         // Running as access point for initial setup
 
 // Start a captive-portal AP named "FluidDial".
@@ -66,4 +70,4 @@ void wifi_set_uart_mode(bool uart); // write to NVS and update cache
 
 bool wifi_is_first_boot();
 
-#endif  // ARDUINO
+#endif  // USE_WIFI

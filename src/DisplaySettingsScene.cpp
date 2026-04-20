@@ -3,12 +3,12 @@
 //
 // Turn the encoder to step through all available layouts (rotation × button position).
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #include "DisplaySettingsScene.h"
 #include "Drawing.h"
 #include "System.h"
-#include "WiFiSetupScene.h"
+#include "SystemScene.h"
 
 static const char* layout_names[] = {
     "0 deg - Btns Bottom",   // rotation 0, buttons below
@@ -32,11 +32,11 @@ void DisplaySettingsScene::onEncoder(int delta) {
 }
 
 void DisplaySettingsScene::onDialButtonPress() {
-    activate_scene(&wifiSetupScene);
+    activate_scene(&systemScene);
 }
 
 void DisplaySettingsScene::onRedButtonPress() {
-    activate_scene(&wifiSetupScene);
+    activate_scene(&systemScene);
 }
 
 void DisplaySettingsScene::reDisplay() {
@@ -62,4 +62,4 @@ void DisplaySettingsScene::reDisplay() {
 
 DisplaySettingsScene displaySettingsScene;
 
-#endif  // ARDUINO
+#endif  // USE_WIFI

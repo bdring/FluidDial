@@ -10,6 +10,9 @@
 #include "M5GFX.h"
 #include "Drawing.h"
 #include "NVS.h"
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 #include <fcntl.h>
 #include <termios.h>
@@ -106,7 +109,9 @@ void base_display() {
     display.clear();
 }
 
-void next_layout(int delta) {}
+int     num_layouts = 1;
+int32_t layout_num  = 0;
+void    next_layout(int delta) {}
 
 void resetFlowControl() {}
 
@@ -284,3 +289,34 @@ bool ui_locked(bool redrawButtonsFlag) {
 }
 
 void redrawButtons() {}
+
+#ifdef USE_WIFI
+// ── WiFi stubs for macOS preview builds ───────────────────────────────────────
+// These let the WiFi scenes compile and render on the SDL simulator.
+// All networking is no-op; status values are fixed to show a connected state.
+
+static WiFiConfig _preview_cfg = { "Preview SSID", "", "192.168.1.100", false };
+
+void        wifi_init(bool)               {}
+void        wifi_poll()                    {}
+bool        wifi_is_connected()            { return true; }
+bool        websocket_is_connected()       { return true; }
+void        wifi_force_ws_reconnect()      {}
+bool        wifi_in_ap_mode()              { return false; }
+void        wifi_start_ap_setup()          {}
+void        wifi_stop_ap_and_restart()     {}
+void        wifi_stop_ap()                 {}
+void        wifi_save_config(const char*, const char*, const char*) {}
+WiFiConfig  wifi_load_config()             { return _preview_cfg; }
+const char* wifi_ap_ssid()                 { return "FluidDial"; }
+const char* wifi_status_str()              { return "Connected"; }
+const bool  wifi_not_ready()               { return false; }
+int         wifi_signal_bars()             { return 3; }
+const char* wifi_last_error()              { return nullptr; }
+WiFiConfig  wifi_active_config()           { return _preview_cfg; }
+void        ws_putchar(uint8_t)            {}
+int         ws_getchar()                   { return -1; }
+bool        wifi_use_uart_mode()           { return false; }
+void        wifi_set_uart_mode(bool)       {}
+bool        wifi_is_first_boot()           { return false; }
+#endif  // USE_WIFI

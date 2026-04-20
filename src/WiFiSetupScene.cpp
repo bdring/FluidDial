@@ -3,7 +3,7 @@
 //
 // Shows connection status and offers AP-mode setup.
 
-#ifdef ARDUINO
+#ifdef USE_WIFI
 
 #include "WiFiSetupScene.h"
 #include "WiFiConnection.h"
@@ -11,7 +11,7 @@
 #include "Menu.h"
 #include "System.h"
 #include "Button.h"
-#include "DisplaySettingsScene.h"
+#include "SystemScene.h"
 
 extern Scene       menuScene;
 extern const char* git_info;
@@ -20,7 +20,7 @@ extern const char* git_info;
 
 static constexpr int BX = 20, BY = 28, BW = 200, BH = 34;       // status badge
 static constexpr int CX = 15, CW = 210, CH = 28, CI = 8;        // info cards
-static constexpr int SBX = 20, SBY = 166, SBW = 200, SBH = 36;  // switch button
+static constexpr int SBX = 20, SBY = 160, SBW = 200, SBH = 36;  // switch button
 
 static constexpr int CARD_Y0    = 68;
 static constexpr int CARD_PITCH = CH + 4;  // 32 px per card row
@@ -61,7 +61,9 @@ void WiFiSetupScene::onStateChange(state_t){ reDisplay(); }
 
 void WiFiSetupScene::switchModeAndRestart() {
     wifi_set_uart_mode(!wifi_use_uart_mode());
+#ifdef ARDUINO
     ESP.restart();
+#endif
 }
 
 void WiFiSetupScene::onModeSwitchButtonPress() {
@@ -87,13 +89,15 @@ void WiFiSetupScene::onGreenButtonPress() {
         wifi_start_ap_setup();
         reDisplay();
     } else {
+#ifdef ARDUINO
         ESP.restart();
+#endif
     }
 }
 
 void WiFiSetupScene::onDialButtonPress() {
     if (!wifi_in_ap_mode()) {
-        activate_scene(&displaySettingsScene);
+        activate_scene(&systemScene);
     }
 }
 
@@ -105,8 +109,13 @@ void WiFiSetupScene::onTouchClick() {
 
 void WiFiSetupScene::drawApView() {
     // ── Status badge ──────────────────────────────────────────────────────────
-    drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, 0x8400, 0x8400);  // dark orange
-    centered_text("AP Setup Mode", BY + BH / 2 + 3, WHITE, SMALL);
+    int by = round_display ? BY + 5 : BY - 3;
+    int bx = round_display ? 55 : BX;
+    int bw = round_display ? 130 : BW;
+    int bh = round_display ? 24 : BH;
+    int ty = round_display ? BY + bh / 2 + 10 : BY + bh / 2 + 3;
+    drawOutlinedRect(bx - 5, by, bw + 10, bh + 6, 0x8400, 0x8400);  // dark orange
+    centered_text("AP Mode", ty, WHITE, SMALL);
 
     // ── AP Info ────────────────────────────────────────────────────────────────
     int y = CARD_Y0 + 14;
@@ -121,7 +130,7 @@ void WiFiSetupScene::drawApView() {
     drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
 
     // IP section
-    y += line_height + 8;
+    y += line_height + 4;
     centered_text("Open Browser To:", y, LIGHTGREY, TINY);
     y += line_height;
     centered_text("192.168.4.1", y, GREEN, SMALL);
@@ -155,7 +164,7 @@ void WiFiSetupScene::drawSettingsView() {
     } else if (ws_ok) {
         badge_fill    = 0x003300;
         badge_outline = 0x66ff66;
-        badge_label   = "Connected";
+        badge_label   = "Ready";
         badge_text    = 0x66ff66;
     } else if (wf_ok) {
         // WiFi up — waiting for FluidNC WebSocket
@@ -179,8 +188,13 @@ void WiFiSetupScene::drawSettingsView() {
         badge_text    = WHITE;
     }
 
-    drawOutlinedRect(BX - 5, BY - 3, BW + 10, BH + 6, badge_fill, badge_outline);
-    centered_text(badge_label, BY + BH / 2 + 3, badge_text, SMALL);
+    int bx = round_display ? 55 : BX;
+    int by = round_display ? BY + 6 : BY - 3;
+    int bw = round_display ? 130 : BW;
+    int bh = round_display ? 24 : BH;
+    int ty = round_display ? BY + bh / 2 + 9 : BY + bh / 2 + 3;
+    drawOutlinedRect(bx - 5, by, bw + 10, bh + 6, badge_fill, badge_outline);
+    centered_text(badge_label, ty, badge_text, round_display ? TINY : SMALL);
 
     // ── Info section ──────────────────────────────────────────────────────────
     int y = CARD_Y0;
@@ -197,11 +211,11 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text("to setup WiFi", y, 0xe02b2b, TINY);
     } else {
         // Network label + SSID — always visible so the user knows what we're connecting to
-        y +=10;
+        y += (round_display ? 8 : 10);
         centered_text("Network", y, DARKGREY, TINY);
         y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
-        y += 20;
+        y += (round_display ? 14 : 20);
 
         drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
         y += 14;
@@ -229,30 +243,52 @@ void WiFiSetupScene::drawSettingsView() {
         int         sw_fill       = uart_mode ? 0x003300: 0x001a4d;
         int         sw_outline    = uart_mode ? 0x66ff66: 0x4da6ff;
 
-        modeSwitchBtn.set(SBX, SBY, SBW, SBH, sw_label, sw_fill, sw_outline, sw_outline, [this]() { onModeSwitchButtonPress(); });
+        int sbx = round_display ? 40 : SBX;
+        int sbw = round_display ? 160 : SBW;
+        int sby = round_display ? SBY : SBY + 6;
+        modeSwitchBtn.font = round_display ? TINY : SMALL;
+        modeSwitchBtn.set(sbx, sby, sbw, SBH, sw_label, sw_fill, sw_outline, sw_outline, [this]() { onModeSwitchButtonPress(); });
     }
 
     // ── Button legends ────────────────────────────────────────────────────────
     const char* red_label   = "Back";
     const char* green_label = uart_mode ? "Restart" : "Setup";
-    drawButtonLegends(red_label, green_label, "Display");
+    drawButtonLegends(red_label, green_label, "More");
 }
 
 void WiFiSetupScene::reDisplay() {
     background();
 
     const char* title;
-    if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_active_config().valid) {
-        title = "Connection Settings";
-    } else if (websocket_is_connected()) {
-        title = " Connected to FluidNC";
-    } else if (wifi_is_connected()) {
-        title = " Connecting to FluidNC";
+    if (round_display) {
+        // Shorter titles for M5 Dial: top of circle is narrow (~104px at y=12)
+        if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_active_config().valid) {
+            title = "WiFi Setup";
+        } else if (websocket_is_connected()) {
+            title = "Connected";
+        } else if (wifi_is_connected()) {
+            title = "Connecting";
+        } else {
+            title = "WiFi Setup";
+        }
     } else {
-        title = "Connecting to WiFi";
+        if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_active_config().valid) {
+            title = "Connection Settings";
+        } else if (websocket_is_connected()) {
+            title = " Connected to FluidNC";
+        } else if (wifi_is_connected()) {
+            title = " Connecting to FluidNC";
+        } else {
+            title = "Connecting to WiFi";
+        }
     }
-    centered_text(title, 12);
-    drawRect(55, 22, 130, 1, 0, DARKGREY);
+    if (round_display) {
+        centered_text(title, 18);
+        drawRect(70, 28, 100, 1, 0, DARKGREY);
+    } else {
+        centered_text(title, 12);
+        drawRect(55, 22, 130, 1, 0, DARKGREY);
+    }
 
     if (wifi_in_ap_mode()) {
         drawApView();
@@ -266,4 +302,4 @@ void WiFiSetupScene::reDisplay() {
 
 WiFiSetupScene wifiSetupScene;
 
-#endif  // ARDUINO
+#endif  // USE_WIFI

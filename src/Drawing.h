@@ -87,6 +87,10 @@ void drawMenuTitle(const char* name);
 void drawPngFile(const char* filename, Point xy);
 void drawPngBackground(const char* filename);
 
+#ifdef USE_WIFI
+void drawWiFiSignalBars(int x0, int y_bot);
+#endif
+
 void refreshDisplay();
 
 void drawError();

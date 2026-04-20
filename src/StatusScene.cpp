@@ -223,6 +223,11 @@ public:
         }
         drawButtonLegends(redLabel, grnLabel, yellowLabel);
 
+#ifdef USE_WIFI
+        if (round_display) {
+            drawWiFiSignalBars(70, 20);
+        }
+#endif
         refreshDisplay();
     }
 };

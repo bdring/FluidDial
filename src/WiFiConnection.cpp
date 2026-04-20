@@ -120,7 +120,7 @@ static void ws_begin(const char* host) {
     webSocket.begin(host, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH, WS_SUBPROTOCOL);
     webSocket.onEvent(onWsEvent);
     webSocket.setReconnectInterval(3000);
-    webSocket.enableHeartbeat(15000, 3000, 2);
+    webSocket.enableHeartbeat(5000, 2000, 1);
     _ws_started = true;
 }
 
@@ -596,7 +596,9 @@ void wifi_stop_ap() {
     _wifi_stack_started = false;
 
     // Re-initiate the STA connection that was torn down by wifi_start_ap_setup().
-    wifi_init();
+    // Pass auto_ap=false so that a device with no credentials does not immediately
+    // re-enter AP mode — the user explicitly chose to exit.
+    wifi_init(false);
 }
 
 bool wifi_is_connected() {
@@ -605,6 +607,16 @@ bool wifi_is_connected() {
 
 bool websocket_is_connected() {
     return _ws_connected;
+}
+
+void wifi_force_ws_reconnect() {
+    if (_ws_started) {
+        webSocket.disconnect();
+        _ws_connected = false;
+        // Leave _ws_started true — WebSocketsClient will auto-reconnect
+        // on the next webSocket.loop() via setReconnectInterval().
+        dbg_println("WS: force-closed for reconnect");
+    }
 }
 
 bool wifi_in_ap_mode() {
@@ -654,7 +666,7 @@ static void onWiFiDisconnect(WiFiEvent_t event, WiFiEventInfo_t info) {
     _wifi_disconnect_reason = info.wifi_sta_disconnected.reason;
 }
 
-void wifi_init() {
+void wifi_init(bool auto_ap) {
     if (wifi_use_uart_mode()) {
         dbg_println("Transport: UART mode — WiFi stack not started");
         return;
@@ -667,11 +679,13 @@ void wifi_init() {
     WiFiConfig cfg = wifi_load_config();
 
     if (!cfg.valid) {
-        // No credentials saved yet — auto-start AP so the user can configure
-        // via browser immediately (captive portal at 192.168.4.1).
-        dbg_println("No WiFi credentials — starting AP setup mode automatically");
-        wifi_start_ap_setup();
-        current_scene->reDisplay();  // switch scene from "not configured" to AP view
+        if (auto_ap) {
+            // No credentials saved yet — auto-start AP so the user can configure
+            // via browser immediately (captive portal at 192.168.4.1).
+            dbg_println("No WiFi credentials — starting AP setup mode automatically");
+            wifi_start_ap_setup();
+            current_scene->reDisplay();  // switch scene from "not configured" to AP view
+        }
         return;
     }
 

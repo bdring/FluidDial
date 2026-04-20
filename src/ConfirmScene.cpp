@@ -10,7 +10,9 @@ public:
     void reDisplay() {
         background();
 
-        drawOutlinedRect(10, 80, 230, 100, 0x001a4d, 0x4da6ff);
+        if (!round_display) {
+            drawOutlinedRect(10, 80, 230, 100, 0x001a4d, 0x4da6ff);
+        }
         size_t nl = _msg.find('\n');
         if (nl != std::string::npos) {
             centered_text(_msg.substr(0, nl).c_str(), 108, 0x4da6ff, SMALL);
