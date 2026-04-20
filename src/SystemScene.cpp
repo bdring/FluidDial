@@ -5,6 +5,7 @@
 
 #include "SystemScene.h"
 #include "DisplaySettingsScene.h"
+#include "BrightnessScene.h"
 #include "WiFiSetupScene.h"
 #include "Drawing.h"
 #include "System.h"
@@ -16,10 +17,12 @@ struct SysItem {
 };
 
 static const SysItem items[] = {
-    { "Restart",  ""                   },
-    { "Display",  "Adjust orientation" },
+    { "Restart",  ""                  },
 #ifdef USE_M5
-    { "Sleep",    "Press red to wake"  },
+    { "Sleep",    "Press red to wake" },
+    { "Brightness", "Turn to adjust"  },
+#else
+    { "Display",  "Adjust orientation" },
 #endif
 };
 static const int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
@@ -53,17 +56,22 @@ void SystemScene::activateSelected() {
 #endif
             break;
         case 1:
-            activate_scene(&displaySettingsScene);
-            break;
 #ifdef USE_M5
-        case 2:
             set_disconnected_state();
 #    ifdef ARDUINO
+            background();
             centered_text("Red button to wake", 118, RED, TINY);
             refreshDisplay();
             delay_ms(2000);
             deep_sleep(0);
 #    endif
+#else
+            activate_scene(&displaySettingsScene);
+#endif
+            break;
+#ifdef USE_M5
+        case 2:
+            activate_scene(&brightnessScene);
             break;
 #endif
     }
