@@ -41,6 +41,9 @@ static inline uint32_t millis() { return m5gfx::millis(); }
 #    endif
 #endif  // USE_M5
 
+int  battery_level();    // Returns 0-100, or -1 if no battery
+bool battery_charging(); // Returns true while charging via USB
+
 extern LGFX_Device&     display;
 extern LGFX_Sprite      canvas;
 extern m5::Touch_Class& touch;

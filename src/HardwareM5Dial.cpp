@@ -143,6 +143,14 @@ int num_layouts = 1;
 int32_t layout_num = 0;
 void redrawButtons() {}
 
+int battery_level() {
+    return M5Dial.Power.getBatteryLevel();
+}
+
+bool battery_charging() {
+    return M5Dial.Power.isCharging();
+}
+
 #include <driver/rtc_io.h>
 // The M5 Library is broken with respect to deep sleep on M5 Dial
 // so we have to do it ourselves.  The problem is that the WAKE

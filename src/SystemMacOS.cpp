@@ -290,6 +290,10 @@ bool ui_locked(bool redrawButtonsFlag) {
 
 void redrawButtons() {}
 
+// ── Battery stubs for macOS preview builds ────────────────────────────────────
+int  battery_level()    { return 75; }   // simulate 75% for layout preview
+bool battery_charging() { return true; }
+
 #ifdef USE_WIFI
 // ── WiFi stubs for macOS preview builds ───────────────────────────────────────
 // These let the WiFi scenes compile and render on the SDL simulator.
