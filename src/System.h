@@ -17,6 +17,10 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 #ifdef USE_LOVYANGFX
 #    include "LovyanGFX.h"
 #    include "Touch_Class.hpp"
+#    ifndef ARDUINO
+// Provide Arduino-compatible millis() free function for native (SDL) builds
+static inline uint32_t millis() { return lgfx::millis(); }
+#    endif
 
 #    define WHITE TFT_WHITE
 #    define BLACK TFT_BLACK
