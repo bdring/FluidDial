@@ -340,6 +340,39 @@ void drawWiFiSignalBars(int x0, int y_bot) {
     }
 }
 
+#ifdef USE_M5
+void drawBatteryLevel(int x0, int y_bot) {
+    int level = battery_level();
+    if (level < 0) return;
+
+    constexpr int W  = 20;
+    constexpr int H  = 13;
+    constexpr int NW = 4;
+    constexpr int NH = 7;
+
+    bool charging  = battery_charging();
+    int  fill_color = charging ? ORANGE : (level > 50) ? GREEN : (level > 20) ? YELLOW : RED;
+
+    // Body outline and nub
+    canvas.drawRect(x0, y_bot - H, W, H, WHITE);
+    canvas.fillRect(x0 + W, y_bot - (H + NH) / 2, NW, NH, WHITE);
+
+    // Level fill
+    int fill_w = (level * (W - 2)) / 100;
+    if (fill_w > 0) {
+        canvas.fillRect(x0 + 1, y_bot - H + 1, fill_w, H - 2, fill_color);
+    }
+
+    // Lightning bolt overlay when charging
+    if (charging) {
+        int bx = x0 + W / 2;
+        int by = y_bot - (H + 1) / 2;  // vertical center
+        canvas.fillTriangle(bx + 3, by - 4, bx - 1, by, bx + 3, by, WHITE);
+        canvas.fillTriangle(bx - 3, by, bx + 1, by, bx - 3, by + 4, WHITE);
+    }
+}
+#endif
+
 static void drawWiFiSignalOverlay() {
     if (round_display) return;   // M5 Dial: WiFi indicator only shown in menu scene
     drawWiFiSignalBars(5, 20);

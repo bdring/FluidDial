@@ -17,6 +17,10 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 #ifdef USE_LOVYANGFX
 #    include "LovyanGFX.h"
 #    include "Touch_Class.hpp"
+#    ifndef ARDUINO
+// Provide Arduino-compatible millis() free function for native (SDL) builds
+static inline uint32_t millis() { return lgfx::millis(); }
+#    endif
 
 #    define WHITE TFT_WHITE
 #    define BLACK TFT_BLACK
@@ -40,6 +44,9 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 static inline uint32_t millis() { return m5gfx::millis(); }
 #    endif
 #endif  // USE_M5
+
+int  battery_level();    // Returns 0-100, or -1 if no battery
+bool battery_charging(); // Returns true while charging via USB
 
 extern LGFX_Device&     display;
 extern LGFX_Sprite      canvas;

@@ -313,6 +313,9 @@ void request_status_report() {
 }
 
 bool fnc_is_connected() {
+#ifdef DEV_SIMULATED_CONNECT
+    return true;
+#endif
     int now = milliseconds();
     if (starting) {
         starting      = false;
