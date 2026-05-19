@@ -257,6 +257,9 @@ extern "C" void handle_other(char* line) {
         handle_json(line);
         return;
     }
+#ifdef FNC_RX_TRACE
+    dbg_printf("[rx-other] %.120s%s\n", line, strlen(line) > 120 ? "..." : "");
+#endif
     int alarmlen = strlen("Active alarm: ");
     if (strncmp(line, "Active alarm: ", alarmlen) == 0) {
         lastAlarm = atoi(line + alarmlen);
@@ -269,6 +272,9 @@ extern "C" void handle_other(char* line) {
 }
 
 extern "C" void show_error(int error) {
+#ifdef FNC_RX_TRACE
+    dbg_printf("[rx-err] error:%d\n", error);
+#endif
     errorExpire = milliseconds() + 1000;
     lastError   = error;
     if (json_in_progress()) {
@@ -286,6 +292,9 @@ extern "C" void show_timeout() {
     dbg_println("Timeout");
 }
 extern "C" void show_ok() {
+#ifdef FNC_RX_TRACE
+    dbg_printf("[rx-ok]\n");
+#endif
     if (json_in_progress()) {
         // "ok" ends a reply; if a torn JSON doc was in flight, clean up.
         json_reset_depth();

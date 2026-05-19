@@ -16,3 +16,9 @@
 
 // Automatically leave Homing Scene after homing is finished
 // #define AUTO_HOMING_RETURN
+
+// Trace incoming bytes from FluidNC (ok / error:N / [rx-other] / JSON
+// chunk sizes + brace depth + macro-chain advance points) via dbg_printf.
+// Useful when diagnosing wire-protocol issues over Telnet vs UART.
+// Uncomment to enable; zero runtime cost when commented out.
+// #define FNC_RX_TRACE

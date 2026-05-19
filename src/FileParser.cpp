@@ -263,6 +263,12 @@ public:
     void startObject() override { ++_level; }
     void key(const char* key) override {
         _key = key;
+#ifdef FNC_RX_TRACE
+        // Surface every key the preferences listener actually sees, with its
+        // depth-from-listener-perspective, so we can verify the structure
+        // matches what _level == 2 expects.
+        dbg_printf("[prefs] L%d key=%s\n", _level, key);
+#endif
         if (_level < 2) {
             // The only thing we care about is the macros section at level 2
             return;
@@ -347,10 +353,16 @@ static uint32_t s_chain_advance_at_ms = 0;
 static constexpr uint32_t CHAIN_ADVANCE_COOLDOWN_MS = 250;
 
 void request_macro_list_wu2() {
+#ifdef FNC_RX_TRACE
+    dbg_printf("[macro-chain] request macrocfg.json (wu2)\n");
+#endif
     s_pending_file_listener = &macrocfgListener;
     request_json_file("macrocfg.json");
 }
 void request_macro_list_wu3() {
+#ifdef FNC_RX_TRACE
+    dbg_printf("[macro-chain] request preferences.json (wu3)\n");
+#endif
     s_pending_file_listener = &preferencesListener;
     request_json_file("preferences.json");
 }
@@ -361,14 +373,23 @@ void try_next_macro_file(JsonListener* listener) {
     // We use schedule_action to avoid reentering
     // the parser code.
     if (!listener) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] start -> wu2\n");
+#endif
         schedule_action(request_macro_list_wu2);
         return;
     }
     if (listener == &preferencesListener) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] preferences exhausted -> No Macros\n");
+#endif
         current_scene->onError("No Macros");
         return;
     }
     if (listener == &macrocfgListener) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] macrocfg miss -> wu3\n");
+#endif
         schedule_action(request_macro_list_wu3);
     }
 }
@@ -387,7 +408,7 @@ void try_next_macro_file(JsonListener* listener) {
 extern "C" void file_request_failed_advance() {
     if (json_in_progress()) {
 #ifdef FNC_RX_TRACE
-        dbg_println("[macro-chain] stale error suppressed (JSON in flight)");
+        dbg_printf("[macro-chain] stale error suppressed (JSON in flight)\n");
 #endif
         return;
     }
@@ -397,12 +418,17 @@ extern "C" void file_request_failed_advance() {
     if (s_chain_advance_at_ms != 0 &&
         (milliseconds() - s_chain_advance_at_ms) < CHAIN_ADVANCE_COOLDOWN_MS) {
 #ifdef FNC_RX_TRACE
-        dbg_println("[macro-chain] stale error suppressed (advance cooldown)");
+        dbg_printf("[macro-chain] stale error suppressed (advance cooldown)\n");
 #endif
         return;
     }
     JsonListener* l = s_pending_file_listener;
     if (l) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] file request failed, advancing from %s\n",
+                   l == &macrocfgListener ? "macrocfg" :
+                   l == &preferencesListener ? "preferences" : "?");
+#endif
         s_pending_file_listener = nullptr;
         try_next_macro_file(l);
     }
@@ -685,6 +711,18 @@ static void parser_feed_line(const char* line) {
 }
 
 extern "C" void handle_json(const char* line) {
+#ifdef FNC_RX_TRACE
+    // Print depth + the leading 60 chars of the chunk so we can SEE the
+    // wire format. Truncated to avoid drowning the monitor on large
+    // documents.
+    size_t len = strlen(line);
+    char   peek[61];
+    size_t pn = len < 60 ? len : 60;
+    memcpy(peek, line, pn);
+    peek[pn] = '\0';
+    dbg_printf("[json] len=%u d=%d | %s%s\n", (unsigned)len, s_json_depth,
+               peek, len > 60 ? "..." : "");
+#endif
     // Only reset the parser at a document boundary, never mid-stream — a reset
     // in the middle of a multi-chunk document loses the in-flight state and
     // the macro list comes back empty.
