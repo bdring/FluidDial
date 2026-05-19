@@ -302,15 +302,28 @@ static bool ws_send_bin(const uint8_t* payload, size_t length) {
 }
 
 // Pull bytes off the socket and push them into the RX ring buffer. Called
-// from wifi_poll() — non-blocking. Splits the kernel buffer into chunks so
-// the ring buffer never overruns.
+// from wifi_poll() — non-blocking. Bounded by available ring space so a
+// burst from FluidNC (preferences.json is ~5 KB and arrives in one shot)
+// can't overflow the ring and silently drop bytes mid-document, which
+// corrupts the streaming JSON parser. Any data we don't read stays in
+// the kernel's TCP receive window; TCP flow control will pause FluidNC
+// if we fall too far behind.
 static void tcp_refill_rx() {
     if (_sock < 0) {
         return;
     }
     uint8_t buf[256];
     while (true) {
-        ssize_t n = ::recv(_sock, buf, sizeof(buf), MSG_DONTWAIT);
+        // Compute headroom in the ring buffer (leave one slot empty to
+        // distinguish full from empty). If we'd overrun, stop and let
+        // fnc_poll drain some bytes first.
+        int used = (_rx_head - _rx_tail + RX_BUF_SIZE) % RX_BUF_SIZE;
+        int free = RX_BUF_SIZE - used - 1;
+        if (free <= 0) {
+            return;
+        }
+        size_t want = (size_t)free < sizeof(buf) ? (size_t)free : sizeof(buf);
+        ssize_t n = ::recv(_sock, buf, want, MSG_DONTWAIT);
         if (n <= 0) {
             if (n == 0) {
                 dbg_println("Telnet: peer closed");
@@ -329,8 +342,8 @@ static void tcp_refill_rx() {
             rx_push(c);
         }
         update_rx_time();
-        if ((size_t)n < sizeof(buf)) {
-            // Kernel had less than a full buffer ready; nothing more for now.
+        if ((size_t)n < want) {
+            // Kernel had less than we asked for; nothing more for now.
             return;
         }
     }
