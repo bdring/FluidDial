@@ -639,9 +639,6 @@ extern "C" void handle_json(const char* line) {
         parser.reset();
     }
     parser_parse_line(line);
-
-#define Ack 0xB2
-    fnc_realtime((realtime_cmd_t)Ack);
 }
 
 std::string wifi_mode;
