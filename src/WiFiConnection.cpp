@@ -25,6 +25,7 @@
 
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
+#include <mdns.h>          // mdns_query_a() — ESP-IDF multicast DNS
 #include <fcntl.h>
 #include <errno.h>
 
@@ -94,11 +95,45 @@ static bool is_dotted_decimal(const char* s) {
     return true;
 }
 
+// Resolve a hostname to an IPv4 address using the correct path for the
+// name shape:
+//   *.local  → ESP-IDF mdns_query_a (multicast).
+//   anything else → unicast DNS via lwip / WiFi.hostByName.
+// WiFi.hostByName() tries unicast first then mDNS, which is the wrong
+// order for .local — unicast may resolve via a misconfigured upstream
+// resolver (or a router that hijacks .local), yielding a confidently
+// wrong address. Going straight to mdns_query_a avoids that.
+static bool resolve_host_strict(const char* host, IPAddress& out) {
+    size_t len = strlen(host);
+    const char* dot_local = ".local";
+    size_t dl_len = strlen(dot_local);
+    if (len > dl_len && strcasecmp(host + len - dl_len, dot_local) == 0) {
+        // Strip the .local suffix; mdns_query_a appends it internally.
+        char base[64];
+        size_t base_len = len - dl_len;
+        if (base_len >= sizeof(base)) {
+            return false;
+        }
+        memcpy(base, host, base_len);
+        base[base_len] = '\0';
+        esp_ip4_addr_t addr = {};
+        esp_err_t      err  = mdns_query_a(base, 2000, &addr);
+        if (err != ESP_OK) {
+            dbg_printf("mDNS: %s.local err=%d\n", base, (int)err);
+            return false;
+        }
+        out = IPAddress(addr.addr);
+        return true;
+    }
+    return WiFi.hostByName(host, out) == 1;
+}
+
 static void dnsResolveTask(void* /*param*/) {
     IPAddress ip;
-    // hostByName() blocks until the mDNS/DNS reply arrives or the stack times
-    // out — running it on a background task keeps the main loop responsive.
-    bool ok = (WiFi.hostByName(_active_cfg.fluidnc_ip, ip) == 1);
+    // resolve_host_strict() blocks on mDNS or unicast DNS depending on the
+    // hostname shape — running it on a background task keeps the main loop
+    // responsive while the multicast query waits up to 2 s for a reply.
+    bool ok = resolve_host_strict(_active_cfg.fluidnc_ip, ip);
     if (ok) {
         ip.toString().toCharArray(_dns_result_str, sizeof(_dns_result_str));
     }
