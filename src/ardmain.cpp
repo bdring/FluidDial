@@ -108,4 +108,5 @@ void loop() {
 #endif
     fnc_poll();         // Parse incoming bytes from FluidNC (UART or WebSocket)
     dispatch_events();  // Handle dial, touch, buttons
+    service_redisplay();
 }

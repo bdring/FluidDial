@@ -255,7 +255,7 @@ extern "C" void handle_other(char* line) {
 extern "C" void show_error(int error) {
     errorExpire = milliseconds() + 1000;
     lastError   = error;
-    current_scene->reDisplay();
+    request_redisplay();
 }
 
 extern "C" void show_timeout() {
@@ -269,7 +269,7 @@ extern "C" void end_status_report() {
 
 extern "C" void show_alarm(int alarm) {
     lastAlarm = alarm;
-    current_scene->reDisplay();
+    request_redisplay();
 }
 
 extern "C" void show_gcode_modes(struct gcode_modes* modes) {
@@ -290,7 +290,7 @@ extern "C" void show_gcode_modes(struct gcode_modes* modes) {
     }
 
     mySelectedTool = modes->tool;
-    current_scene->reDisplay();
+    request_redisplay();
 }
 
 int disconnect_ms = 0;

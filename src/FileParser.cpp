@@ -3,7 +3,7 @@
 
 #include "FileParser.h"
 
-#include "Scene.h"  // current_scene->reDisplay()
+#include "Scene.h"  // request_redisplay()
 #include "Menu.h"
 #include "GrblParserC.h"  // send_line()
 #include "HomingScene.h"  // set_axis_homed()
@@ -670,14 +670,39 @@ void parse_wifi(char* arguments) {
 }
 
 // command is "Mode=STA" - or AP or No Wifi
+//
+// FluidNC re-emits [MSG:Mode=...] periodically as a heartbeat. Forcing a
+// full reDisplay every time hammers the heap (every PNG decode allocates
+// & frees, and the LGFX/pngle allocator fragments over time -> mDNS OOMs
+// after a minute). We now only reDisplay when something the UI shows has
+// actually changed.
 void handle_radio_mode(char* command, char* arguments) {
-    dbg_printf("Mode %s %s\n", command, arguments);
     char* value;
     split(command, &value, '=');
+
+    static std::string last_mode;
+    static std::string last_ssid;
+    static std::string last_connected;
+    static std::string last_ip;
+
     wifi_mode = value;
-    if (strcmp(value, "No Wifi") != 0) {
-        parse_wifi(arguments);
-        current_scene->reDisplay();
+    if (strcmp(value, "No Wifi") == 0) {
+        if (last_mode != wifi_mode) {
+            last_mode = wifi_mode;
+            request_redisplay();
+        }
+        return;
+    }
+
+    parse_wifi(arguments);
+
+    if (last_mode != wifi_mode || last_ssid != wifi_ssid || last_connected != wifi_connected || last_ip != wifi_ip) {
+        last_mode      = wifi_mode;
+        last_ssid      = wifi_ssid;
+        last_connected = wifi_connected;
+        last_ip        = wifi_ip;
+        dbg_printf("Mode %s %s\n", command, arguments);
+        request_redisplay();
     }
 }
 

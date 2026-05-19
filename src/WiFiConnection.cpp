@@ -11,7 +11,7 @@
 #include "WiFiConnection.h"
 #include "FluidNCModel.h"
 #include "System.h"
-#include "Scene.h"   // current_scene->reDisplay()
+#include "Scene.h"   // request_redisplay()
 
 #include <Esp.h>
 #include <WiFi.h>
@@ -253,7 +253,7 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
             _last_status_ms = 0;
             dbg_printf("WS: connected to FluidNC at ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
             // Update the badge immediately; state report from FluidNC will follow shortly.
-            current_scene->reDisplay();
+            request_redisplay();
             break;
         }
 
@@ -684,7 +684,7 @@ void wifi_init(bool auto_ap) {
             // via browser immediately (captive portal at 192.168.4.1).
             dbg_println("No WiFi credentials — starting AP setup mode automatically");
             wifi_start_ap_setup();
-            current_scene->reDisplay();  // switch scene from "not configured" to AP view
+            request_redisplay();  // switch scene from "not configured" to AP view
         }
         return;
     }
@@ -754,7 +754,7 @@ void wifi_poll() {
     if (!_wifi_ever_connected && !_wifi_error_msg && _wifi_connect_start_ms &&
         (millis() - _wifi_connect_start_ms) > WIFI_CONNECT_TIMEOUT_MS) {
         _wifi_error_msg = "Cannot connect";
-        current_scene->reDisplay();
+        request_redisplay();
     }
 
     // Decode the reason code set by the WiFi disconnect event.
@@ -814,7 +814,7 @@ void wifi_poll() {
                 if (allow_retry && !_wifi_retry_at) {
                     _wifi_retry_at = millis() + WIFI_RETRY_DELAY_MS;
                 }
-                if (changed) current_scene->reDisplay();
+                if (changed) request_redisplay();
             }
         }
     }
@@ -850,7 +850,7 @@ void wifi_poll() {
             start_dns_resolve();
         }
         // WiFi just came up — update badge from "WiFi..." to "WiFi OK".
-        current_scene->reDisplay();
+        request_redisplay();
     }
     if (!now_connected && _wifi_was_connected) {
         if (_ws_started) {
@@ -879,7 +879,7 @@ void wifi_poll() {
             _wifi_error_msg = "Host not found";
             _dns_retry_at   = millis() + DNS_RETRY_DELAY_MS;
         }
-        current_scene->reDisplay();
+        request_redisplay();
     }
 
     // Retry DNS resolution after a failed attempt (ie: FluidNC may not have
@@ -890,7 +890,7 @@ void wifi_poll() {
         _wifi_error_msg = nullptr;
         dbg_printf("DNS retry: resolving %s\n", _active_cfg.fluidnc_ip);
         start_dns_resolve();
-        current_scene->reDisplay();
+        request_redisplay();
     }
 
     if (_ws_started) {
@@ -904,7 +904,7 @@ void wifi_poll() {
         uint32_t        now_ms        = millis();
         if (now_ms - _last_anim_ms >= 400) {
             _last_anim_ms = now_ms;
-            current_scene->reDisplay();
+            request_redisplay();
         }
         return;
     }

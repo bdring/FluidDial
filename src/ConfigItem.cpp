@@ -13,7 +13,7 @@ void parse_dollar(const char* line) {
             line += cmdlen + 1;
             item->got(line);
 
-            current_scene->reDisplay();
+            request_redisplay();
             configRequests.erase(it);
             break;
         }
