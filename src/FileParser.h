@@ -34,4 +34,13 @@ extern std::string wifi_mode, wifi_ip, wifi_connected, wifi_ssid;
 
 void init_listener();
 void init_file_list();
-bool receive_plain_json(const char* line);
+
+// True while the streaming JSON parser is mid-document (outer-brace
+// depth > 0). Used by handle_other() in FluidNCModel.cpp to route
+// continuation chunks of a multi-line response back to handle_json().
+bool json_in_progress();
+
+// Discard any in-flight JSON state. Call when a transport-level event
+// (socket close, "ok"/"error:" delimiter, $-response) ends the document
+// abruptly so the next legitimate document starts with a clean parser.
+void json_reset_depth();

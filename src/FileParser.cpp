@@ -561,59 +561,6 @@ void request_file_list(const char* dirname) {
     parser_needs_reset = true;
 }
 
-// ── Plain-JSON receiver ───────────────────────────────────────────────────────
-// Large payloads can arrive split across TCP segments (the RX refill is line-
-// terminated by the Telnet path) so GrblParserC delivers them as separate
-// lines to handle_other(). Accumulate fragments until the outermost JSON
-// object is complete (brace depth -> 0), then dispatch to handle_json().
-
-static std::string _json_accum;
-
-static bool json_accum_complete() {
-    int  depth  = 0;
-    bool in_str = false;
-    bool esc    = false;
-    for (char c : _json_accum) {
-        if (esc)       { esc = false; continue; }
-        if (c == '\\') { esc = true;  continue; }
-        if (c == '"')  { in_str = !in_str; continue; }
-        if (!in_str) {
-            if      (c == '{') ++depth;
-            else if (c == '}') { if (--depth == 0) return true; }
-        }
-    }
-    return false;
-}
-
-static bool is_non_json_protocol_message(const char* line) {
-    return line[0] == '<'
-           || strncmp(line, "ok",     2) == 0
-           || strncmp(line, "error:", 6) == 0
-           || strcmp(line, "PING") == 0;
-}
-
-// Returns true if the line was consumed as JSON
-bool receive_plain_json(const char* line) {
-    // Discard non-JSON messages that interrupt an in-progress accumulation
-    if (!_json_accum.empty() && is_non_json_protocol_message(line)) {
-        _json_accum.clear();
-        return false;
-    }
-
-    // Accept the line if it starts a JSON object or continues one.
-    if (line[0] != '{' && _json_accum.empty()) {
-        return false;
-    }
-
-    _json_accum += line;
-
-    if (json_accum_complete()) {
-        handle_json(_json_accum.c_str());
-        _json_accum.clear();
-    }
-    return true;
-}
-
 void init_file_list() {
     init_listener();
     request_file_list("/sd");
@@ -626,20 +573,70 @@ void request_file_preview(const char* name, int firstline, int nlines) {
     // parser.reset();
 }
 
-void parser_parse_line(const char* line) {
+// ── Streaming JSON receiver ───────────────────────────────────────────────────
+// Large payloads can arrive split across TCP segments (the Telnet RX refill is
+// line-terminated) so GrblParserC delivers them as separate lines to
+// handle_other(). Rather than accumulating the whole document into a std::string
+// (which fragments the heap for big file lists), feed each chunk into the
+// streaming JSON parser as it arrives and track outer-brace depth so we know
+// when a document is complete and when the parser is safe to reset.
+
+static int  s_json_depth  = 0;
+static bool s_json_in_str = false;
+static bool s_json_esc    = false;
+
+bool json_in_progress() {
+    return s_json_depth > 0;
+}
+
+void json_reset_depth() {
+    s_json_depth       = 0;
+    s_json_in_str      = false;
+    s_json_esc         = false;
+    parser_needs_reset = true;
+}
+
+// Feed a chunk into the parser one char at a time, counting outer-brace
+// depth as we go. Tracks string state (incl. backslash escapes) across
+// chunk boundaries so '{' and '}' inside JSON string values — for
+// example a macro action like "G92 Z{z}" — don't inflate the counter
+// and prevent the document from ever returning to depth 0.
+static void parser_feed_line(const char* line) {
     char c;
     while ((c = *line++) != '\0') {
+        if (s_json_esc) {
+            s_json_esc = false;
+        } else if (s_json_in_str) {
+            if (c == '\\') {
+                s_json_esc = true;
+            } else if (c == '"') {
+                s_json_in_str = false;
+            }
+        } else {
+            if (c == '"') {
+                s_json_in_str = true;
+            } else if (c == '{') {
+                s_json_depth++;
+            } else if (c == '}') {
+                if (s_json_depth > 0) {
+                    s_json_depth--;
+                }
+            }
+        }
         parser.parse(c);
     }
 }
 
 extern "C" void handle_json(const char* line) {
-    if (parser_needs_reset) {
+    // Only reset the parser at a document boundary, never mid-stream — a reset
+    // in the middle of a multi-chunk document loses the in-flight state and
+    // the macro list comes back empty.
+    if (parser_needs_reset && s_json_depth == 0) {
         parser_needs_reset = false;
         parser.setListener(pInitialListener);
         parser.reset();
     }
-    parser_parse_line(line);
+    parser_feed_line(line);
 }
 
 std::string wifi_mode;

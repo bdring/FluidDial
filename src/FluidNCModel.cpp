@@ -239,12 +239,22 @@ extern "C" void show_state(const char* state_string) {
 }
 
 extern "C" void handle_other(char* line) {
-    // Intercept plain-JSON responses (FluidNC sends {"files":[...]} etc. without the [MSG:JSON:...] wrapper, sometimes split across frames).
-    if (receive_plain_json(line)) {
+    // $-responses are config, never JSON. If FluidNC tore down a JSON
+    // document by sending a $-response (rare, but happens on some error
+    // paths), drop the depth counter so the next document starts clean.
+    if (*line == '$') {
+        if (json_in_progress()) {
+            json_reset_depth();
+        }
+        parse_dollar(line);
         return;
     }
-    if (*line == '$') {
-        parse_dollar(line);
+    // Route to the streaming JSON parser if either (a) this line opens a
+    // new JSON object, or (b) a previous chunk left the outer brace open.
+    // FluidNC sends {"files":[...]} etc. without the [MSG:JSON:...] wrapper
+    // and splits the body across multiple lines for large file/macro lists.
+    if (*line == '{' || json_in_progress()) {
+        handle_json(line);
         return;
     }
     int alarmlen = strlen("Active alarm: ");
@@ -261,13 +271,22 @@ extern "C" void handle_other(char* line) {
 extern "C" void show_error(int error) {
     errorExpire = milliseconds() + 1000;
     lastError   = error;
+    if (json_in_progress()) {
+        // "error:N" without a JSON wrapper ends an in-flight document.
+        json_reset_depth();
+    }
     request_redisplay();
 }
 
 extern "C" void show_timeout() {
     dbg_println("Timeout");
 }
-extern "C" void show_ok() {}
+extern "C" void show_ok() {
+    if (json_in_progress()) {
+        // "ok" ends a reply; if a torn JSON doc was in flight, clean up.
+        json_reset_depth();
+    }
+}
 
 extern "C" void end_status_report() {
     current_scene->onDROChange();

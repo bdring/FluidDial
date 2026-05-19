@@ -13,6 +13,7 @@
 
 #include "WiFiConnection.h"
 #include "FluidNCModel.h"
+#include "FileParser.h"  // json_reset_depth()
 #include "System.h"
 #include "Scene.h"   // request_redisplay()
 
@@ -166,6 +167,9 @@ static void tcp_close() {
         _sock = -1;
     }
     _ws_connected = false;
+    // Any JSON document still being streamed across chunks is now lost;
+    // reset the depth tracker so the next document starts cleanly.
+    json_reset_depth();
 }
 
 static void tcp_apply_opts(int fd) {
