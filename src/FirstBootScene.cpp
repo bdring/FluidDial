@@ -1,7 +1,7 @@
 // 2026 - Figamore
 // FirstBootScene.cpp — one-time setup wizard shown on first boot.
 //
-// Asks the user to choose WiFi (WebSocket) or UART (serial cable).
+// Asks the user to choose WiFi (Telnet) or UART (serial cable).
 // Choice is saved to NVS, then transitions directly to the appropriate scene.
 
 #ifdef USE_WIFI
@@ -31,7 +31,7 @@ class FirstBootScene : public Scene {
     void onWifiPress() {
         if (!selectable())
             return;
-        wifi_set_uart_mode(false);  // WiFi / WebSocket
+        wifi_set_uart_mode(false);  // WiFi / Telnet
         first_boot_complete();
     }
 
@@ -53,7 +53,7 @@ public:
     void onGreenButtonPress() override {
         if (!selectable())
             return;
-        wifi_set_uart_mode(false);  // WiFi / WebSocket
+        wifi_set_uart_mode(false);  // WiFi / Telnet
         first_boot_complete();
     }
 

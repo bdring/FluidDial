@@ -110,7 +110,7 @@ void loop() {
         wifi_poll();
     }
 #endif
-    fnc_poll();         // Parse incoming bytes from FluidNC (UART or WebSocket)
+    fnc_poll();         // Parse incoming bytes from FluidNC (UART or WiFi/Telnet)
     dispatch_events();  // Handle dial, touch, buttons
     service_redisplay();
 }

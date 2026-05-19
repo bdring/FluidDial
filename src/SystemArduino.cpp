@@ -71,9 +71,9 @@ extern "C" int  fnc_getchar()          { return uart_getchar_impl(); }
 #endif
 
 // poll_extra: called by fnc_poll() inside fnc_send_line()'s blocking wait loop.
-// In WiFi mode this MUST drive the WebSocket so that the "ok" response from
-// FluidNC can arrive in _rx_buf — otherwise fnc_send_line() blocks for the
-// full 2000 ms timeout on every second jog command, causing the stall.
+// In WiFi mode this MUST drive wifi_poll() so the Telnet socket refills _rx_buf
+// and the "ok" response from FluidNC can be observed — otherwise fnc_send_line()
+// blocks for the full 2000 ms timeout on every second jog command.
 extern "C" void poll_extra() {
 #ifdef USE_WIFI
     wifi_poll();
@@ -156,7 +156,7 @@ void init_system() {
 }
 void resetFlowControl() {
 #ifdef USE_WIFI
-    if (!wifi_use_uart_mode()) return;  // no-op over WebSocket
+    if (!wifi_use_uart_mode()) return;  // no-op over WiFi/Telnet
 #endif
     fnc_putchar(0x11);
     uart_ll_force_xon(fnc_uart_port);

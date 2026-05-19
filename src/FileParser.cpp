@@ -562,9 +562,10 @@ void request_file_list(const char* dirname) {
 }
 
 // ── Plain-JSON receiver ───────────────────────────────────────────────────────
-// Large payloads arrive split across several WebSocket frames; the WS receiver appends '\n' to each, so
-// GrblParserC delivers them as separate lines to handle_other().
-// Accumulate fragments until the outermost JSON object is complete (brace depth -> 0), then dispatch to handle_json().
+// Large payloads can arrive split across TCP segments (the RX refill is line-
+// terminated by the Telnet path) so GrblParserC delivers them as separate
+// lines to handle_other(). Accumulate fragments until the outermost JSON
+// object is complete (brace depth -> 0), then dispatch to handle_json().
 
 static std::string _json_accum;
 
