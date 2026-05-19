@@ -328,15 +328,36 @@ void request_json_file(const char* name) {
     parser_needs_reset = true;
 }
 
+// Track which file request is in flight so we can advance the macro
+// chain if FluidNC rejects it with a bare "error:N" (Telnet's terse
+// error form, no JSON wrapper). Without this, a rejection on
+// $File/SendJSON=macrocfg.json never unblocks the chain and the macro
+// menu sits forever on "Reading Macros". Cleared either via the success
+// path (try_next_macro_file from JSON endDocument) or via the failure
+// path (file_request_failed_advance from show_error).
+static JsonListener* s_pending_file_listener = nullptr;
+
+// Cooldown millisecond stamp from the last chain advance. FluidNC over
+// Telnet can emit a bare "error:N" for a failed file request AFTER it
+// has already wrapped that failure in a JSON-status response — by then
+// the chain has advanced to the next file and the stray error byte
+// would falsely advance again. Within this window the second advance
+// is suppressed.
+static uint32_t s_chain_advance_at_ms = 0;
+static constexpr uint32_t CHAIN_ADVANCE_COOLDOWN_MS = 250;
+
 void request_macro_list_wu2() {
-    //    reading_macros = true;
+    s_pending_file_listener = &macrocfgListener;
     request_json_file("macrocfg.json");
 }
 void request_macro_list_wu3() {
+    s_pending_file_listener = &preferencesListener;
     request_json_file("preferences.json");
 }
 
 void try_next_macro_file(JsonListener* listener) {
+    s_pending_file_listener = nullptr;
+    s_chain_advance_at_ms   = milliseconds();
     // We use schedule_action to avoid reentering
     // the parser code.
     if (!listener) {
@@ -351,6 +372,42 @@ void try_next_macro_file(JsonListener* listener) {
         schedule_action(request_macro_list_wu3);
     }
 }
+
+// Called from show_error in FluidNCModel.cpp. If a macrocfg.json or
+// preferences.json request is in flight when FluidNC returns a bare
+// error:N (no JSON wrapper), advance the chain as if endDocument had
+// fired with non-ok status. Without this the macro chain hangs forever
+// on the "Reading Macros" screen when Telnet rejects $File/SendJSON.
+//
+// Suppress when json_in_progress(): FluidNC interleaves messages on the
+// wire, so an error:N from a previously-failed request can arrive AFTER
+// the next request's JSON has started streaming. Advancing in that case
+// kills a healthy in-flight document and shows "No Macros" even though
+// the macros are right there in the buffer.
+extern "C" void file_request_failed_advance() {
+    if (json_in_progress()) {
+#ifdef FNC_RX_TRACE
+        dbg_println("[macro-chain] stale error suppressed (JSON in flight)");
+#endif
+        return;
+    }
+    // Suppress stray error bytes that arrive immediately after a
+    // chain advance — they belong to the request we just transitioned
+    // away from, not the one that's now pending.
+    if (s_chain_advance_at_ms != 0 &&
+        (milliseconds() - s_chain_advance_at_ms) < CHAIN_ADVANCE_COOLDOWN_MS) {
+#ifdef FNC_RX_TRACE
+        dbg_println("[macro-chain] stale error suppressed (advance cooldown)");
+#endif
+        return;
+    }
+    JsonListener* l = s_pending_file_listener;
+    if (l) {
+        s_pending_file_listener = nullptr;
+        try_next_macro_file(l);
+    }
+}
+
 void request_macros() {
     try_next_macro_file(nullptr);
 }

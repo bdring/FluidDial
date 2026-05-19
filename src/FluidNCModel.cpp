@@ -275,6 +275,10 @@ extern "C" void show_error(int error) {
         // "error:N" without a JSON wrapper ends an in-flight document.
         json_reset_depth();
     }
+    // Telnet returns bare "error:N" with no JSON wrapper when $File/SendJSON
+    // is rejected (file not present, etc). Without this hook the macro chain
+    // sits on "Reading Macros" forever because endDocument never fires.
+    file_request_failed_advance();
     request_redisplay();
 }
 

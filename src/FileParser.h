@@ -44,3 +44,9 @@ bool json_in_progress();
 // (socket close, "ok"/"error:" delimiter, $-response) ends the document
 // abruptly so the next legitimate document starts with a clean parser.
 void json_reset_depth();
+
+// Called from show_error when FluidNC returns a bare "error:N" (no JSON
+// wrapper, as Telnet does). Advances the macro file chain so the
+// "Reading Macros" UI doesn't hang when a $File/SendJSON request was
+// rejected. No-op if no file request is currently in flight.
+extern "C" void file_request_failed_advance();
