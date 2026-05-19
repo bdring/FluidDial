@@ -3,6 +3,7 @@
 
 #include "System.h"
 #include "FileParser.h"
+#include "FluidNCModel.h"  // pendant_wait_for_fluidnc_ready()
 #include "Scene.h"
 #include "AboutScene.h"
 #ifdef USE_M5
@@ -60,10 +61,13 @@ void setup() {
     dbg_printf("FluidNC Pendant %s\n", git_info);
 
 #ifndef USE_WIFI
-    fnc_realtime(StatusReport);  // Kick FluidNC into action via UART
+    // Bounded boot probe — discards stale bootloader noise, asks FluidNC
+    // for a status report, waits up to 7 s for any RX byte. If it times
+    // out the runtime recovery ladder in fnc_is_connected() takes over.
+    pendant_wait_for_fluidnc_ready(7000);
 #else
     if (wifi_use_uart_mode()) {
-        fnc_realtime(StatusReport);  // UART mode in a WiFi build
+        pendant_wait_for_fluidnc_ready(7000);
     }
 #endif
 

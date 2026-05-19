@@ -4,6 +4,7 @@
 #include "Scene.h"
 #include "FileParser.h"
 #include "AboutScene.h"
+#include "BootLog.h"
 
 extern Scene menuScene;
 
@@ -107,6 +108,25 @@ void AboutScene::reDisplay() {
                 wifi_str = "IP ";
                 wifi_str += wifi_ip;
                 centered_text(wifi_str.c_str(), y += y_spacing, LIGHTGREY, TINY);
+            }
+        }
+    }
+
+    // When the link is down, surface the last few boot/handshake log lines
+    // here. UART0 is shared with the USB-serial bridge on CYD, so this is
+    // the only way to see what is happening without unplugging.
+    if (state == Disconnected) {
+        const int log_line_spacing = 10;
+        int       log_y            = y + 14;
+        centered_text("Boot log (newest first):", log_y, YELLOW, TINY);
+        const int max_lines = 6;
+        int       avail     = bootlog_count();
+        int       shown     = avail < max_lines ? avail : max_lines;
+        for (int i = 0; i < shown; i++) {
+            const char* line = bootlog_line(i);
+            if (line) {
+                log_y += log_line_spacing;
+                centered_text(line, log_y, LIGHTGREY, TINY);
             }
         }
     }

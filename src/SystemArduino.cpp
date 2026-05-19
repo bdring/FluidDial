@@ -6,6 +6,7 @@
 #include "System.h"
 #include "FluidNCModel.h"
 #include "NVS.h"
+#include "BootLog.h"
 
 #include <Esp.h>  // ESP.restart()
 
@@ -138,6 +139,7 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
     uart_set_sw_flow_ctrl(fnc_uart_port, true, 64, 120);
     uint32_t baud;
     uart_get_baudrate(fnc_uart_port, &baud);
+    bootlog_printf("uart: num=%d tx=%d rx=%d baud=%lu", uart_num, tx_pin, rx_pin, (unsigned long)baud);
 }
 
 void init_system() {

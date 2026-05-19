@@ -114,6 +114,7 @@ int32_t layout_num  = 0;
 void    next_layout(int delta) {}
 
 void resetFlowControl() {}
+void reinit_fnc_uart() {}
 
 extern "C" void fnc_putchar(uint8_t c) {
     if (serial_fd >= 0) {

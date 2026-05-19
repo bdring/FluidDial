@@ -201,6 +201,7 @@ extern "C" int fnc_getchar() {
 extern "C" void poll_extra() {}
 
 void resetFlowControl() {}
+void reinit_fnc_uart() {}
 
 void dbg_write(uint8_t c) {
     putchar(c);
