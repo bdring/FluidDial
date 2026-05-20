@@ -28,7 +28,12 @@
 // CYD that is supposed to control battery charging, cutting the
 // traces that connect it to the battery circuit and running a wire
 // over to the photoresistor.
+#ifdef PIBOT_PENDANT
+// PiBot uses GPIO 34 for the band switch, not a lockout input.
+int lockout_pin = -1;
+#else
 int lockout_pin = GPIO_NUM_34;
+#endif
 
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
@@ -125,6 +130,9 @@ static void init_panel_st7789() {
     cfg.pin_cs          = GPIO_NUM_15;
     cfg.offset_rotation = base_rotation;
     cfg.bus_shared      = false;
+#ifdef PIBOT_PENDANT
+    cfg.invert = true;
+#endif
     p.config(cfg);
 
     p.light(&light);
@@ -142,6 +150,9 @@ static void init_panel_ili9341() {
     cfg.pin_cs          = GPIO_NUM_15;
     cfg.offset_rotation = base_rotation;
     cfg.bus_shared      = false;
+#ifdef PIBOT_PENDANT
+    cfg.invert = true;
+#endif
     p.config(cfg);
 
     p.light(&light);
@@ -160,10 +171,33 @@ int green_button_pin = -1;
 int enc_a, enc_b;
 
 #ifdef CAPACITIVE_CYD
+#    ifdef PIBOT_PENDANT
+lgfx::Touch_FT5x06 _touch_ft5x06;
+#    else
 lgfx::Touch_CST816S _touch_cst816s;
+#    endif
 
 void init_capacitive_cyd() {
     {
+#    ifdef PIBOT_PENDANT
+        // PiBot Pendant V4: FT5x06 capacitive touch on I2C bus 1.
+        auto cfg            = _touch_ft5x06.config();
+        cfg.i2c_port        = I2C_NUM_1;
+        cfg.pin_sda         = GPIO_NUM_32;
+        cfg.pin_scl         = GPIO_NUM_25;
+        cfg.pin_int         = GPIO_NUM_36;
+        cfg.pin_rst         = -1;
+        cfg.offset_rotation = base_rotation;
+        cfg.freq            = 400000;
+        cfg.x_min           = 0;
+        cfg.x_max           = 239;
+        cfg.y_min           = 0;
+        cfg.y_max           = 319;
+        cfg.bus_shared      = false;
+        _touch_ft5x06.config(cfg);
+        display.getPanel()->setTouch(&_touch_ft5x06);
+        display.getPanel()->initTouch();
+#    else
         auto cfg            = _touch_cst816s.config();
         cfg.i2c_port        = I2C_NUM_0;
         cfg.pin_sda         = GPIO_NUM_33;
@@ -177,12 +211,24 @@ void init_capacitive_cyd() {
         _touch_cst816s.config(cfg);
         display.getPanel()->setTouch(&_touch_cst816s);
         display.getPanel()->initTouch();
+#    endif
     }
     setBacklightPin(GPIO_NUM_27);
 
     pinMode(lockout_pin, INPUT);
 
-#    ifdef CYD_BUTTONS
+#    ifdef PIBOT_PENDANT
+    // PiBot Pendant V4 wiring: encoder B on GPIO 27, and the dial/green
+    // RGB-LED pins are swapped vs the stock CYD button layout.
+    enc_a            = GPIO_NUM_22;
+    enc_b            = GPIO_NUM_27;
+    red_button_pin   = GPIO_NUM_4;   // RGB LED Red
+    dial_button_pin  = GPIO_NUM_16;  // RGB LED Green (PiBot dial)
+    green_button_pin = GPIO_NUM_17;  // RGB LED Blue  (PiBot green)
+    pinMode(red_button_pin, INPUT_PULLUP);
+    pinMode(dial_button_pin, INPUT_PULLUP);
+    pinMode(green_button_pin, INPUT_PULLUP);
+#    elif defined(CYD_BUTTONS)
     enc_a = GPIO_NUM_22;
     enc_b = GPIO_NUM_21;
     // rotary_button_pin = GPIO_NUM_35;
