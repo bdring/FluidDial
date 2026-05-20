@@ -62,5 +62,11 @@ void set_disconnected_state();
 
 void update_rx_time();
 
+// Bounded boot-time probe over UART: discards bootloader noise then sends
+// XON + status-report queries until FluidNC responds, or `budget_ms`
+// elapses. Returns true on response. Bytes read here are discarded, NOT
+// fed to the parser — current_scene may not be set yet at boot time.
+bool pendant_wait_for_fluidnc_ready(uint32_t budget_ms);
+
 extern pos_t toMm(pos_t position);
 extern pos_t fromMm(pos_t position);

@@ -1,34 +1,41 @@
-// 2026 - Figamore
+// 2026 - Figamore (original WebSocket scaffolding)
+// 2026 - Paul Mokbel (Telnet transport)
 // Use of this source code is governed by a GPLv3 license.
 //
-// WiFi / WebSocket transport layer for FluidDial.
+// WiFi transport layer for FluidDial.
 //
-// Provides fnc_putchar() and fnc_getchar() over a WebSocket connection to
-// FluidNC instead of UART.
+// Provides fnc_putchar() and fnc_getchar() over a raw TCP (Telnet) socket
+// to FluidNC on port 23. The public API still carries `ws_*` and `*_ws_*`
+// names because the surrounding scenes were already wired against them;
+// the implementation underneath is lwip sockets, not WebSocket.
 
 #ifdef ARDUINO
 
 #include "WiFiConnection.h"
 #include "FluidNCModel.h"
+#include "FileParser.h"  // json_reset_depth()
 #include "System.h"
-#include "Scene.h"   // current_scene->reDisplay()
+#include "Scene.h"   // request_redisplay()
 
 #include <Esp.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
-#include <WebSocketsClient.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
+
+#include <lwip/sockets.h>
+#include <lwip/netdb.h>
+#include <mdns.h>          // mdns_query_a() — ESP-IDF multicast DNS
+#include <fcntl.h>
+#include <errno.h>
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 #define WIFI_AP_SSID       "FluidDial"
 #define WIFI_AP_PASS       ""          // Open AP — no password needed
 #define PREF_NAMESPACE     "fluidwifi"
-#define WS_SUBPROTOCOL     "arduino"
-#define FLUIDNC_WS_PORT    80
-#define FLUIDNC_WS_PATH    "/"
+#define FLUIDNC_TELNET_PORT 23
 #define HARDCODE_TEST_WIFI 0
 #define TEST_WIFI_SSID     "FluidNC"
 #define TEST_WIFI_PASS     "12345678"
@@ -38,10 +45,13 @@
 #define STATUS_POLL_MS     500         // Send '?' every 500 ms while connected
 #define WIFI_RETRY_DELAY_MS 15000     // Retry WiFi.begin() this long after a failure
 #define DNS_RETRY_DELAY_MS  5000     // Retry hostname resolution this long after a failure
+#define TCP_RECONNECT_DELAY_MS 2000   // Retry TCP connect this long after a failure
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
-static WebSocketsClient webSocket;
+static int              _sock = -1;
+static uint32_t         _tcp_next_try_ms = 0;
+static char             _fluidnc_remote_ip[40] = {};  // dotted-decimal, cached for reconnects
 static WebServer        httpServer(80);
 static DNSServer        dnsServer;
 
@@ -59,8 +69,8 @@ static bool             _wifi_ever_connected      = false;    // true once WL_CO
 static uint32_t         _wifi_connect_start_ms    = 0;        // millis() when WiFi.begin() was last issued
 static uint8_t          _handshake_timeout_count  = 0;        // consecutive 4-way handshake timeouts; real auth fail after threshold
 
-// Ring buffer for characters received from FluidNC via WebSocket.
-// Written in the WS callback, read by fnc_getchar() (both on the main task).
+// Ring buffer for characters received from FluidNC over Telnet.
+// Refilled by tcp_refill_rx() from wifi_poll(); read by fnc_getchar().
 static uint8_t _rx_buf[RX_BUF_SIZE];
 static int     _rx_head = 0;
 static int     _rx_tail = 0;
@@ -86,13 +96,45 @@ static bool is_dotted_decimal(const char* s) {
     return true;
 }
 
-static void onWsEvent(WStype_t type, uint8_t* payload, size_t length);
+// Resolve a hostname to an IPv4 address using the correct path for the
+// name shape:
+//   *.local  → ESP-IDF mdns_query_a (multicast).
+//   anything else → unicast DNS via lwip / WiFi.hostByName.
+// WiFi.hostByName() tries unicast first then mDNS, which is the wrong
+// order for .local — unicast may resolve via a misconfigured upstream
+// resolver (or a router that hijacks .local), yielding a confidently
+// wrong address. Going straight to mdns_query_a avoids that.
+static bool resolve_host_strict(const char* host, IPAddress& out) {
+    size_t len = strlen(host);
+    const char* dot_local = ".local";
+    size_t dl_len = strlen(dot_local);
+    if (len > dl_len && strcasecmp(host + len - dl_len, dot_local) == 0) {
+        // Strip the .local suffix; mdns_query_a appends it internally.
+        char base[64];
+        size_t base_len = len - dl_len;
+        if (base_len >= sizeof(base)) {
+            return false;
+        }
+        memcpy(base, host, base_len);
+        base[base_len] = '\0';
+        esp_ip4_addr_t addr = {};
+        esp_err_t      err  = mdns_query_a(base, 2000, &addr);
+        if (err != ESP_OK) {
+            dbg_printf("mDNS: %s.local err=%d\n", base, (int)err);
+            return false;
+        }
+        out = IPAddress(addr.addr);
+        return true;
+    }
+    return WiFi.hostByName(host, out) == 1;
+}
 
 static void dnsResolveTask(void* /*param*/) {
     IPAddress ip;
-    // hostByName() blocks until the mDNS/DNS reply arrives or the stack times
-    // out — running it on a background task keeps the main loop responsive.
-    bool ok = (WiFi.hostByName(_active_cfg.fluidnc_ip, ip) == 1);
+    // resolve_host_strict() blocks on mDNS or unicast DNS depending on the
+    // hostname shape — running it on a background task keeps the main loop
+    // responsive while the multicast query waits up to 2 s for a reply.
+    bool ok = resolve_host_strict(_active_cfg.fluidnc_ip, ip);
     if (ok) {
         ip.toString().toCharArray(_dns_result_str, sizeof(_dns_result_str));
     }
@@ -115,13 +157,86 @@ static void start_dns_resolve() {
     }
 }
 
-static void ws_begin(const char* host) {
-    dbg_printf("Starting WebSocket: ws://%s:%d%s\n", host, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
-    webSocket.begin(host, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH, WS_SUBPROTOCOL);
-    webSocket.onEvent(onWsEvent);
-    webSocket.setReconnectInterval(3000);
-    webSocket.enableHeartbeat(5000, 2000, 1);
+// Ring buffer push/pop are defined further down; forward-declare so
+// tcp_refill_rx() can push received bytes from up here.
+static inline void rx_push(uint8_t c);
+
+static void tcp_close() {
+    if (_sock >= 0) {
+        ::close(_sock);
+        _sock = -1;
+    }
+    _ws_connected = false;
+    // Any JSON document still being streamed across chunks is now lost;
+    // reset the depth tracker so the next document starts cleanly.
+    json_reset_depth();
+}
+
+static void tcp_apply_opts(int fd) {
+    // TCP_NODELAY: send realtime ('?', '!', '~', XON, etc.) as their own
+    // segments instead of waiting for Nagle to coalesce.
+    int one = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+
+    // Bound how long a blocking send() will wait if FluidNC's RX is full.
+    struct timeval snd_tv = { 2, 0 };
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &snd_tv, sizeof(snd_tv));
+
+    // Detect dead peers faster than the default ~2 hour kernel timeout.
+    int keepalive  = 1;
+    int idle_s     = 10;
+    int interval_s = 3;
+    int count      = 3;
+    setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle_s, sizeof(idle_s));
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval_s, sizeof(interval_s));
+    setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
+}
+
+// Open a raw TCP socket to FluidNC's telnet server (port 23). Synchronous;
+// returns true on success. Called from wifi_poll() once WiFi STA is up and
+// the FluidNC IP has been resolved.
+static bool tcp_open(const char* host) {
+    dbg_printf("Starting Telnet: %s:%d\n", host, FLUIDNC_TELNET_PORT);
+    IPAddress ip;
+    if (!ip.fromString(host)) {
+        dbg_printf("Telnet: bad IP literal: %s\n", host);
+        return false;
+    }
+    int fd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (fd < 0) {
+        dbg_printf("Telnet: socket errno=%d\n", errno);
+        return false;
+    }
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family      = AF_INET;
+    dest.sin_port        = htons(FLUIDNC_TELNET_PORT);
+    dest.sin_addr.s_addr = (uint32_t)ip;
+    if (::connect(fd, (struct sockaddr*)&dest, sizeof(dest)) != 0) {
+        dbg_printf("Telnet: connect errno=%d\n", errno);
+        ::close(fd);
+        return false;
+    }
+    tcp_apply_opts(fd);
+    _sock = fd;
+    _ws_connected   = true;
+    _last_status_ms = 0;
+    dbg_printf("Telnet: connected to %s:%d (fd=%d)\n", host, FLUIDNC_TELNET_PORT, fd);
+    request_redisplay();
+    return true;
+}
+
+static void tcp_begin(const char* host) {
+    // `host` is the resolved dotted-decimal IP (either from is_dotted_decimal
+    // shortcut or from start_dns_resolve()). Cache it so reconnects after a
+    // transient drop don't have to redo DNS for a still-valid host.
+    strncpy(_fluidnc_remote_ip, host, sizeof(_fluidnc_remote_ip) - 1);
+    _fluidnc_remote_ip[sizeof(_fluidnc_remote_ip) - 1] = '\0';
     _ws_started = true;
+    if (!tcp_open(host)) {
+        _tcp_next_try_ms = millis() + TCP_RECONNECT_DELAY_MS;
+    }
 }
 
 static const char* wifi_status_name(wl_status_t status) {
@@ -147,12 +262,91 @@ static const char* wifi_status_name(wl_status_t status) {
     }
 }
 
+// Bulk send over the raw socket. Blocks up to SO_SNDTIMEO per chunk;
+// transient EAGAIN drops the remainder of this flush but keeps the
+// socket so the in-flight document survives. Any other errno tears the
+// socket down so wifi_poll() can reconnect.
+static bool tcp_send_all(const uint8_t* payload, size_t length) {
+    if (_sock < 0 || length == 0) {
+        return _sock >= 0;
+    }
+    size_t off = 0;
+    while (off < length) {
+        ssize_t n = ::send(_sock, payload + off, length - off, 0);
+        if (n <= 0) {
+            int e = errno;
+            if (e == EAGAIN || e == EWOULDBLOCK) {
+                dbg_printf("Telnet: send EAGAIN dropped=%u of %u\n",
+                           (unsigned)(length - off), (unsigned)length);
+                return true;
+            }
+            dbg_printf("Telnet: send errno=%d off=%u/%u\n",
+                       e, (unsigned)off, (unsigned)length);
+            tcp_close();
+            set_disconnected_state();
+            return false;
+        }
+        off += (size_t)n;
+    }
+    return true;
+}
+
+// Keep the ws_send_text/ws_send_bin spellings for the ws_putchar
+// callsites — both go through the same raw send() now.
 static bool ws_send_text(uint8_t* payload, size_t length) {
-    return webSocket.sendTXT(payload, length);
+    return tcp_send_all(payload, length);
 }
 
 static bool ws_send_bin(const uint8_t* payload, size_t length) {
-    return webSocket.sendBIN(payload, length);
+    return tcp_send_all(payload, length);
+}
+
+// Pull bytes off the socket and push them into the RX ring buffer. Called
+// from wifi_poll() — non-blocking. Bounded by available ring space so a
+// burst from FluidNC (preferences.json is ~5 KB and arrives in one shot)
+// can't overflow the ring and silently drop bytes mid-document, which
+// corrupts the streaming JSON parser. Any data we don't read stays in
+// the kernel's TCP receive window; TCP flow control will pause FluidNC
+// if we fall too far behind.
+static void tcp_refill_rx() {
+    if (_sock < 0) {
+        return;
+    }
+    uint8_t buf[256];
+    while (true) {
+        // Compute headroom in the ring buffer (leave one slot empty to
+        // distinguish full from empty). If we'd overrun, stop and let
+        // fnc_poll drain some bytes first.
+        int used = (_rx_head - _rx_tail + RX_BUF_SIZE) % RX_BUF_SIZE;
+        int free = RX_BUF_SIZE - used - 1;
+        if (free <= 0) {
+            return;
+        }
+        size_t want = (size_t)free < sizeof(buf) ? (size_t)free : sizeof(buf);
+        ssize_t n = ::recv(_sock, buf, want, MSG_DONTWAIT);
+        if (n <= 0) {
+            if (n == 0) {
+                dbg_println("Telnet: peer closed");
+                tcp_close();
+                set_disconnected_state();
+            } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                dbg_printf("Telnet: recv errno=%d\n", errno);
+                tcp_close();
+                set_disconnected_state();
+            }
+            return;
+        }
+        for (ssize_t i = 0; i < n; i++) {
+            uint8_t c = buf[i];
+            if (c == '\r') continue;  // strip CR; GrblParserC wants LF-terminated lines
+            rx_push(c);
+        }
+        update_rx_time();
+        if ((size_t)n < want) {
+            // Kernel had less than we asked for; nothing more for now.
+            return;
+        }
+    }
 }
 
 // ─── Ring-buffer helpers ──────────────────────────────────────────────────────
@@ -172,20 +366,19 @@ static inline int rx_pop() {
     return (unsigned char)c;
 }
 
-// ─── WebSocket transport primitives ──────────────────────────────────────────
+// ─── Telnet transport primitives ─────────────────────────────────────────────
 // These are called by fnc_putchar/fnc_getchar (defined in SystemArduino.cpp)
-// when the active transport is WiFi.
+// when the active transport is WiFi. Kept under the ws_* spelling so the
+// SystemArduino dispatch and simulator stubs don't have to rename.
 
-// Send one byte to FluidNC via WebSocket.
+// Send one byte to FluidNC over the Telnet socket.
 void ws_putchar(uint8_t c) {
-    // Skip UART XON/XOFF flow-control bytes (irrelevant over WebSocket).
+    // Skip UART XON/XOFF flow-control bytes (irrelevant over TCP).
     if (c == 0x11 || c == 0x13) return;
 
     // Extended single-byte realtime commands: Ctrl-X, 0x80–0x9F, and the
-    // IO-extender commands 0xB0–0xB3 (ACK=0xB2, NAK=0xB3).  FluidNC uses
-    // ACK/NAK flow control when streaming JSON file listings, even over
-    // WebSocket — without it the first chunk arrives and FluidNC stalls
-    // waiting for acknowledgement, leaving the file list empty.
+    // IO-extender commands 0xB0–0xB3 (ACK=0xB2, NAK=0xB3). Send each one
+    // immediately so it doesn't sit behind buffered g-code text.
     if (c == 0x18 || (c >= 0x80 && c <= 0x9F) || (c >= 0xB0 && c <= 0xB3)) {
         if (_ws_connected) ws_send_bin(&c, 1);
         return;
@@ -207,7 +400,7 @@ void ws_putchar(uint8_t c) {
     }
 }
 
-// Receive one byte from the WebSocket ring buffer (-1 if empty).
+// Receive one byte from the RX ring buffer (-1 if empty).
 int ws_getchar() {
     return rx_pop();
 }
@@ -242,55 +435,6 @@ bool wifi_is_first_boot() {
     bool done = prefs.getBool("setup_done", false);
     prefs.end();
     return !done;
-}
-
-// ─── WebSocket event handler ──────────────────────────────────────────────────
-
-static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
-    switch (type) {
-        case WStype_CONNECTED: {
-            _ws_connected = true;
-            _last_status_ms = 0;
-            dbg_printf("WS: connected to FluidNC at ws://%s:%d%s\n", _active_cfg.fluidnc_ip, FLUIDNC_WS_PORT, FLUIDNC_WS_PATH);
-            // Update the badge immediately; state report from FluidNC will follow shortly.
-            current_scene->reDisplay();
-            break;
-        }
-
-        case WStype_DISCONNECTED:
-            _ws_connected = false;
-            dbg_println("WS: disconnected from FluidNC");
-            set_disconnected_state();
-            break;
-
-        case WStype_TEXT:
-        case WStype_BIN: {
-            // Push every received byte into the ring buffer.
-            // GrblParserC's fnc_getchar() will drain it character-by-character.
-            for (size_t i = 0; i < length; i++) {
-                if (payload[i] == '\r') continue;  // Strip CR
-                rx_push(payload[i]);
-            }
-            // Ensure the last line is newline-terminated.
-            if (length > 0 && payload[length - 1] != '\n') {
-                rx_push('\n');
-            }
-            update_rx_time();
-            break;
-        }
-
-        case WStype_ERROR:
-            dbg_println("WS: error");
-            break;
-
-        case WStype_PING:
-        case WStype_PONG:
-        case WStype_FRAGMENT_TEXT_START:
-        case WStype_FRAGMENT_BIN_START:
-        case WStype_FRAGMENT:
-        case WStype_FRAGMENT_FIN:
-            break;
-    }
 }
 
 // ─── Captive portal HTML ──────────────────────────────────────────────────────
@@ -548,7 +692,7 @@ WiFiConfig wifi_load_config() {
 
 void wifi_start_ap_setup() {
     _ap_mode            = true;
-    _ws_connected       = false;
+    tcp_close();
     _ws_started         = false;
     _wifi_stack_started = true;  // ensure wifi_poll() drives DNS/HTTP server
 
@@ -611,11 +755,9 @@ bool websocket_is_connected() {
 
 void wifi_force_ws_reconnect() {
     if (_ws_started) {
-        webSocket.disconnect();
-        _ws_connected = false;
-        // Leave _ws_started true — WebSocketsClient will auto-reconnect
-        // on the next webSocket.loop() via setReconnectInterval().
-        dbg_println("WS: force-closed for reconnect");
+        tcp_close();
+        _tcp_next_try_ms = millis() + TCP_RECONNECT_DELAY_MS;
+        dbg_println("Telnet: force-closed for reconnect");
     }
 }
 
@@ -684,7 +826,7 @@ void wifi_init(bool auto_ap) {
             // via browser immediately (captive portal at 192.168.4.1).
             dbg_println("No WiFi credentials — starting AP setup mode automatically");
             wifi_start_ap_setup();
-            current_scene->reDisplay();  // switch scene from "not configured" to AP view
+            request_redisplay();  // switch scene from "not configured" to AP view
         }
         return;
     }
@@ -692,8 +834,10 @@ void wifi_init(bool auto_ap) {
     _wifi_stack_started = true;
     dbg_printf("Connecting to WiFi: %s  FluidNC: %s\n", cfg.ssid, cfg.fluidnc_ip);
     _active_cfg              = cfg;
+    tcp_close();
     _ws_started              = false;
-    _ws_connected            = false;
+    _tcp_next_try_ms         = 0;
+    _fluidnc_remote_ip[0]    = '\0';
     _wifi_was_connected      = false;
     _last_wifi_status        = WL_IDLE_STATUS;
     _wifi_error_msg          = nullptr;
@@ -754,7 +898,7 @@ void wifi_poll() {
     if (!_wifi_ever_connected && !_wifi_error_msg && _wifi_connect_start_ms &&
         (millis() - _wifi_connect_start_ms) > WIFI_CONNECT_TIMEOUT_MS) {
         _wifi_error_msg = "Cannot connect";
-        current_scene->reDisplay();
+        request_redisplay();
     }
 
     // Decode the reason code set by the WiFi disconnect event.
@@ -814,7 +958,7 @@ void wifi_poll() {
                 if (allow_retry && !_wifi_retry_at) {
                     _wifi_retry_at = millis() + WIFI_RETRY_DELAY_MS;
                 }
-                if (changed) current_scene->reDisplay();
+                if (changed) request_redisplay();
             }
         }
     }
@@ -832,7 +976,7 @@ void wifi_poll() {
         WiFi.begin(_active_cfg.ssid, _active_cfg.password[0] ? _active_cfg.password : nullptr);
     }
 
-    // Detect WiFi reconnects so the WebSocket can recover.
+    // Detect WiFi reconnects so the Telnet socket can be re-opened.
     bool now_connected = wifi_status == WL_CONNECTED;
     if (now_connected && !_wifi_was_connected) {
         dbg_printf("WiFi connected — IP: %s\n",
@@ -842,44 +986,43 @@ void wifi_poll() {
             dbg_println("mDNS init failed — .local hostnames may not resolve");
         }
         if (is_dotted_decimal(_active_cfg.fluidnc_ip)) {
-            // Plain IP address — start WebSocket immediately.
-            ws_begin(_active_cfg.fluidnc_ip);
+            // Plain IP address — open Telnet socket immediately.
+            tcp_begin(_active_cfg.fluidnc_ip);
         } else if (!_dns_resolving) {
-            // Hostname — resolve asynchronously; ws_begin() runs when done.
+            // Hostname — resolve asynchronously; tcp_begin() runs when done.
             _dns_retry_at = 0;  // cancel any pending retry from a prior failure
             start_dns_resolve();
         }
         // WiFi just came up — update badge from "WiFi..." to "WiFi OK".
-        current_scene->reDisplay();
+        request_redisplay();
     }
     if (!now_connected && _wifi_was_connected) {
         if (_ws_started) {
-            webSocket.disconnect();
+            tcp_close();
             _ws_started = false;
         }
-        _dns_done     = false;  // discard any in-flight DNS result
-        _ws_connected = false;
+        _dns_done = false;  // discard any in-flight DNS result
         set_disconnected_state();
         dbg_println("WiFi lost");
     }
     _wifi_was_connected = now_connected;
 
     // Handle async DNS completion (hostname -> IP resolution).
-    // Only act if WiFi is still up and the WebSocket hasn't already started.
+    // Only act if WiFi is still up and the Telnet socket hasn't already started.
     if (_dns_done && !_ws_started && now_connected) {
         bool ok = _dns_ok;
         _dns_done = false;
         if (ok) {
             dbg_printf("Hostname resolved: %s -> %s\n",
                        _active_cfg.fluidnc_ip, _dns_result_str);
-            ws_begin(_dns_result_str);
+            tcp_begin(_dns_result_str);
         } else {
             dbg_printf("Hostname resolution failed: %s — retrying in %d ms\n",
                        _active_cfg.fluidnc_ip, DNS_RETRY_DELAY_MS);
             _wifi_error_msg = "Host not found";
             _dns_retry_at   = millis() + DNS_RETRY_DELAY_MS;
         }
-        current_scene->reDisplay();
+        request_redisplay();
     }
 
     // Retry DNS resolution after a failed attempt (ie: FluidNC may not have
@@ -890,12 +1033,21 @@ void wifi_poll() {
         _wifi_error_msg = nullptr;
         dbg_printf("DNS retry: resolving %s\n", _active_cfg.fluidnc_ip);
         start_dns_resolve();
-        current_scene->reDisplay();
+        request_redisplay();
     }
 
-    if (_ws_started) {
-        // Drive the WebSocket state machine only after WiFi is up.
-        webSocket.loop();
+    // Service the Telnet socket: refill RX from the kernel buffer, and if
+    // the socket is down, attempt periodic reconnects.
+    if (_ws_started && now_connected) {
+        if (_sock >= 0) {
+            tcp_refill_rx();
+        } else if (_tcp_next_try_ms && (int32_t)(millis() - _tcp_next_try_ms) >= 0) {
+            _tcp_next_try_ms = 0;
+            dbg_println("Telnet: reconnect attempt");
+            if (!tcp_open(_fluidnc_remote_ip)) {
+                _tcp_next_try_ms = millis() + TCP_RECONNECT_DELAY_MS;
+            }
+        }
     }
 
     // Animate the connecting badge until FluidNC is fully connected.
@@ -904,7 +1056,7 @@ void wifi_poll() {
         uint32_t        now_ms        = millis();
         if (now_ms - _last_anim_ms >= 400) {
             _last_anim_ms = now_ms;
-            current_scene->reDisplay();
+            request_redisplay();
         }
         return;
     }

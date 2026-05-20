@@ -488,6 +488,10 @@ void init_hardware() {
 #endif
 }
 
+void reinit_fnc_uart() {
+    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+}
+
 int last_locked = -1;
 
 void redrawButtons() {

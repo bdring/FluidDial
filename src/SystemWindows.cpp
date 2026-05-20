@@ -286,6 +286,7 @@ void base_display() {
 void next_layout(int delta) {}
 
 void resetFlowControl() {}
+void reinit_fnc_uart() {}
 
 extern "C" void fnc_putchar(uint8_t c) {
     serial_write(hFNC, &c, 1);

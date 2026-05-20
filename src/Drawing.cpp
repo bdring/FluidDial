@@ -133,7 +133,7 @@ void drawStatus() {
             line1   = "AP Setup";
             line2   = "192.168.4.1";
         } else if (wifi_is_connected()) {
-            bgColor = YELLOW;       // WiFi up, WebSocket still connecting
+            bgColor = YELLOW;       // WiFi up, Telnet still connecting
             line1   = "FluidNC";
             static const char* nc_frames[] = { "Connecting", "Connecting.", "Connecting..", "Connecting..." };
             line2   = nc_frames[(millis() / 400) % 4];
@@ -188,7 +188,7 @@ void drawStatusSmall(int y) {
             bgColor = 0x8400;   // dark orange
             label   = "AP Mode";
         } else if (wifi_is_connected()) {
-            bgColor = YELLOW;   // WiFi up, WebSocket still connecting
+            bgColor = YELLOW;   // WiFi up, Telnet still connecting
             static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
             label   = nc_frames[(millis() / 400) % 4];
         } else {
