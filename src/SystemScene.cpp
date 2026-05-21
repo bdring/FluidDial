@@ -121,6 +121,17 @@ void SystemScene::reDisplay() {
         }
     }
 
+#if defined(USE_LOVYANGFX) && defined(CYD_BATTERY_ADC)
+    if (!round_display) {
+        int mv = battery_millivolts();
+        if (mv > 0) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Battery: %d.%02d V", mv / 1000, (mv % 1000) / 10);
+            centered_text(buf, 210, LIGHTGREY, TINY);
+        }
+    }
+#endif
+
     drawButtonLegends("Back", "Select", "");
     refreshDisplay();
 }

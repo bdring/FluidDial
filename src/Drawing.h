@@ -91,7 +91,7 @@ void drawPngBackground(const char* filename);
 void drawWiFiSignalBars(int x0, int y_bot);
 #endif
 
-#ifdef USE_M5
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
 void drawBatteryLevel(int x0, int y_bot);
 #endif
 

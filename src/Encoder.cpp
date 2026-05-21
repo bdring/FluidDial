@@ -12,23 +12,26 @@
 
 namespace {
 #ifdef USE_LOVYANGFX
-constexpr int8_t quadrature_lut[16] = {
+static const DRAM_ATTR int8_t quadrature_lut[16] = {
     0, -1, 1, 0,
     1, 0, 0, -1,
     -1, 0, 0, 1,
     0, 1, -1, 0,
 };
 
-int     encoder_a_pin    = -1;
-int     encoder_b_pin    = -1;
-int16_t encoder_count    = 0;
-uint8_t encoder_state    = 0;
+static int              encoder_a_pin = -1;
+static int              encoder_b_pin = -1;
+static volatile int32_t encoder_count = 0;
+static volatile uint8_t encoder_state = 0;
 
-uint8_t read_encoder_state() {
-    if (encoder_a_pin < 0 || encoder_b_pin < 0) {
-        return 0;
-    }
+static uint8_t IRAM_ATTR read_encoder_state_isr() {
     return (digitalRead(encoder_a_pin) << 1) | digitalRead(encoder_b_pin);
+}
+
+static void IRAM_ATTR encoder_isr() {
+    uint8_t next_state = read_encoder_state_isr();
+    encoder_count += quadrature_lut[(encoder_state << 2) | next_state];
+    encoder_state = next_state;
 }
 #else
 bool pcnt_ready = false;
@@ -98,13 +101,13 @@ void init_encoder(int a_pin, int b_pin) {
     pinMode(encoder_b_pin, INPUT_PULLUP);
 
     encoder_count = 0;
-    encoder_state = read_encoder_state();
+    encoder_state = read_encoder_state_isr();
+
+    attachInterrupt(digitalPinToInterrupt(encoder_a_pin), encoder_isr, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(encoder_b_pin), encoder_isr, CHANGE);
 }
 
 int16_t get_encoder() {
-    uint8_t next_state = read_encoder_state();
-    encoder_count += quadrature_lut[(encoder_state << 2) | next_state];
-    encoder_state = next_state;
-    return encoder_count;
+    return (int16_t)encoder_count;
 }
 #endif

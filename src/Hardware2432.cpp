@@ -35,6 +35,18 @@ int lockout_pin = -1;
 int lockout_pin = GPIO_NUM_34;
 #endif
 
+#ifdef CYD_BATTERY_ADC
+#    ifndef CYD_BATTERY_ADC_PIN
+#        define CYD_BATTERY_ADC_PIN GPIO_NUM_39
+#    endif
+#    ifndef CYD_BATTERY_ADC_MULTIPLIER_NUM
+#        define CYD_BATTERY_ADC_MULTIPLIER_NUM 1534
+#    endif
+#    ifndef CYD_BATTERY_ADC_MULTIPLIER_DEN
+#        define CYD_BATTERY_ADC_MULTIPLIER_DEN 1000
+#    endif
+#endif
+
 m5::Touch_Class  xtouch;
 m5::Touch_Class& touch = xtouch;
 
@@ -215,7 +227,11 @@ void init_capacitive_cyd() {
     }
     setBacklightPin(GPIO_NUM_27);
 
+#ifdef CYD_BATTERY_ADC
+    analogSetPinAttenuation(CYD_BATTERY_ADC_PIN, ADC_11db);
+#else
     pinMode(lockout_pin, INPUT);
+#endif
 
 #    ifdef PIBOT_PENDANT
     // PiBot Pendant V4 wiring: encoder B on GPIO 27, and the dial/green
@@ -589,6 +605,10 @@ bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
 
 bool ui_locked(bool redrawButtonsFlag) {
+#ifdef CYD_BATTERY_ADC
+    (void)redrawButtonsFlag;
+    return false;
+#else
     bool locked = digitalRead(lockout_pin);
     if ((int)locked != last_locked) {
         last_locked = locked;
@@ -597,6 +617,7 @@ bool ui_locked(bool redrawButtonsFlag) {
         }
     }
     return locked;
+#endif
 }
 
 bool in_rect(Point test, Point xy, Point wh) {
@@ -638,5 +659,105 @@ void update_events() {
 }
 
 void ackBeep() {}
+
+int adc_millivolts(int pin) {
+    return analogReadMilliVolts(pin);
+}
+
+int battery_adc_millivolts() {
+#ifndef CYD_BATTERY_ADC
+    return -1;
+#else
+    return adc_millivolts(CYD_BATTERY_ADC_PIN);
+#endif
+}
+
+int battery_millivolts() {
+#ifndef CYD_BATTERY_ADC
+    return -1;
+#else
+    return (battery_adc_millivolts() * CYD_BATTERY_ADC_MULTIPLIER_NUM) / CYD_BATTERY_ADC_MULTIPLIER_DEN;
+#endif
+}
+
+int battery_level() {
+#ifndef CYD_BATTERY_ADC
+    return -1;
+#else
+    static int      cached_level  = -1;
+    static int      smoothed_mv   = -1;
+    static uint32_t next_read_ms  = 0;
+
+#    if defined(RESISTIVE_CYD) && defined(CAPACITIVE_CYD)
+    if (display_num == 1) {
+        return -1;
+    }
+#    endif
+
+    uint32_t now = millis();
+    if (now < next_read_ms) {
+        return cached_level;
+    }
+    next_read_ms = now + 1000;
+
+    int millivolts = battery_millivolts();
+    if (millivolts < 3000 || millivolts > 4400) {
+        cached_level = -1;
+        return cached_level;
+    }
+
+    // Exponential moving average (alpha=0.25)
+    smoothed_mv = (smoothed_mv < 3000) ? millivolts : (smoothed_mv * 3 + millivolts) / 4;
+    millivolts  = smoothed_mv;
+
+    struct LevelPoint {
+        int mv;
+        int pct;
+    };
+    static constexpr LevelPoint curve[] = {
+        { 4200, 100 },
+        { 4100, 90 },
+        { 4000, 80 },
+        { 3930, 70 },
+        { 3860, 60 },
+        { 3800, 50 },
+        { 3750, 40 },
+        { 3700, 30 },
+        { 3650, 20 },
+        { 3550, 10 },
+        { 3300, 0 },
+    };
+
+    if (millivolts >= curve[0].mv) {
+        cached_level = 100;
+        return cached_level;
+    }
+    for (size_t i = 1; i < sizeof(curve) / sizeof(curve[0]); ++i) {
+        if (millivolts >= curve[i].mv) {
+            int high_mv  = curve[i - 1].mv;
+            int low_mv   = curve[i].mv;
+            int high_pct = curve[i - 1].pct;
+            int low_pct  = curve[i].pct;
+            cached_level = low_pct + ((millivolts - low_mv) * (high_pct - low_pct)) / (high_mv - low_mv);
+            return cached_level;
+        }
+    }
+
+    cached_level = 0;
+    return cached_level;
+#endif
+}
+
+bool battery_charging() {
+#ifndef CYD_BATTERY_ADC
+    return false;
+#else
+    static int cached = -1;
+    if (cached < 0) {
+        cached = (battery_millivolts() > 4250) ? 1 : 0;
+    }
+    return cached == 1;
+#endif
+}
 
 void deep_sleep(int us) {}

@@ -20,7 +20,7 @@ In WiFi mode the pendant communicates with FluidNC over WebSockets on your local
 - **SD File** — browse and run G-code files directly from the FluidNC SD card
 - **Macros** — store and execute custom G-code macros from the pendant
 - **Captive portal setup** — configure WiFi credentials directly from your phone or browser
-- **Battery indicator** *(experimental, M5Dial only)* — battery level shown in the status bar when running on battery power
+- **Battery indicator** *(experimental)* — Supported in both M5Dial and CYD versions. *See [this sample project for CYD battery operation](https://github.com/figamore/FigDial)*
 
 ---
 
