@@ -194,9 +194,8 @@ void init_capacitive_cyd() {
 
 #ifdef CYD_BATTERY_ADC
     analogSetPinAttenuation(CYD_BATTERY_ADC_PIN, ADC_11db);
-#else
-    pinMode(lockout_pin, INPUT);
 #endif
+    pinMode(lockout_pin, INPUT);
 
 #    ifdef CYD_BUTTONS
     enc_a = GPIO_NUM_22;
@@ -560,10 +559,6 @@ bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
 
 bool ui_locked(bool redrawButtonsFlag) {
-#ifdef CYD_BATTERY_ADC
-    (void)redrawButtonsFlag;
-    return false;
-#else
     bool locked = digitalRead(lockout_pin);
     if ((int)locked != last_locked) {
         last_locked = locked;
@@ -572,7 +567,6 @@ bool ui_locked(bool redrawButtonsFlag) {
         }
     }
     return locked;
-#endif
 }
 
 bool in_rect(Point test, Point xy, Point wh) {
@@ -657,7 +651,6 @@ int battery_level() {
 
     int millivolts = battery_millivolts();
     if (millivolts < 3000 || millivolts > 4400) {
-        cached_level = -1;
         return cached_level;
     }
 
