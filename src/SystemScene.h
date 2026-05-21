@@ -8,7 +8,7 @@ class SystemScene : public Scene {
     int _selected = 0;
 
 public:
-    SystemScene() : Scene("System") {}
+    SystemScene() : Scene("System", 4) {}
 
     void onEntry(void* arg = nullptr) override;
     void onEncoder(int delta) override;

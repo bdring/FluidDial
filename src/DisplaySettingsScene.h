@@ -6,7 +6,7 @@
 
 class DisplaySettingsScene : public Scene {
 public:
-    DisplaySettingsScene() : Scene("Display") {}
+    DisplaySettingsScene() : Scene("Display", 4) {}
 
     void onEntry(void* arg = nullptr) override;
     void onEncoder(int delta) override;
