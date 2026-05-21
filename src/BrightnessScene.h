@@ -1,14 +1,12 @@
 #pragma once
 
-#ifdef USE_M5
-
 #include "Scene.h"
 
 class BrightnessScene : public Scene {
-    int _brightness = 255;
+    int _brightness = 100;  // stored as percentage 0-100
 
 public:
-    BrightnessScene() : Scene("Brightness") {}
+    BrightnessScene() : Scene("Brightness", 4) {}
 
     void onEntry(void* arg = nullptr) override;
     void onEncoder(int delta) override;
@@ -19,5 +17,3 @@ public:
 };
 
 extern BrightnessScene brightnessScene;
-
-#endif  // USE_M5

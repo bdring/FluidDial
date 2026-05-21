@@ -6,7 +6,7 @@
 #include "FluidNCModel.h"  // pendant_wait_for_fluidnc_ready()
 #include "Scene.h"
 #include "AboutScene.h"
-#ifdef USE_M5
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
 #    include "BrightnessScene.h"
 #endif
 
@@ -47,7 +47,7 @@ void first_boot_complete() {
 void setup() {
     init_system();
 
-#ifdef USE_M5
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
     display.setBrightness(brightnessScene.getBrightness());
 #else
     display.setBrightness(aboutScene.getBrightness());

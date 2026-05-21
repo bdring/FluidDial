@@ -17,12 +17,13 @@ struct SysItem {
 };
 
 static const SysItem items[] = {
-    { "Restart",  ""                  },
+    { "Restart",    ""                   },
 #ifdef USE_M5
-    { "Sleep",    "Press red to wake" },
-    { "Brightness", "Turn to adjust"  },
+    { "Sleep",      "Press red to wake"  },
+    { "Brightness", ""     },
 #else
-    { "Display",  "Adjust orientation" },
+    { "Display",    "Adjust orientation" },
+    { "Brightness", ""     },
 #endif
 };
 static const int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
@@ -30,9 +31,9 @@ static const int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
 static constexpr int ITEM_H_ROUND     = 48;
 static constexpr int ITEM_PITCH_ROUND = 48;
 static constexpr int ITEM_H_CYD       = 48;
-static constexpr int ITEM_PITCH_CYD   = 72;
+static constexpr int ITEM_PITCH_CYD   = 60;
 static constexpr int START_Y_ROUND    = 50;
-static constexpr int START_Y_CYD      = 60;
+static constexpr int START_Y_CYD      = 50;
 
 int SystemScene::itemCount() { return N_ITEMS; }
 
@@ -69,11 +70,9 @@ void SystemScene::activateSelected() {
             activate_scene(&displaySettingsScene);
 #endif
             break;
-#ifdef USE_M5
         case 2:
             activate_scene(&brightnessScene);
             break;
-#endif
     }
 }
 
@@ -125,9 +124,9 @@ void SystemScene::reDisplay() {
     if (!round_display) {
         int mv = battery_millivolts();
         if (mv > 0) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Battery: %d.%02d V", mv / 1000, (mv % 1000) / 10);
-            centered_text(buf, 210, LIGHTGREY, TINY);
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d.%02d V", mv / 1000, (mv % 1000) / 10);
+            centered_text(buf, 36, DARKGREY, TINY);
         }
     }
 #endif
