@@ -247,6 +247,9 @@ void init_resistive_cyd() {
     red_button_pin   = GPIO_NUM_4;   // RGB LED Red
     dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
     green_button_pin = GPIO_NUM_16;  // RGB LED Green
+    pinMode(red_button_pin, INPUT_PULLUP);
+    pinMode(dial_button_pin, INPUT_PULLUP);
+    pinMode(green_button_pin, INPUT_PULLUP);
 #    else
     red_button_pin = dial_button_pin = green_button_pin = -1;
 #    endif
