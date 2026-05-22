@@ -33,8 +33,10 @@ private:
     // MPG jog rate-limiting: accumulate encoder ticks and send at most one
     // jog command per MPG_INTERVAL_MS to avoid flooding FluidNC's planner queue.
     static const uint32_t MPG_INTERVAL_MS = 30;
-    int      _mpg_accum   = 0;
-    uint32_t _last_mpg_ms = 0;
+    static const uint32_t MPG_STOP_MS     = 280;
+    int      _mpg_accum      = 0;
+    uint32_t _last_mpg_ms    = 0;
+    uint32_t _last_mpg_tick_ms = 0;
 
 public:
     MultiJogScene() : Scene("Jog", 4, jog_help_text) {}
@@ -235,6 +237,9 @@ public:
             _continuous = false;
             _cancelling = true;
         }
+        _mpg_accum = 0;
+        _last_mpg_ms = 0;
+        _last_mpg_tick_ms = 0;
     }
     void next_axis() {
         int the_axis = the_selected_axis();
@@ -423,12 +428,12 @@ public:
         cancel_jog();
     }
 
-    void flush_mpg() {
+    void flush_mpg(bool force = false) {
         if (_mpg_accum == 0) {
             return;
         }
         uint32_t now = millis();
-        if ((now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
+        if (force || (now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
             start_mpg_jog(_mpg_accum);
             _mpg_accum   = 0;
             _last_mpg_ms = now;
@@ -437,11 +442,22 @@ public:
 
     void onEncoder(int delta) {
         _mpg_accum += delta;
+        _last_mpg_tick_ms = millis();
         flush_mpg();
     }
 
     void onPoll() override {
         flush_mpg();
+        if (state == Jog && !_continuous && _last_mpg_tick_ms != 0) {
+            uint32_t now = millis();
+            if ((now - _last_mpg_tick_ms) >= MPG_STOP_MS) {
+                flush_mpg(true);
+                if (_mpg_accum == 0) {
+                    cancel_jog();
+                    _last_mpg_tick_ms = 0;
+                }
+            }
+        }
     }
 
     void onDROChange() {

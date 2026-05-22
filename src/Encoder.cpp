@@ -19,10 +19,11 @@ static const DRAM_ATTR int8_t quadrature_lut[16] = {
     0, 1, -1, 0,
 };
 
-static int              encoder_a_pin = -1;
-static int              encoder_b_pin = -1;
-static volatile int32_t encoder_count = 0;
-static volatile uint8_t encoder_state = 0;
+static int               encoder_a_pin         = -1;
+static int               encoder_b_pin         = -1;
+static volatile int32_t  encoder_count         = 0;
+static volatile uint8_t  encoder_state         = 0;
+static volatile uint32_t encoder_last_event_us = 0;
 
 static uint8_t IRAM_ATTR read_encoder_state_isr() {
     return (digitalRead(encoder_a_pin) << 1) | digitalRead(encoder_b_pin);
@@ -30,7 +31,11 @@ static uint8_t IRAM_ATTR read_encoder_state_isr() {
 
 static void IRAM_ATTR encoder_isr() {
     uint8_t next_state = read_encoder_state_isr();
-    encoder_count += quadrature_lut[(encoder_state << 2) | next_state];
+    int8_t  step       = quadrature_lut[(encoder_state << 2) | next_state];
+    if (step) {
+        encoder_count += step;
+        encoder_last_event_us = micros();
+    }
     encoder_state = next_state;
 }
 #else
@@ -92,6 +97,11 @@ int16_t get_encoder() {
     pcnt_get_counter_value(PCNT_UNIT_0, &count);
     return count;
 }
+
+uint32_t encoder_event_us() {
+    // PCNT has no per-pulse ISR; fall back to call time.
+    return micros();
+}
 #else
 void init_encoder(int a_pin, int b_pin) {
     encoder_a_pin = a_pin;
@@ -109,5 +119,9 @@ void init_encoder(int a_pin, int b_pin) {
 
 int16_t get_encoder() {
     return (int16_t)encoder_count;
+}
+
+uint32_t encoder_event_us() {
+    return encoder_last_event_us;
 }
 #endif
