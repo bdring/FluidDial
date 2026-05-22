@@ -39,6 +39,11 @@ void DisplaySettingsScene::onRedButtonPress() {
     activate_scene(&systemScene);
 }
 
+void DisplaySettingsScene::onGreenButtonPress() {
+    next_layout(1);
+    reDisplay();
+}
+
 void DisplaySettingsScene::reDisplay() {
     background();
     drawMenuTitle("Display");
@@ -54,9 +59,9 @@ void DisplaySettingsScene::reDisplay() {
                            : "Unknown";
     centered_text(name, 100, WHITE, SMALL);
 
-    centered_text("Turn dial to rotate", 140, LIGHTGREY, TINY);
+    centered_text("Turn dial or press green", 140, LIGHTGREY, TINY);
 
-    drawButtonLegends("Back", "", "");
+    drawButtonLegends("Back", "Rotate", "");
     refreshDisplay();
 }
 

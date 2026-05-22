@@ -12,6 +12,7 @@ public:
     void onEncoder(int delta) override;
     void onDialButtonPress() override;
     void onRedButtonPress() override;
+    void onGreenButtonPress() override;
     void reDisplay() override;
 };
 
