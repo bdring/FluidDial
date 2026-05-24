@@ -241,6 +241,8 @@ void init_resistive_cyd() {
 
     setBacklightPin(GPIO_NUM_21);
 
+    pinMode(lockout_pin, INPUT);
+
     enc_a = GPIO_NUM_22;
     enc_b = GPIO_NUM_27;
 #    ifdef CYD_BUTTONS
@@ -657,6 +659,12 @@ int battery_level() {
         return cached_level;
     }
 
+    // Skip EMA when charger is connected
+    if (millivolts > 4250) {
+        cached_level = 100;
+        return cached_level;
+    }
+
     // Exponential moving average (alpha=0.25)
     smoothed_mv = (smoothed_mv < 3000) ? millivolts : (smoothed_mv * 3 + millivolts) / 4;
     millivolts  = smoothed_mv;
@@ -666,16 +674,10 @@ int battery_level() {
         int pct;
     };
     static constexpr LevelPoint curve[] = {
-        { 4200, 100 },
-        { 4100, 90 },
-        { 4000, 80 },
-        { 3930, 70 },
-        { 3860, 60 },
-        { 3800, 50 },
-        { 3750, 40 },
-        { 3700, 30 },
-        { 3650, 20 },
-        { 3550, 10 },
+        { 4050, 100 },
+        { 3800, 75 },
+        { 3700, 50 },
+        { 3600, 25 },
         { 3300, 0 },
     };
 
@@ -703,9 +705,12 @@ bool battery_charging() {
 #ifndef CYD_BATTERY_ADC
     return false;
 #else
-    static int cached = -1;
-    if (cached < 0) {
-        cached = (battery_millivolts() > 4250) ? 1 : 0;
+    static int      cached       = -1;
+    static uint32_t next_read_ms = 0;
+    uint32_t        now          = millis();
+    if (cached < 0 || now >= next_read_ms) {
+        cached       = (battery_millivolts() > 4250) ? 1 : 0;
+        next_read_ms = now + 1000;
     }
     return cached == 1;
 #endif

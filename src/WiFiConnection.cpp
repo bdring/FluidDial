@@ -20,6 +20,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
+#include <atomic>
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -107,7 +108,7 @@ static void start_dns_resolve() {
     _dns_ok        = false;
     _dns_resolving = true;
     dbg_printf("Resolving hostname (async): %s\n", _active_cfg.fluidnc_ip);
-    BaseType_t task_created = xTaskCreate(dnsResolveTask, "dns_resolve", 4096, nullptr, 1, nullptr);
+    BaseType_t task_created = xTaskCreate(dnsResolveTask, "dns_resolve", 8192, nullptr, 1, nullptr);
     if (task_created != pdPASS) {
         _dns_resolving = false;
         _wifi_error_msg = "DNS resolve task start failed";
@@ -361,7 +362,17 @@ function doScan(){
   btn.disabled=true; btn.textContent='Scanning...';
   st.textContent='Scanning for networks, please wait...';
   lst.style.display='none';
-  fetch('/scan').then(function(r){return r.json();}).then(function(nets){
+  pollScan();
+}
+function pollScan(){
+  fetch('/scan').then(function(r){
+    if(r.status===202){setTimeout(pollScan,1500);return null;}
+    return r.json();
+  }).then(function(nets){
+    if(!nets)return;
+    var lst=document.getElementById('netList');
+    var st=document.getElementById('scanStatus');
+    var btn=document.getElementById('scanBtn');
     lst.innerHTML='<option value="">-- select a network --</option>';
     nets.sort(function(a,b){return b.rssi-a.rssi;});
     nets.forEach(function(n){
@@ -374,8 +385,9 @@ function doScan(){
     st.textContent=nets.length+' network'+(nets.length!==1?'s':'')+' found.';
     btn.disabled=false; btn.textContent='Scan';
   }).catch(function(){
-    st.textContent='Scan failed. Try again.';
-    btn.disabled=false; btn.textContent='Scan';
+    document.getElementById('scanStatus').textContent='Scan failed. Try again.';
+    document.getElementById('scanBtn').disabled=false;
+    document.getElementById('scanBtn').textContent='Scan';
   });
 }
 function pickNet(sel){
@@ -468,12 +480,24 @@ static void handleSave() {
 }
 
 static void handleScan() {
-    int n = WiFi.scanNetworks(false, false);  // blocking, no hidden networks
+    int n = WiFi.scanComplete();
+
+    if (n == WIFI_SCAN_RUNNING) {
+        httpServer.sendHeader("Cache-Control", "no-cache");
+        httpServer.send(202, "application/json", "[]");
+        return;
+    }
+
+    if (n == WIFI_SCAN_FAILED || n < 0) {
+        WiFi.scanNetworks(true, false);
+        httpServer.sendHeader("Cache-Control", "no-cache");
+        httpServer.send(202, "application/json", "[]");
+        return;
+    }
 
     String json = "[";
     for (int i = 0; i < n && i < 32; i++) {
         if (i > 0) json += ",";
-        // Escape backslashes and double-quotes to produce valid JSON.
         String ssid = WiFi.SSID(i);
         String safe;
         safe.reserve(ssid.length());
@@ -838,6 +862,9 @@ void wifi_poll() {
         dbg_printf("WiFi connected — IP: %s\n",
                    WiFi.localIP().toString().c_str());
         // Initialise mDNS so ".local" names resolve via the lwIP mDNS resolver.
+        // Always call end() first — if WiFi reconnects (signal drop, router reboot,
+        // etc.) without end(), each begin() leaks heap and a task, eventually crashing.
+        MDNS.end();
         if (!MDNS.begin("fluiddial")) {
             dbg_println("mDNS init failed — .local hostnames may not resolve");
         }
@@ -859,6 +886,7 @@ void wifi_poll() {
         }
         _dns_done     = false;  // discard any in-flight DNS result
         _ws_connected = false;
+        MDNS.end();
         set_disconnected_state();
         dbg_println("WiFi lost");
     }
@@ -867,12 +895,15 @@ void wifi_poll() {
     // Handle async DNS completion (hostname -> IP resolution).
     // Only act if WiFi is still up and the WebSocket hasn't already started.
     if (_dns_done && !_ws_started && now_connected) {
+        std::atomic_thread_fence(std::memory_order_acquire);
         bool ok = _dns_ok;
         _dns_done = false;
         if (ok) {
+            char resolved_host[sizeof(_dns_result_str)];
+            memcpy(resolved_host, _dns_result_str, sizeof(resolved_host));
             dbg_printf("Hostname resolved: %s -> %s\n",
-                       _active_cfg.fluidnc_ip, _dns_result_str);
-            ws_begin(_dns_result_str);
+                       _active_cfg.fluidnc_ip, resolved_host);
+            ws_begin(resolved_host);
         } else {
             dbg_printf("Hostname resolution failed: %s — retrying in %d ms\n",
                        _active_cfg.fluidnc_ip, DNS_RETRY_DELAY_MS);

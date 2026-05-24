@@ -351,15 +351,29 @@ void drawBatteryLevel(int x0, int y_bot) {
     constexpr int NW = 4;
     constexpr int NH = 7;
 
-    bool charging  = battery_charging();
-    int  fill_color = charging ? BLACK : (level > 50) ? GREEN : (level > 20) ? YELLOW : RED;
+    bool charging = battery_charging();
+
+    int fill_w, fill_color;
+    if (level >= 75) {
+        fill_w = W - 2;
+        fill_color = GREEN;
+    } else if (level >= 50) {
+        fill_w = (W - 2) / 2;
+        fill_color = GREEN;
+    } else if (level >= 25) {
+        fill_w = (W - 2) / 4;
+        fill_color = YELLOW;
+    } else {
+        fill_w = 2;
+        fill_color = RED;
+    }
+    if (charging) fill_color = BLACK;
 
     // Body outline and nub
     canvas.drawRect(x0, y_bot - H, W, H, WHITE);
     canvas.fillRect(x0 + W, y_bot - (H + NH) / 2, NW, NH, WHITE);
 
     // Level fill
-    int fill_w = (level * (W - 2)) / 100;
     if (fill_w > 0) {
         canvas.fillRect(x0 + 1, y_bot - H + 1, fill_w, H - 2, fill_color);
     }
