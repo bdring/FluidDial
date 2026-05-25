@@ -7,6 +7,7 @@
 #include <map>
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
+#    include "PeerLink.h"
 #endif
 
 void drawBackground(int color) {
@@ -123,12 +124,20 @@ void drawStatus() {
 
 #ifdef USE_WIFI
     if (state == Disconnected && !wifi_use_uart_mode()) {
-        // Show WiFi connection progress instead of a plain "N/C" badge.
         // Not shown in UART mode — fall through to the standard N/C display.
         int         bgColor;
         const char* line1;
         const char* line2;
-        if (wifi_in_ap_mode()) {
+        if (wifi_use_espnow_mode()) {
+            bgColor = 0x1a001a;
+            line1   = "ESP-NOW";
+            if (espnow_is_reconnecting()) {
+                static const char* rc[] = { "Searching", "Searching.", "Searching..", "Searching..." };
+                line2 = rc[(millis() / 400) % 4];
+            } else {
+                line2 = espnow_is_paired() ? "Lost Signal" : "Not Paired";
+            }
+        } else if (wifi_in_ap_mode()) {
             bgColor = 0x8400;       // dark orange
             line1   = "AP Setup";
             line2   = "192.168.4.1";
@@ -180,15 +189,22 @@ void drawStatusSmall(int y) {
 
 #ifdef USE_WIFI
     if (state == Disconnected && !wifi_use_uart_mode()) {
-        // Show WiFi connection progress in the compact badge.
         // Not shown in UART mode — fall through to the standard N/C display.
         int         bgColor;
         const char* label;
-        if (wifi_in_ap_mode()) {
-            bgColor = 0x8400;   // dark orange
+        if (wifi_use_espnow_mode()) {
+            bgColor = 0x1a001a;
+            if (espnow_is_reconnecting()) {
+                static const char* rc[] = { "Searching", "Search.", "Search..", "Search..." };
+                label = rc[(millis() / 400) % 4];
+            } else {
+                label = espnow_is_paired() ? "ESP-NOW" : "Unpaired";
+            }
+        } else if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;    // dark orange
             label   = "AP Mode";
         } else if (wifi_is_connected()) {
-            bgColor = YELLOW;   // WiFi up, WebSocket still connecting
+            bgColor = YELLOW;    // WiFi up, WebSocket still connecting
             static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
             label   = nc_frames[(millis() / 400) % 4];
         } else {
@@ -324,18 +340,26 @@ void drawMenuTitle(const char* name) {
 }
 
 #ifdef USE_WIFI
-// Draw a 4-bar WiFi signal indicator at the given position.
 void drawWiFiSignalBars(int x0, int y_bot) {
-    if (!wifi_is_connected()) return;   // No indicator while scanning / AP mode
+    int bars;
+    int bar_color;
 
-    int bars = wifi_signal_bars();      // 0–4
+    if (wifi_use_espnow_mode()) {
+        bars      = espnow_signal_bars();
+        bar_color = 0xcc66ff;
+        if (bars == 0) return;
+    } else {
+        if (!wifi_is_connected()) return;
+        bars      = wifi_signal_bars();
+        bar_color = GREEN;
+    }
 
-    static constexpr int W   = 3;                   // bar width  (px)
-    static constexpr int GAP = 2;                   // gap between bars (px)
+    static constexpr int W   = 3;
+    static constexpr int GAP = 2;
     static const     int H[] = { 4, 7, 10, 13 };   // heights: weak → strong
 
     for (int i = 0; i < 4; i++) {
-        int color = (i < bars) ? GREEN : DARKGREY;
+        int color = (i < bars) ? bar_color : DARKGREY;
         canvas.fillRect(x0 + i * (W + GAP), y_bot - H[i], W, H[i], color);
     }
 }

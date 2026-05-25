@@ -12,6 +12,7 @@
 #include "NVS.h"
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
+#    include "PeerLink.h"
 #endif
 
 #include <fcntl.h>
@@ -320,7 +321,29 @@ const char* wifi_last_error()              { return nullptr; }
 WiFiConfig  wifi_active_config()           { return _preview_cfg; }
 void        ws_putchar(uint8_t)            {}
 int         ws_getchar()                   { return -1; }
-bool        wifi_use_uart_mode()           { return false; }
-void        wifi_set_uart_mode(bool)       {}
-bool        wifi_is_first_boot()           { return false; }
+bool          wifi_use_uart_mode()            { return false; }
+void          wifi_set_uart_mode(bool)        {}
+bool          wifi_is_first_boot()            { return false; }
+TransportMode wifi_get_transport()            { return TransportMode::WIFI; }
+void          wifi_set_transport(TransportMode) {}
+bool          wifi_use_espnow_mode()          { return false; }
+
+// ESP-NOW stubs
+void        espnow_init()                  {}
+void        espnow_poll()                  {}
+void        espnow_putchar(uint8_t)        {}
+int         espnow_getchar()               { return -1; }
+bool        espnow_is_paired()             { return true; }
+bool        espnow_is_connected()          { return true; }
+const char* espnow_status_str()            { return "Simulated"; }
+const char* espnow_start_pairing()         { return "000000"; }
+void        espnow_cancel_pairing()        {}
+bool        espnow_pairing_complete()      { return false; }
+const char* espnow_pairing_code()         { return "000000"; }
+uint32_t    espnow_code_remaining_ms()     { return 30000; }
+void        espnow_clear_pairing()         {}
+bool        espnow_has_saved_pairing()     { return true; }
+bool        espnow_is_reconnecting()       { return false; }
+int8_t      espnow_rssi()                  { return 0; }
+int         espnow_signal_bars()           { return 3; }
 #endif  // USE_WIFI

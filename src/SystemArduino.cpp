@@ -11,6 +11,7 @@
 
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
+#    include "PeerLink.h"
 #endif
 
 // ── UART transport ─────────────────────────────────────────────────────────────
@@ -54,13 +55,14 @@ static int uart_getchar_impl() {
 }
 
 #ifdef USE_WIFI
-// ── Routing: dispatch fnc_putchar/fnc_getchar to WiFi or UART ────────────────
 extern "C" void fnc_putchar(uint8_t c) {
-    if (wifi_use_uart_mode()) uart_putchar_impl(c);
-    else ws_putchar(c);
+    if (wifi_use_uart_mode())   { uart_putchar_impl(c); return; }
+    if (wifi_use_espnow_mode()) { espnow_putchar(c);    return; }
+    ws_putchar(c);
 }
 extern "C" int fnc_getchar() {
-    if (wifi_use_uart_mode()) return uart_getchar_impl();
+    if (wifi_use_uart_mode())   return uart_getchar_impl();
+    if (wifi_use_espnow_mode()) return espnow_getchar();
     return ws_getchar();
 }
 #else
@@ -69,13 +71,13 @@ extern "C" void fnc_putchar(uint8_t c) { uart_putchar_impl(c); }
 extern "C" int  fnc_getchar()          { return uart_getchar_impl(); }
 #endif
 
-// poll_extra: called by fnc_poll() inside fnc_send_line()'s blocking wait loop.
-// In WiFi mode this MUST drive the WebSocket so that the "ok" response from
-// FluidNC can arrive in _rx_buf — otherwise fnc_send_line() blocks for the
-// full 2000 ms timeout on every second jog command, causing the stall.
 extern "C" void poll_extra() {
 #ifdef USE_WIFI
-    wifi_poll();
+    if (wifi_use_espnow_mode()) {
+        espnow_poll();
+    } else {
+        wifi_poll();
+    }
 #endif
 #ifdef DEBUG_TO_USB
     if (debugPort.available()) {
@@ -154,7 +156,7 @@ void init_system() {
 }
 void resetFlowControl() {
 #ifdef USE_WIFI
-    if (!wifi_use_uart_mode()) return;  // no-op over WebSocket
+    if (!wifi_use_uart_mode()) return;
 #endif
     fnc_putchar(0x11);
     uart_ll_force_xon(fnc_uart_port);

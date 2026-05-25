@@ -18,7 +18,6 @@ public:
     void reDisplay() override;
 
 private:
-    void switchModeAndRestart();
     void onModeSwitchButtonPress();
     void drawSettingsView();
     void drawApView();

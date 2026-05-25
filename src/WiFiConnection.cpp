@@ -215,26 +215,40 @@ int ws_getchar() {
 
 // ─── Runtime transport mode ───────────────────────────────────────────────────
 
-static int _uart_mode_cached = -1;  // -1 = not yet read from NVS
+static int _transport_cached = -1;  // -1 = not yet loaded from NVS
 
-bool wifi_use_uart_mode() {
-    if (_uart_mode_cached < 0) {
-        Preferences prefs;
-        prefs.begin(PREF_NAMESPACE, false);  // read-write ensures namespace exists
-        _uart_mode_cached = prefs.getBool("uart_mode", false) ? 1 : 0;
-        prefs.end();
-    }
-    return _uart_mode_cached == 1;
-}
+TransportMode wifi_get_transport() {
+    if (_transport_cached >= 0) return (TransportMode)_transport_cached;
 
-void wifi_set_uart_mode(bool uart) {
     Preferences prefs;
     prefs.begin(PREF_NAMESPACE, false);
-    prefs.putBool("uart_mode",   uart);
-    prefs.putBool("setup_done",  true);  // clears first-boot flag
+
+    if (prefs.isKey("transport")) {
+        _transport_cached = (int)prefs.getUChar("transport", (uint8_t)TransportMode::WIFI);
+    } else {
+        bool uart = prefs.getBool("uart_mode", false);
+        _transport_cached = uart ? (int)TransportMode::UART : (int)TransportMode::WIFI;
+    }
     prefs.end();
-    _uart_mode_cached = uart ? 1 : 0;
-    dbg_printf("Transport mode set to: %s\n", uart ? "UART" : "WiFi");
+    return (TransportMode)_transport_cached;
+}
+
+void wifi_set_transport(TransportMode mode) {
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.putUChar("transport",  (uint8_t)mode);
+    prefs.putBool("setup_done", true);  // clears first-boot flag
+    prefs.end();
+    _transport_cached = (int)mode;
+    const char* names[] = {"UART", "WiFi", "ESP-NOW"};
+    dbg_printf("Transport mode set to: %s\n", names[(int)mode < 3 ? (int)mode : 1]);
+}
+
+bool wifi_use_uart_mode()   { return wifi_get_transport() == TransportMode::UART; }
+bool wifi_use_espnow_mode() { return wifi_get_transport() == TransportMode::ESPNOW; }
+
+void wifi_set_uart_mode(bool uart) {
+    wifi_set_transport(uart ? TransportMode::UART : TransportMode::WIFI);
 }
 
 bool wifi_is_first_boot() {
@@ -653,6 +667,7 @@ const char* wifi_ap_ssid() {
 
 const char* wifi_status_str() {
     if (wifi_use_uart_mode())   return "UART Mode";
+    if (wifi_use_espnow_mode()) return "ESP-NOW Mode";
     if (_ap_mode)               return "AP Setup Mode";
     if (!wifi_is_connected())   return "Connecting to WiFi";
     if (!_ws_connected)         return "Connecting to FluidNC";
@@ -691,8 +706,13 @@ static void onWiFiDisconnect(WiFiEvent_t event, WiFiEventInfo_t info) {
 }
 
 void wifi_init(bool auto_ap) {
-    if (wifi_use_uart_mode()) {
+    TransportMode transport = wifi_get_transport();
+    if (transport == TransportMode::UART) {
         dbg_println("Transport: UART mode — WiFi stack not started");
+        return;
+    }
+    if (transport == TransportMode::ESPNOW) {
+        dbg_println("Transport: ESP-NOW mode — WebSocket stack not started");
         return;
     }
     if (wifi_is_first_boot()) {
@@ -746,8 +766,9 @@ void wifi_init(bool auto_ap) {
 }
 
 void wifi_poll() {
-    if (!_wifi_stack_started) return;  // wifi_init() never ran (first boot or UART mode)
-    if (wifi_use_uart_mode()) return;
+    if (!_wifi_stack_started) return;  // wifi_init() never ran (first boot or UART/ESP-NOW mode)
+    if (wifi_use_uart_mode())   return;
+    if (wifi_use_espnow_mode()) return;
 
     if (_ap_mode) {
         dnsServer.processNextRequest();
