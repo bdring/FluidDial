@@ -2,7 +2,7 @@
 
 This is my implementation of ESP-NOW for the FluidDial. ESP-NOW is a new, optional connection mode for FluidDial that lets the pendant communicate directly with your FluidNC controller over a peer-to-peer encrypted radio link - no router, no WiFi network, no IP address required.
 
-> **Flash the firmware:** Use the **[ESP-NOW Preview Installer](https://figamore.github.io/FluidDial)** to flash this experimental build onto your M5Dial or CYD pendant.
+> **Flash the firmware:** Use the **[ESP-NOW Preview Installer](https://figamore.github.io/FluidDial)** to flash this experimental build onto your M5Dial or CYD pendant, as well as your FluidNC ESP32.
 
 ---
 
@@ -20,9 +20,9 @@ This feature was added in response to user interest in a simpler, potentially mo
 
 ESP-NOW uses the ESP32's built-in peer-to-peer radio protocol. After a one-time pairing step, the pendant and the FluidNC controller communicate directly by MAC address using hardware AES-128 encryption - no IP address, no router, no WebSocket.
 
-Pairing uses a **8-digit numeric code**: the pendant displays a countdown screen while broadcasting a discovery beacon. FluidNC matches the code, derives the encryption key, and completes the handshake. Once paired, the credentials are stored in NVS on both sides and pairing does not need to be repeated.
+Pairing uses a **8-digit numeric code**: FluidNC matches the code, derives the encryption key, and completes the handshake. Once paired, the credentials are stored in NVS on both sides and pairing does not need to be repeated.
 
-<img src="images/espNowPairingScene.png" width="240" alt="ESP-NOW pairing screen showing 8-digit code and countdown">
+<img src="images/espNowPairingScene.png" width="240" alt="ESP-NOW pairing screen showing 8-digit code">
 
 ---
 
