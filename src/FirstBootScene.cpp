@@ -85,13 +85,13 @@ public:
         int wifi_y   = round_display ? WIFI_BTN_Y   - 4  : WIFI_BTN_Y;
         int espnow_y = round_display ? ESPNOW_BTN_Y - 12 : ESPNOW_BTN_Y;
 
-        uartBtn.set(BTN_X, uart_y, BTN_W, BTN_H, "Wired (UART)",
+        uartBtn.set(BTN_X, uart_y, BTN_W, BTN_H, "Wired",
                     0x001a4d, 0x4da6ff, 0x4da6ff, [this]() { onUartPress(); });
 
         wifiBtn.set(BTN_X, wifi_y, BTN_W, BTN_H, "WiFi",
                     0x003300, 0x66ff66, 0x66ff66, [this]() { onWifiPress(); });
 
-        espnowBtn.set(BTN_X, espnow_y, BTN_W, BTN_H, "ESP-NOW (no router)",
+        espnowBtn.set(BTN_X, espnow_y, BTN_W, BTN_H, "ESP-NOW",
                       0x1a0033, 0xcc66ff, 0xcc66ff, [this]() { onEspNowPress(); });
 
         if (!round_display) {

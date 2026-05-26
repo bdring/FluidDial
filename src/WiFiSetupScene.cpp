@@ -1,7 +1,4 @@
 // 2026 - Figamore
-// Use of this source code is governed by a GPLv3 license.
-//
-// Shows connection status and offers AP-mode setup.
 
 #ifdef USE_WIFI
 
@@ -23,7 +20,7 @@ extern const char* git_info;
 
 static constexpr int BX = 20, BY = 28, BW = 200, BH = 34;       // status badge
 static constexpr int CX = 15, CW = 210, CH = 28, CI = 8;        // info cards
-static constexpr int SBX = 20, SBY = 160, SBW = 200, SBH = 36;  // switch button
+static constexpr int SBX = 12, SBY = 160, SBW = 216, SBH = 36;  // switch button
 
 static constexpr int CARD_Y0    = 68;
 static constexpr int CARD_PITCH = CH + 4;  // 32 px per card row
@@ -236,15 +233,10 @@ void WiFiSetupScene::drawSettingsView() {
         } else if (espnow_is_reconnecting()) {
             centered_text("Connection lost", y, YELLOW, TINY);
             y += 18;
-            centered_text("Scanning channels...", y, 0xcc66ff, TINY);
-            y += (round_display ? 14 : 20);
-            centered_text("Will reconnect automatically", y, DARKGREY, TINY);
+            centered_text("Scanning...", y, 0xcc66ff, TINY);
         } else {
-            centered_text("Direct wireless", y, DARKGREY, TINY);
             y += 18;
-            centered_text("No router needed", y, WHITE, TINY);
             y += (round_display ? 14 : 20);
-            drawRect(40, y, 160, 1, 0, DARKGREY);
             y += 14;
             if (espnow_is_connected()) {
                 int8_t rssi = espnow_rssi();
@@ -293,8 +285,8 @@ void WiFiSetupScene::drawSettingsView() {
         int sbw = round_display ? 160 : SBW;
         int sby = round_display ? SBY : SBY + 6;
         modeSwitchBtn.font = round_display ? TINY : SMALL;
-        modeSwitchBtn.set(sbx, sby, sbw, SBH, "Change Transport",
-                          0x1a1a1a, 0x888888, WHITE,
+        modeSwitchBtn.set(sbx, sby, sbw, SBH, "Switch Mode",
+                          0x001a4d, 0x4da6ff, 0x4da6ff,
                           [this]() { onModeSwitchButtonPress(); });
     }
 

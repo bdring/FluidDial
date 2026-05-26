@@ -101,7 +101,7 @@ void TransportScene::reDisplay() {
         bool active = (kItems[i].mode == cur);
 
         if (sel) {
-            drawOutlinedRect(bx, y - 2, bw, ITEM_H, kItems[i].fill, kItems[i].outline);
+            drawOutlinedRect(bx, y - 5, bw, ITEM_H, kItems[i].fill, kItems[i].outline);
         }
 
         if (active) {

@@ -84,7 +84,9 @@ void setup() {
 #endif
 
     // For debugging certain views without setting WiFi/UART transports
-#ifdef DEV_SKIP_TO_SCENE
+#if defined(DEV_SKIP_TO_ESPNOW_PAIRING) && defined(USE_WIFI)
+    activate_scene(&espnowPairingScene);
+#elif defined(DEV_SKIP_TO_SCENE)
     extern Scene DEV_SKIP_TO_SCENE;
     activate_scene(&DEV_SKIP_TO_SCENE);
 #elif defined(USE_WIFI)
