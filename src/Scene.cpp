@@ -194,6 +194,7 @@ void dispatch_events() {
 #endif
             extern Scene menuScene;
             activate_at_top_level(&menuScene);
+            fnc_realtime(StatusReport);
         }
     }
     if (action) {

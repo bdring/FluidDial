@@ -336,10 +336,10 @@ int         espnow_getchar()               { return -1; }
 bool        espnow_is_paired()             { return true; }
 bool        espnow_is_connected()          { return true; }
 const char* espnow_status_str()            { return "Simulated"; }
-const char* espnow_start_pairing()         { return "000000"; }
+const char* espnow_start_pairing()         { return "00000000"; }
 void        espnow_cancel_pairing()        {}
 bool        espnow_pairing_complete()      { return false; }
-const char* espnow_pairing_code()         { return "000000"; }
+const char* espnow_pairing_code()         { return "00000000"; }
 uint32_t    espnow_code_remaining_ms()     { return 30000; }
 void        espnow_clear_pairing()         {}
 bool        espnow_has_saved_pairing()     { return true; }

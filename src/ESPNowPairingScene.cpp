@@ -11,6 +11,7 @@
 #    include <stdio.h>
 
 extern Scene menuScene;
+extern Scene firstBootScene;
 
 int         badge_fill;
 int         badge_outline;
@@ -25,7 +26,8 @@ static void draw_code(const char* code) {
     }
 }
 
-void ESPNowPairingScene::onEntry(void* /*arg*/) {
+void ESPNowPairingScene::onEntry(void* arg) {
+    _fallback = arg ? static_cast<Scene*>(arg) : &firstBootScene;
     set_disconnected_state();
     espnow_start_pairing();
     reDisplay();
@@ -39,7 +41,11 @@ void ESPNowPairingScene::onExit() {
 
 void ESPNowPairingScene::onRedButtonPress() {
     espnow_cancel_pairing();
-    pop_scene();
+    if (parent_scene()) {
+        pop_scene();
+    } else {
+        activate_at_top_level(_fallback);
+    }
 }
 
 void ESPNowPairingScene::onPoll() {
@@ -82,7 +88,7 @@ void ESPNowPairingScene::reDisplay() {
         drawOutlinedRect(BX-8, 132, BW+12, 40, BLACK, badge_outline);
         text("espnow:", 50, 144, 0x4da6ff, TINY);
 
-        char hint[24];
+        char hint[28];
         snprintf(hint, sizeof(hint), "  pair_code: %s", code);
         centered_text(hint, 158, 0x4da6ff, TINY);
     } else {
@@ -92,12 +98,12 @@ void ESPNowPairingScene::reDisplay() {
         drawOutlinedRect(BX-10, 166, BW+18, 40, BLACK, badge_outline);
         text("espnow:", 50, 176, 0x4da6ff, TINY);
 
-        char hint[24];
+        char hint[28];
         snprintf(hint, sizeof(hint), "  pair_code: %s", code);
         centered_text(hint, 194, 0x4da6ff, TINY);
     }
 
-    drawButtonLegends("Cancel", "", "");
+    drawButtonLegends("Back", "", "");
     refreshDisplay();
 }
 

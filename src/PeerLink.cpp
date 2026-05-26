@@ -11,23 +11,26 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_efuse.h>
 #include <Preferences.h>
 #include <mbedtls/sha256.h>
 #include <string.h>
 #include <stdio.h>
+#include <atomic>
 
-#define PREF_NAMESPACE       "fluidwifi"
-#define ESPNOW_PAIR_CHANNEL  1
-#define BEACON_INTERVAL_MS   2000
-#define CODE_LIFETIME_MS     60000
-#define CONNECT_TIMEOUT_MS   5000
-#define KEEPALIVE_INTERVAL_MS 2000
-#define RECONNECT_PROBE_MS   1000
-#define RX_BUF_SIZE          2048
-#define TX_BUF_SIZE          512
-#define MAX_FRAGS            8
-#define FRAG_HEADER_SIZE     4
-#define FRAG_PAYLOAD_MAX     (250 - FRAG_HEADER_SIZE)  // 246 bytes
+#define PREF_NAMESPACE             "fluidespnow"
+#define ESPNOW_PAIR_CHANNEL        1
+#define BEACON_INTERVAL_MS         2000
+#define CODE_LIFETIME_MS           60000
+#define CONNECT_TIMEOUT_MS         5000
+#define KEEPALIVE_INTERVAL_MS      2000
+#define RECONNECT_PROBE_MS         1000
+#define RX_BUF_SIZE                2048
+#define TX_BUF_SIZE                512
+#define MAX_FRAGS                  8
+#define FRAG_HEADER_SIZE           4
+#define FRAG_PAYLOAD_MAX           (250 - FRAG_HEADER_SIZE)  // 246 bytes
+#define FRAG_REASSEMBLY_TIMEOUT_MS 3000   // discard stale partial reassembly
 
 #define PKT_DISCOVERY  0x01
 #define PKT_PAIR_ACK   0x02
@@ -37,11 +40,10 @@
 
 static const uint8_t PROBE_ORDER[13] = {6, 11, 1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13};
 
-
 struct __attribute__((packed)) DiscoveryPkt {
     uint8_t  type;          // PKT_DISCOVERY
     uint8_t  mac[6];        // FluidDial MAC
-    uint8_t  code_hash[4];  // SHA-256(code)[0:4]
+    uint8_t  code_hash[4];  // SHA-256(lmk)[0:4]
     uint8_t  channel;       // channel FluidDial is currntly using
 };
 
@@ -49,7 +51,7 @@ struct __attribute__((packed)) PairAckPkt {
     uint8_t  type;       // PKT_PAIR_ACK
     uint8_t  mac[6];     // FluidNC MAC
     uint8_t  channel;    // FluidNC's operational WiFi channel
-    uint32_t timestamp;  // millis() on FluidNC (anti-replay)
+    uint32_t timestamp;  // millis() on FluidNC
 };
 
 struct __attribute__((packed)) FragHeader {
@@ -60,38 +62,42 @@ struct __attribute__((packed)) FragHeader {
 };
 
 
-static uint8_t  _peer_mac[6] = {};
-static uint8_t  _lmk[16]     = {};
-static uint8_t  _op_channel  = ESPNOW_PAIR_CHANNEL;
-static bool     _is_paired   = false;
+static uint8_t          _peer_mac[6]  = {};
+static uint8_t          _lmk[16]      = {};
+static uint8_t          _op_channel   = ESPNOW_PAIR_CHANNEL;
+static volatile bool    _is_paired    = false;
 
+static volatile bool     _is_connected     = false;
+static volatile uint32_t _last_rx_ms       = 0;
+static          uint32_t _keepalive_last_ms = 0;
+static volatile int8_t   _peer_rssi         = 0;
 
-static bool     _is_connected      = false;
-static uint32_t _last_rx_ms        = 0;
-static uint32_t _keepalive_last_ms = 0;
-static volatile int8_t _peer_rssi  = 0;
-
-static bool     _pairing_active   = false;
-static bool     _pairing_complete = false;
-static char     _pairing_code[7]  = {};
-static uint8_t  _pairing_lmk[16] = {};
-static uint32_t _beacon_last_ms   = 0;
-static uint32_t _code_start_ms    = 0;
-static bool     _probe_active     = false;
-static uint8_t  _probe_idx        = 0;
+static volatile bool    _pairing_active   = false;
+static volatile bool    _pairing_complete = false;
+static std::atomic<bool> _pair_ack_pending {false};
+static PairAckPkt       _pair_ack_pending_pkt = {};
+static char             _pairing_code[9]  = {};
+static uint8_t          _pairing_lmk[16] = {};
+static uint32_t         _beacon_last_ms   = 0;
+static uint32_t         _code_start_ms    = 0;
+static bool             _probe_active     = false;
+static uint8_t          _probe_idx        = 0;
 
 static bool     _reconnect_active    = false;
 static uint8_t  _reconnect_probe_idx = 0;
 static uint32_t _reconnect_beacon_ms = 0;
+static uint32_t _reconnect_start_ms  = 0;
 
-static uint8_t  _rx_buf[RX_BUF_SIZE];
-static volatile int _rx_head = 0;
-static int          _rx_tail = 0;
+static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-// TX line buffer
-static uint8_t _tx_buf[TX_BUF_SIZE];
-static int     _tx_len = 0;
-static uint8_t _tx_seq = 0;
+static bool mac_eq(const uint8_t* a, const uint8_t* b) {
+    return a && b && memcmp(a, b, 6) == 0;
+}
+
+
+static uint8_t             _rx_buf[RX_BUF_SIZE];
+static std::atomic<int>    _rx_head {0};
+static int                 _rx_tail = 0;
 
 // Fragment reassembly (recv callback only)
 static uint8_t  _frag_buf[MAX_FRAGS][FRAG_PAYLOAD_MAX];
@@ -100,14 +106,17 @@ static uint8_t  _frag_got;
 static uint8_t  _frag_total;
 static uint8_t  _frag_seq;
 static bool     _frag_pending;
+static uint32_t _frag_start_ms;
 
-static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static uint8_t _tx_buf[TX_BUF_SIZE];
+static int     _tx_len = 0;
+static uint8_t _tx_seq = 0;
 
 static void derive_lmk(const char* code, uint8_t out_lmk[16]) {
-    const char* prefix = "fluiddial-espnow:";
-    uint8_t     input[32];
+    const char* prefix     = "fluiddial-espnow:";
     size_t      prefix_len = strlen(prefix);
     size_t      code_len   = strlen(code);
+    uint8_t     input[48]; // prefix (17) + code (6) + margin
     memcpy(input, prefix, prefix_len);
     memcpy(input + prefix_len, code, code_len);
     uint8_t hash[32];
@@ -115,12 +124,12 @@ static void derive_lmk(const char* code, uint8_t out_lmk[16]) {
     memcpy(out_lmk, hash, 16);
 }
 
-static void derive_device_code(char out[7]) {
+static void derive_device_code(char out[9]) {
     uint8_t mac[6];
-    esp_wifi_get_mac(WIFI_IF_STA, mac);
-    const char* salt = "fluiddial-code-v1:";
-    uint8_t     hash[32];
-    mbedtls_sha256_context ctx;
+    esp_efuse_mac_get_default(mac);
+    const char*             salt = "fluiddial-code-v2:";
+    uint8_t                 hash[32];
+    mbedtls_sha256_context  ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
     mbedtls_sha256_update(&ctx, (const uint8_t*)salt, strlen(salt));
@@ -128,27 +137,9 @@ static void derive_device_code(char out[7]) {
     mbedtls_sha256_finish(&ctx, hash);
     mbedtls_sha256_free(&ctx);
     uint32_t n = ((uint32_t)hash[0] << 24 | (uint32_t)hash[1] << 16 |
-                  (uint32_t)hash[2] << 8  | (uint32_t)hash[3]) % 1000000u;
-    snprintf(out, 7, "%06u", n);
+                  (uint32_t)hash[2] << 8  | (uint32_t)hash[3]) % 100000000u;
+    snprintf(out, 9, "%08u", n);
 }
-
-
-static inline void rx_push(uint8_t c) {
-    int next = (_rx_head + 1) % RX_BUF_SIZE;
-    if (next != _rx_tail) {
-        _rx_buf[_rx_head] = c;
-        _rx_head          = next;
-    }
-}
-
-static inline int rx_pop() {
-    int head = _rx_head;
-    if (head == _rx_tail) return -1;
-    uint8_t c = _rx_buf[_rx_tail];
-    _rx_tail  = (_rx_tail + 1) % RX_BUF_SIZE;
-    return (unsigned char)c;
-}
-
 
 static void register_peer(const uint8_t mac[6], uint8_t channel, bool encrypt, const uint8_t lmk[16]) {
     if (esp_now_is_peer_exist(mac)) {
@@ -169,54 +160,105 @@ static void register_peer(const uint8_t mac[6], uint8_t channel, bool encrypt, c
     }
 }
 
+static inline void rx_push(uint8_t c) {
+    int cur  = _rx_head.load(std::memory_order_relaxed);
+    int next = (cur + 1) % RX_BUF_SIZE;
+    if (next != _rx_tail) {
+        _rx_buf[cur] = c;
+        _rx_head.store(next, std::memory_order_release);
+    }
+}
+
+static inline int rx_pop() {
+    int head = _rx_head.load(std::memory_order_acquire);
+    if (head == _rx_tail) return -1;
+    uint8_t c = _rx_buf[_rx_tail];
+    _rx_tail  = (_rx_tail + 1) % RX_BUF_SIZE;
+    return (unsigned char)c;
+}
+
+static void send_fragments(const uint8_t* data, size_t len) {
+    if (!_is_paired || len == 0) return;
+
+    uint8_t total = (uint8_t)((len + FRAG_PAYLOAD_MAX - 1) / FRAG_PAYLOAD_MAX);
+    if (total == 0) total = 1;
+    if (total > MAX_FRAGS) {
+        dbg_printf("ESP-NOW: TX message %u B exceeds max (%u B) — truncating\n",
+                   (unsigned)len, (unsigned)(MAX_FRAGS * FRAG_PAYLOAD_MAX));
+        total = MAX_FRAGS;
+        len   = MAX_FRAGS * FRAG_PAYLOAD_MAX;
+    }
+
+    uint8_t seq    = _tx_seq++;
+    uint8_t pkt[250];
+    size_t  offset = 0;
+    for (uint8_t i = 0; i < total; i++) {
+        size_t chunk = len - offset;
+        if (chunk > FRAG_PAYLOAD_MAX) chunk = FRAG_PAYLOAD_MAX;
+        pkt[0] = PKT_DATA;
+        pkt[1] = seq;
+        pkt[2] = i;
+        pkt[3] = total;
+        memcpy(pkt + FRAG_HEADER_SIZE, data + offset, chunk);
+        esp_now_send(_peer_mac, pkt, FRAG_HEADER_SIZE + chunk);
+        offset += chunk;
+    }
+}
+
+static void complete_pairing_from_ack(const PairAckPkt& ack) {
+    memcpy(_peer_mac, ack.mac, 6);
+    memcpy(_lmk, _pairing_lmk, 16);
+    _op_channel = (ack.channel > 0 && ack.channel <= 14)
+                  ? ack.channel : ESPNOW_PAIR_CHANNEL;
+
+    register_peer(_peer_mac, _op_channel, true, _lmk);
+    esp_wifi_set_channel(_op_channel, WIFI_SECOND_CHAN_NONE);
+
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.putBytes("espnow_mac", _peer_mac, 6);
+    prefs.putBytes("espnow_lmk", _lmk, 16);
+    prefs.putUChar("espnow_ch",  _op_channel);
+    prefs.end();
+
+    _is_paired        = true;
+    _pairing_complete = true;
+    _pairing_active   = false;
+    _probe_active     = false;
+    _last_rx_ms       = millis();
+    _is_connected     = true;
+
+    dbg_printf("ESP-NOW: pairing complete — peer %02x:%02x:%02x:%02x:%02x:%02x ch=%d\n",
+               _peer_mac[0], _peer_mac[1], _peer_mac[2],
+               _peer_mac[3], _peer_mac[4], _peer_mac[5], _op_channel);
+}
 
 #if ESP_IDF_VERSION_MAJOR >= 5
 static void on_data_recv(const esp_now_recv_info_t* recv_info,
                          const uint8_t* data, int len) {
-    if (_is_paired && recv_info && recv_info->rx_ctrl) {
+    const uint8_t* src = recv_info ? recv_info->src_addr : nullptr;
+    if (_is_paired && mac_eq(src, _peer_mac) && recv_info && recv_info->rx_ctrl) {
         _peer_rssi = (int8_t)recv_info->rx_ctrl->rssi;
     }
 #else
-static void on_data_recv(const uint8_t* /* mac_addr */,
+static void on_data_recv(const uint8_t* src,
                          const uint8_t* data, int len) {
 #endif
     if (len < 1) return;
     uint8_t pkt_type = data[0];
 
+    // pair handshake
     if (pkt_type == PKT_PAIR_ACK && _pairing_active
         && len >= (int)sizeof(PairAckPkt)) {
-        const PairAckPkt* ack = (const PairAckPkt*)data;
-
-        memcpy(_peer_mac, ack->mac, 6);
-        memcpy(_lmk, _pairing_lmk, 16);
-        _op_channel = (ack->channel > 0 && ack->channel <= 14)
-                      ? ack->channel : ESPNOW_PAIR_CHANNEL;
-
-        register_peer(_peer_mac, _op_channel, true, _lmk);
-        esp_wifi_set_channel(_op_channel, WIFI_SECOND_CHAN_NONE);
-
-        Preferences prefs;
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putBytes("espnow_mac", _peer_mac, 6);
-        prefs.putBytes("espnow_lmk", _lmk, 16);
-        prefs.putUChar("espnow_ch",  _op_channel);
-        prefs.end();
-
-        _is_paired        = true;
-        _pairing_complete = true;
-        _pairing_active   = false;
-        _probe_active     = false;
-        _last_rx_ms       = millis();
-        _is_connected     = true;
-
-        dbg_printf("ESP-NOW: pairing complete — peer %02x:%02x:%02x:%02x:%02x:%02x ch=%d\n",
-                   _peer_mac[0], _peer_mac[1], _peer_mac[2],
-                   _peer_mac[3], _peer_mac[4], _peer_mac[5], _op_channel);
+        memcpy(&_pair_ack_pending_pkt, data, sizeof(PairAckPkt));
+        _pair_ack_pending.store(true, std::memory_order_release);
         return;
     }
 
     if (!_is_paired) return;
+    if (!mac_eq(src, _peer_mac)) return;
 
+    // Refresh liveness timestamp on packet rx
     _last_rx_ms   = millis();
     _is_connected = true;
 
@@ -224,6 +266,7 @@ static void on_data_recv(const uint8_t* /* mac_addr */,
         if (len >= 2) {
             _peer_rssi = (int8_t)data[1];
         }
+        update_rx_time();
         return;
     }
 
@@ -235,26 +278,38 @@ static void on_data_recv(const uint8_t* /* mac_addr */,
 
     // DATA FRAG
     if (pkt_type == PKT_DATA && len >= FRAG_HEADER_SIZE) {
-        const FragHeader* hdr  = (const FragHeader*)data;
+        const FragHeader* hdr   = (const FragHeader*)data;
         uint8_t           idx   = hdr->frag_idx;
         uint8_t           total = hdr->total_frags;
         uint8_t           seq   = hdr->seq;
         int               plen  = len - FRAG_HEADER_SIZE;
 
-        if (total == 0 || total > MAX_FRAGS || idx >= total || plen < 0
-            || plen > FRAG_PAYLOAD_MAX) return;
+        if (total == 0 || total > MAX_FRAGS || idx >= total
+            || plen < 0 || plen > FRAG_PAYLOAD_MAX) return;
 
-        if (!_frag_pending || _frag_seq != seq) {
-            _frag_got     = 0;
-            _frag_total   = total;
-            _frag_seq     = seq;
-            _frag_pending = true;
+        if (_frag_pending) {
+            bool stale_seq     = (_frag_seq != seq);
+            bool stale_timeout = ((uint32_t)(millis() - _frag_start_ms)
+                                  > FRAG_REASSEMBLY_TIMEOUT_MS);
+            if (stale_seq || stale_timeout) {
+                _frag_pending = false;
+            }
+        }
+
+        if (!_frag_pending) {
+            _frag_got      = 0;
+            _frag_total    = total;
+            _frag_seq      = seq;
+            _frag_pending  = true;
+            _frag_start_ms = millis();
             memset(_frag_len, 0, sizeof(_frag_len));
         }
 
+        if (_frag_total != total) return;
+
         memcpy(_frag_buf[idx], data + FRAG_HEADER_SIZE, plen);
-        _frag_len[idx] = (uint8_t)plen;
-        _frag_got     |= (uint8_t)(1u << idx);
+        _frag_len[idx]  = (uint8_t)plen;
+        _frag_got      |= (uint8_t)(1u << idx);
 
         uint8_t full_mask = (total >= 8) ? 0xFF : (uint8_t)((1u << total) - 1u);
         if ((_frag_got & full_mask) != full_mask) return;
@@ -277,38 +332,7 @@ static void on_data_recv(const uint8_t* /* mac_addr */,
 
 static void on_data_sent(const uint8_t* /*mac*/, esp_now_send_status_t /*status*/) {}
 
-
-static void send_fragments(const uint8_t* data, size_t len) {
-    if (!_is_paired || len == 0) return;
-
-    uint8_t total = (uint8_t)((len + FRAG_PAYLOAD_MAX - 1) / FRAG_PAYLOAD_MAX);
-    if (total == 0) total = 1;
-    if (total > MAX_FRAGS) total = MAX_FRAGS;
-
-    uint8_t pkt[250];
-    size_t  offset = 0;
-
-    for (uint8_t i = 0; i < total; i++) {
-        size_t chunk = len - offset;
-        if (chunk > FRAG_PAYLOAD_MAX) chunk = FRAG_PAYLOAD_MAX;
-
-        FragHeader* hdr  = (FragHeader*)pkt;
-        hdr->type        = PKT_DATA;
-        hdr->seq         = _tx_seq;
-        hdr->frag_idx    = i;
-        hdr->total_frags = total;
-        memcpy(pkt + FRAG_HEADER_SIZE, data + offset, chunk);
-
-        esp_now_send(_peer_mac, pkt, FRAG_HEADER_SIZE + chunk);
-        offset += chunk;
-    }
-    _tx_seq++;
-}
-
-
 void espnow_init() {
-    dbg_println("ESP-NOW: initialising");
-
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
@@ -355,16 +379,45 @@ void espnow_init() {
 void espnow_poll() {
     uint32_t now = millis();
 
+    if (_pair_ack_pending.load(std::memory_order_acquire)) {
+        PairAckPkt ack;
+        memcpy(&ack, &_pair_ack_pending_pkt, sizeof(ack));
+        _pair_ack_pending.store(false, std::memory_order_release);
+        complete_pairing_from_ack(ack);
+        if (current_scene) current_scene->reDisplay();
+    }
+
     if (_is_connected && (now - _last_rx_ms) > CONNECT_TIMEOUT_MS) {
         _is_connected = false;
         set_disconnected_state();
+        if (current_scene) current_scene->reDisplay();
     }
 
+    static bool _was_connected = false;
+    if (_is_connected != _was_connected) {
+        _was_connected = _is_connected;
+        if (_is_connected) {
+            fnc_realtime(StatusReport);
+        }
+        if (current_scene) current_scene->reDisplay();
+    }
+
+    if (state == Disconnected) {
+        static uint32_t _badge_tick_ms = 0;
+        if ((now - _badge_tick_ms) >= 400) {
+            _badge_tick_ms = now;
+            if (current_scene) current_scene->reDisplay();
+        }
+    }
+
+    // Reconnect channel scan
     if (_is_paired && !_is_connected) {
         if (!_reconnect_active) {
             _reconnect_active    = true;
             _reconnect_probe_idx = 0;
             _reconnect_beacon_ms = 0;
+            _reconnect_start_ms  = now;
+            dbg_printf("ESP-NOW: reconnect started — saved ch=%d\n", _op_channel);
             if (current_scene) current_scene->reDisplay();
         }
 
@@ -380,18 +433,21 @@ void espnow_poll() {
 
             uint8_t pkt[1] = {PKT_KEEPALIVE};
             esp_now_send(_peer_mac, pkt, 1);
-            dbg_printf("ESP-NOW: reconnect probe ch=%d\n", ch);
+            dbg_printf("ESP-NOW: probe #%d ch=%d (+%lums)\n",
+                       _reconnect_probe_idx, ch, (unsigned long)(now - _reconnect_start_ms));
         }
     } else if (_reconnect_active && _is_connected) {
         _reconnect_active = false;
+        if (current_scene) current_scene->reDisplay();
         Preferences prefs;
         prefs.begin(PREF_NAMESPACE, false);
         prefs.putUChar("espnow_ch", _op_channel);
         prefs.end();
-        if (current_scene) current_scene->reDisplay();
-        dbg_printf("ESP-NOW: reconnected on ch=%d (RSSI %d dBm)\n", _op_channel, _peer_rssi);
+        dbg_printf("ESP-NOW: reconnected on ch=%d (RSSI %d dBm)\n",
+                   _op_channel, (int)_peer_rssi);
     }
 
+    // Keepalive heartbeat
     if (_is_paired && _is_connected && (now - _keepalive_last_ms) >= KEEPALIVE_INTERVAL_MS) {
         _keepalive_last_ms = now;
         uint8_t pkt[1] = {PKT_KEEPALIVE};
@@ -433,10 +489,8 @@ void espnow_poll() {
         pkt.channel = _op_channel;
 
         esp_now_send(BROADCAST_MAC, (const uint8_t*)&pkt, sizeof(pkt));
-        dbg_printf("ESP-NOW: beacon ch=%d code=%s\n", _op_channel, _pairing_code);
     }
 }
-
 
 void espnow_putchar(uint8_t c) {
     if (c == 0x11 || c == 0x13) return;
@@ -448,7 +502,6 @@ void espnow_putchar(uint8_t c) {
         }
         return;
     }
-
     if (_tx_len == 0 && (c == '?' || c == '!' || c == '~')) {
         if (_is_paired) {
             uint8_t pkt[2] = {PKT_REALTIME, c};
@@ -458,9 +511,12 @@ void espnow_putchar(uint8_t c) {
     }
 
     _tx_buf[_tx_len++] = c;
+
     if (c == '\n' || _tx_len >= TX_BUF_SIZE - 1) {
-        send_fragments(_tx_buf, _tx_len);
+        size_t flush_len = (size_t)_tx_len;
         _tx_len = 0;
+
+        send_fragments(_tx_buf, flush_len);
     }
 }
 
@@ -468,24 +524,26 @@ int espnow_getchar() {
     return rx_pop();
 }
 
-
-bool espnow_is_paired()       { return _is_paired; }
-bool espnow_is_connected()    { return _is_paired && _is_connected; }
-bool   espnow_is_reconnecting() { return _reconnect_active; }
-int8_t espnow_rssi()            { return _peer_rssi; }
+bool        espnow_is_paired()      { return _is_paired; }
+bool        espnow_is_connected()   { return _is_paired && _is_connected; }
+bool        espnow_is_reconnecting(){ return _reconnect_active; }
+int8_t      espnow_rssi()           { return _peer_rssi; }
 
 int espnow_signal_bars() {
     if (!_is_connected) return 0;
-    return 4;
+    int8_t r = _peer_rssi;
+    if (r >= -55) return 4;
+    if (r >= -65) return 3;
+    if (r >= -75) return 2;
+    return 1;
 }
 
 const char* espnow_status_str() {
-    if (!_is_paired)         return "Not Paired";
-    if (_reconnect_active)   return "Searching...";
-    if (_is_connected)       return "Connected";
+    if (!_is_paired)       return "Not Paired";
+    if (_reconnect_active) return "Searching...";
+    if (_is_connected)     return "Connected";
     return "Paired";
 }
-
 
 const char* espnow_start_pairing() {
     _probe_active = true;
@@ -504,8 +562,7 @@ const char* espnow_start_pairing() {
     _pairing_complete = false;
     _beacon_last_ms   = 0;
 
-    dbg_printf("ESP-NOW: pairing session started, code=%s, priority ch order 1/6/11/...\n",
-               _pairing_code);
+    dbg_printf("ESP-NOW: pairing session started, code=%s\n", _pairing_code);
     return _pairing_code;
 }
 
@@ -538,10 +595,12 @@ void espnow_clear_pairing() {
     }
     memset(_peer_mac, 0, 6);
     memset(_lmk, 0, 16);
-    _is_paired       = false;
-    _is_connected    = false;
+    _is_paired        = false;
+    _is_connected     = false;
     _reconnect_active = false;
-    _peer_rssi       = 0;
+    _peer_rssi        = 0;
+
+    _tx_len = 0;
 
     Preferences prefs;
     prefs.begin(PREF_NAMESPACE, false);

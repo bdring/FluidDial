@@ -42,7 +42,7 @@ void first_boot_complete() {
             _wifi_initialized = true;
             espnow_init();
         }
-        activate_scene(&espnowPairingScene);
+        activate_scene(&espnowPairingScene, &firstBootScene);
     } else {
         activate_scene(&wifiSetupScene);
     }
@@ -98,7 +98,7 @@ void setup() {
         _first_boot_active = true;
         activate_scene(&firstBootScene);
     } else if (wifi_use_espnow_mode() && !espnow_has_saved_pairing()) {
-        activate_scene(&espnowPairingScene);
+        activate_scene(&espnowPairingScene, &wifiSetupScene);
     } else if (!wifi_use_uart_mode() && !wifi_use_espnow_mode()
                && !wifi_load_config().valid) {
         // WiFi mode selected but no credentials configured yet.

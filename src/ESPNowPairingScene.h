@@ -4,6 +4,7 @@
 #include "Scene.h"
 
 class ESPNowPairingScene : public Scene {
+    Scene* _fallback = nullptr;
 public:
     ESPNowPairingScene() : Scene("Pair") {}
 

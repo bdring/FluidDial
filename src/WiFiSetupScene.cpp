@@ -160,7 +160,7 @@ void WiFiSetupScene::drawSettingsView() {
         if (espnow_is_connected()) {
             badge_fill    = 0x003300;
             badge_outline = 0xcc66ff;
-            badge_label   = "ESP-NOW Ready";
+            badge_label   = "Using ESP-NOW";
             badge_text    = 0xcc66ff;
         } else if (espnow_is_reconnecting()) {
             static const char* rc_frames[] = {"Searching", "Searching.", "Searching..", "Searching..."};
@@ -245,7 +245,7 @@ void WiFiSetupScene::drawSettingsView() {
                     snprintf(rssi_buf, sizeof(rssi_buf), "%d dBm", rssi);
                     centered_text(rssi_buf, y, 0xcc66ff, SMALL);
                 } else {
-                    centered_text(espnow_status_str(), y, 0xcc66ff, SMALL);
+                    // centered_text(espnow_status_str(), y, 0xcc66ff, SMALL);
                 }
             } else {
                 centered_text(espnow_status_str(), y, DARKGREY, SMALL);
