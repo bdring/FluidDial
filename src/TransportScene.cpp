@@ -93,7 +93,7 @@ void TransportScene::reDisplay() {
     TransportMode cur     = wifi_get_transport();
     int           start_y = round_display ? START_Y_ROUND : START_Y_CYD;
     int           bx      = round_display ? 28 : 18;
-    int           bw      = round_display ? 184 : 284;
+    int           bw      = round_display ? 184 : 204;
 
     for (int i = 0; i < N_TRANSPORT; i++) {
         int  y      = start_y + i * ITEM_PITCH;
