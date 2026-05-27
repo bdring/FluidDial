@@ -70,7 +70,14 @@ static volatile bool    _is_paired    = false;
 static volatile bool     _is_connected     = false;
 static volatile uint32_t _last_rx_ms       = 0;
 static          uint32_t _keepalive_last_ms = 0;
-static volatile int8_t   _peer_rssi         = 0;
+static volatile int8_t   _peer_rssi         = -100;  // no measurement yet
+
+// EMA: a = 1/5
+static void update_rssi(int8_t raw) {
+    int8_t cur = _peer_rssi;
+    _peer_rssi = (cur == -100) ? raw
+                               : (int8_t)(((int)cur * 4 + (int)raw) / 5);
+}
 
 static volatile bool    _pairing_active   = false;
 static volatile bool    _pairing_complete = false;
@@ -238,7 +245,7 @@ static void on_data_recv(const esp_now_recv_info_t* recv_info,
                          const uint8_t* data, int len) {
     const uint8_t* src = recv_info ? recv_info->src_addr : nullptr;
     if (_is_paired && mac_eq(src, _peer_mac) && recv_info && recv_info->rx_ctrl) {
-        _peer_rssi = (int8_t)recv_info->rx_ctrl->rssi;
+        update_rssi((int8_t)recv_info->rx_ctrl->rssi);
     }
 #else
 static void on_data_recv(const uint8_t* src,
@@ -264,7 +271,7 @@ static void on_data_recv(const uint8_t* src,
 
     if (pkt_type == PKT_KEEPALIVE) {
         if (len >= 2) {
-            _peer_rssi = (int8_t)data[1];
+            update_rssi((int8_t)data[1]);
         }
         update_rx_time();
         return;
@@ -330,6 +337,17 @@ static void on_data_recv(const uint8_t* src,
     }
 }
 
+#if ESP_IDF_VERSION_MAJOR < 5
+static void promiscuous_rx_cb(void* buf, wifi_promiscuous_pkt_type_t /*type*/) {
+    if (!_is_paired) return;
+    const wifi_promiscuous_pkt_t* pkt = (const wifi_promiscuous_pkt_t*)buf;
+    if (pkt->rx_ctrl.sig_len < 16) return;
+    if (memcmp(pkt->payload + 10, _peer_mac, 6) == 0) {
+        update_rssi(pkt->rx_ctrl.rssi);
+    }
+}
+#endif
+
 static void on_data_sent(const uint8_t* /*mac*/, esp_now_send_status_t /*status*/) {}
 
 void espnow_init() {
@@ -352,6 +370,15 @@ void espnow_init() {
 
     esp_now_register_recv_cb(on_data_recv);
     esp_now_register_send_cb(on_data_sent);
+
+#if ESP_IDF_VERSION_MAJOR < 5
+    {
+        wifi_promiscuous_filter_t filt = { .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT };
+        esp_wifi_set_promiscuous_filter(&filt);
+        esp_wifi_set_promiscuous_rx_cb(promiscuous_rx_cb);
+        esp_wifi_set_promiscuous(true);
+    }
+#endif
 
     Preferences prefs;
     prefs.begin(PREF_NAMESPACE, true);
@@ -535,7 +562,8 @@ int espnow_signal_bars() {
     if (r >= -55) return 4;
     if (r >= -65) return 3;
     if (r >= -75) return 2;
-    return 1;
+    if (r >= -85) return 1;
+    return 0;
 }
 
 const char* espnow_status_str() {
@@ -598,7 +626,7 @@ void espnow_clear_pairing() {
     _is_paired        = false;
     _is_connected     = false;
     _reconnect_active = false;
-    _peer_rssi        = 0;
+    _peer_rssi        = -100;
 
     _tx_len = 0;
 
