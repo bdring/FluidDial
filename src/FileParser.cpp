@@ -698,7 +698,7 @@ extern "C" void handle_msg(char* command, char* arguments) {
         act_on_state_change();
     }
     if (strcmp(command, "Files changed") == 0) {
-        init_file_list();
+        schedule_action(init_file_list);
     }
     if (strcmp(command, "JSON") == 0) {
         handle_json(arguments);
