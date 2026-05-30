@@ -25,6 +25,7 @@ void jog_toggle_mode();
 
 // Jog settings / help screen (dial center)
 // the green button toggles between the two jogging behaviors
+#ifndef USE_M5
 static const char* jog_help_lines[] = {
     "Top/Bottom: pick axis",
     "Left/Right: set digit",
@@ -32,13 +33,26 @@ static const char* jog_help_lines[] = {
     "Dial: zero   Swipe: exit",
     NULL,
 };
+#endif
 
 class JogHelpScene : public Scene {
     void drawScreen() {
         drawBackground(BROWN);
-        centered_text("Jog Mode", 18, WHITE, SMALL);
 
         bool dyn = jog_dynamic_mode();
+#ifdef USE_M5
+        centered_text("Jog Mode", 48, WHITE, SMALL);
+        centered_text(dyn ? "Dynamic" : "Precise", 84, dyn ? GREEN : YELLOW, MEDIUM);
+        if (dyn) {
+            centered_text("Follows the handwheel,", 120, WHITE, TINY);
+            centered_text("stops when you stop.", 140, WHITE, TINY);
+        } else {
+            centered_text("Moves the exact number", 120, WHITE, TINY);
+            centered_text("of clicks x step size.", 140, WHITE, TINY);
+        }
+        centered_text("Top/Bot: axis   L/R: digit", 170, WHITE, TINY);
+#else
+        centered_text("Jog Mode", 18, WHITE, SMALL);
         centered_text(dyn ? "Dynamic" : "Precise", 50, dyn ? GREEN : YELLOW, MEDIUM);
         if (dyn) {
             centered_text("Follows the handwheel,", 82, WHITE, TINY);
@@ -47,12 +61,12 @@ class JogHelpScene : public Scene {
             centered_text("Moves the exact number", 82, WHITE, TINY);
             centered_text("of clicks x step size.", 102, WHITE, TINY);
         }
-
         int pos = 134;
         for (const char** p = jog_help_lines; *p; ++p) {
             centered_text(*p, pos, WHITE, TINY);
             pos += 20;
         }
+#endif
         drawButtonLegends("", "Toggle", "Back");
         refreshDisplay();
     }
@@ -196,10 +210,12 @@ public:
     void reDisplay() {
         background();
         drawJogBg();
-        std::string title("Jog (");
-        title += _dynamic_mode ? "Dynamic)" : "Precise)";
-        drawMenuTitle(title.c_str());
-        drawStatus();
+        drawMenuTitle("Jog");
+        if (state == Idle) {
+            centered_text(_dynamic_mode ? "Dynamic" : "Precise", 45, 65535, SMALL);
+        } else {
+            drawStatus();
+        }
 
         if (state != Jog && _cancelling) {
             _cancelling = false;
