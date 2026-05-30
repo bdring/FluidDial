@@ -83,7 +83,9 @@ public:
 
         int uart_y   = round_display ? UART_BTN_Y   + 4  : UART_BTN_Y;
         int wifi_y   = round_display ? WIFI_BTN_Y   - 4  : WIFI_BTN_Y;
+#ifdef USE_ESPNOW
         int espnow_y = round_display ? ESPNOW_BTN_Y - 12 : ESPNOW_BTN_Y;
+#endif
 
         uartBtn.set(BTN_X, uart_y, BTN_W, BTN_H, "Wired",
                     0x001a4d, 0x4da6ff, 0x4da6ff, [this]() { onUartPress(); });
@@ -91,8 +93,10 @@ public:
         wifiBtn.set(BTN_X, wifi_y, BTN_W, BTN_H, "WiFi",
                     0x003300, 0x66ff66, 0x66ff66, [this]() { onWifiPress(); });
 
+#ifdef USE_ESPNOW
         espnowBtn.set(BTN_X, espnow_y, BTN_W, BTN_H, "ESP-NOW",
                       0x1a0033, 0xcc66ff, 0xcc66ff, [this]() { onEspNowPress(); });
+#endif
 
         if (!round_display) {
             centered_text("This can be changed later", 218, DARKGREY, TINY);
@@ -103,7 +107,9 @@ public:
     void onTouchClick() override {
         wifiBtn.handleTouch(touchX, touchY);
         uartBtn.handleTouch(touchX, touchY);
+#ifdef USE_ESPNOW
         espnowBtn.handleTouch(touchX, touchY);
+#endif
     }
 };
 

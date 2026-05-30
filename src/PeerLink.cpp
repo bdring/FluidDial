@@ -4,6 +4,9 @@
 #ifdef USE_WIFI
 
 #include "PeerLink.h"
+
+#ifdef USE_ESPNOW
+
 #include "FluidNCModel.h"
 #include "System.h"
 #include "Scene.h"
@@ -644,5 +647,31 @@ void espnow_clear_pairing() {
     dbg_println("ESP-NOW: pairing cleared");
 }
 
-#endif
-#endif
+#else  // !USE_ESPNOW
+
+// ESP-NOW is excluded from this build. Provide inert stubs so the rest of the
+// firmware (transport dispatch, status UI, pairing scene) links and runs with
+// ESP-NOW simply unavailable. wifi_get_transport() never reports ESPNOW in this
+// configuration, so none of these are reached at runtime
+void        espnow_init() {}
+void        espnow_poll() {}
+void        espnow_putchar(uint8_t) {}
+int         espnow_getchar() { return -1; }
+bool        espnow_is_paired() { return false; }
+bool        espnow_is_connected() { return false; }
+const char* espnow_status_str() { return ""; }
+const char* espnow_start_pairing() { return ""; }
+void        espnow_cancel_pairing() {}
+bool        espnow_pairing_complete() { return false; }
+const char* espnow_pairing_code() { return ""; }
+uint32_t    espnow_code_remaining_ms() { return 0; }
+void        espnow_clear_pairing() {}
+bool        espnow_has_saved_pairing() { return false; }
+bool        espnow_is_reconnecting() { return false; }
+int8_t      espnow_rssi() { return -100; }
+int         espnow_signal_bars() { return 0; }
+
+#endif  // USE_ESPNOW
+
+#endif  // USE_WIFI
+#endif  // ARDUINO

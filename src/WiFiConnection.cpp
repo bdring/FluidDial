@@ -230,6 +230,13 @@ TransportMode wifi_get_transport() {
         _transport_cached = uart ? (int)TransportMode::UART : (int)TransportMode::WIFI;
     }
     prefs.end();
+#ifndef USE_ESPNOW
+    // ESP-NOW excluded from this build: if a saved pairing selected it, fall back
+    // to WiFi so nothing downstream tries to use the unavailable transport
+    if (_transport_cached == (int)TransportMode::ESPNOW) {
+        _transport_cached = (int)TransportMode::WIFI;
+    }
+#endif
     return (TransportMode)_transport_cached;
 }
 
