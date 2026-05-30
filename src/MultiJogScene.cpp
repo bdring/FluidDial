@@ -32,11 +32,22 @@ private:
     bool         _continuous    = false;
     // MPG jog rate-limiting: accumulate encoder ticks and send at most one
     // jog command per MPG_INTERVAL_MS to avoid flooding FluidNC's planner queue.
-    static const uint32_t MPG_INTERVAL_MS = 30;
-    static const uint32_t MPG_STOP_MS     = 280;
-    int      _mpg_accum      = 0;
-    uint32_t _last_mpg_ms    = 0;
+    static const uint32_t MPG_INTERVAL_MS = 30;   // min spacing between jog commands
+    static const uint32_t MPG_STOP_MS     = 280;  // dial-still time that ends a jog
+    static const uint32_t QUEUE_CAP_MS    = 180;  // max motion kept buffered ahead
+    
+    static const uint32_t CANCEL_RESEND_MS = 80;
+    static const uint32_t CANCEL_MIN_MS    = 250;
+    static const uint32_t CANCEL_MAX_MS    = 1500;
+    int      _mpg_accum        = 0;
+    uint32_t _last_mpg_ms      = 0;
     uint32_t _last_mpg_tick_ms = 0;
+    int8_t   _jog_dir          = 0;   // -1/0/+1: direction of the live dial jog
+    uint32_t _jog_drain_ms     = 0;   // estimated millis() when the buffer empties
+    bool     _mpg_jogging      = false;
+    bool     _cancel_pending   = false;
+    uint32_t _cancel_req_ms    = 0;
+    uint32_t _last_cancel_ms   = 0;
 
 public:
     MultiJogScene() : Scene("Jog", 4, jog_help_text) {}
@@ -232,14 +243,21 @@ public:
         }
     }
     void cancel_jog() {
-        if (state == Jog) {
-            fnc_realtime(JogCancel);
-            _continuous = false;
-            _cancelling = true;
-        }
-        _mpg_accum = 0;
-        _last_mpg_ms = 0;
+        bool was_jogging = _continuous || _mpg_jogging || (state == Jog);
+        _continuous       = false;
+        _mpg_jogging      = false;
+        _mpg_accum        = 0;
+        _last_mpg_ms      = 0;
         _last_mpg_tick_ms = 0;
+        _jog_dir          = 0;
+        _jog_drain_ms     = 0;
+        if (was_jogging) {
+            fnc_realtime(JogCancel);
+            _cancel_pending = true;
+            _cancelling     = true;
+            _cancel_req_ms  = millis();
+            _last_cancel_ms = _cancel_req_ms;
+        }
     }
     void next_axis() {
         int the_axis = the_selected_axis();
@@ -364,9 +382,21 @@ public:
         zero_axes();
     }
 
-    void start_mpg_jog(int delta) {
-        // e.g. $J=G91F1000X-10000
-        std::string cmd(inInches ? "$J=G91F400" : "$J=G91F10000");
+    e4_t mpg_move_distance(int delta) {
+        e4_t move = 0;
+        for (int axis = 0; axis < num_axes; ++axis) {
+            if (selected(axis)) {
+                move = e4_magnitude(move, delta * distance(axis));
+            }
+        }
+        return move;
+    }
+
+    void send_mpg_jog(int delta, e4_t feed) {
+        std::string cmd("$J=G91");
+        cmd += inInches ? "G20" : "G21";
+        cmd += "F";
+        cmd += e4_to_cstr(feed, 0);
         for (int axis = 0; axis < num_axes; ++axis) {
             if (selected(axis)) {
                 cmd += axisNumToChar(axis);
@@ -374,6 +404,7 @@ public:
             }
         }
         send_line(cmd.c_str());
+        _mpg_jogging = true;
     }
     void start_button_jog(bool negative) {
         // e.g. $J=G91F1000X-10000
@@ -428,34 +459,85 @@ public:
         cancel_jog();
     }
 
-    void flush_mpg(bool force = false) {
+    void service_mpg(bool force = false) {
         if (_mpg_accum == 0) {
             return;
         }
         uint32_t now = millis();
-        if (force || (now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
-            start_mpg_jog(_mpg_accum);
+        if (!force && (now - _last_mpg_ms) < MPG_INTERVAL_MS) {
+            return;
+        }
+
+        int dir = (_mpg_accum > 0) ? 1 : -1;
+
+        if (_jog_dir != 0 && dir != _jog_dir) {
+            fnc_realtime(JogCancel);
+            _jog_drain_ms = now;
+        }
+
+        _cancel_pending = false;
+        _cancelling     = false;
+
+        e4_t move = mpg_move_distance(_mpg_accum);
+        if (move == 0) {
             _mpg_accum   = 0;
             _last_mpg_ms = now;
+            return;
         }
+
+        // Velocity-matched feed: feed[units/min] = move / dt * 60000ms
+        uint32_t dt     = (_last_mpg_ms == 0) ? MPG_INTERVAL_MS : (now - _last_mpg_ms);
+        int64_t  feed64 = (int64_t)move * 60000 / (int64_t)dt;
+        e4_t     f_max  = e4_from_int(inInches ? 400 : 10000);
+        e4_t     f_min  = e4_from_int(inInches ? 40 : 1000);
+        e4_t     feed   = (feed64 > f_max) ? f_max : (feed64 < f_min ? f_min : (e4_t)feed64);
+
+        uint32_t outstanding = (_jog_drain_ms > now) ? (_jog_drain_ms - now) : 0;
+        if (!force && outstanding >= QUEUE_CAP_MS) {
+            _mpg_accum   = 0;
+            _last_mpg_ms = now;
+            return;
+        }
+
+        send_mpg_jog(_mpg_accum, feed);
+        _jog_dir = dir;
+
+        // Track the estimated buffer drain time
+        uint32_t exec_ms = (uint32_t)((int64_t)move * 60000 / feed);
+        uint32_t base    = (_jog_drain_ms > now) ? _jog_drain_ms : now;
+        _jog_drain_ms    = base + exec_ms;
+
+        _mpg_accum   = 0;
+        _last_mpg_ms = now;
     }
 
     void onEncoder(int delta) {
         _mpg_accum += delta;
         _last_mpg_tick_ms = millis();
-        flush_mpg();
+        service_mpg();
     }
 
     void onPoll() override {
-        flush_mpg();
-        if (state == Jog && !_continuous && _last_mpg_tick_ms != 0) {
+        service_mpg();
+        // Stop jogging once the dial has been still long enough
+        if (_mpg_jogging && _last_mpg_tick_ms != 0) {
             uint32_t now = millis();
             if ((now - _last_mpg_tick_ms) >= MPG_STOP_MS) {
-                flush_mpg(true);
+                service_mpg(true);
                 if (_mpg_accum == 0) {
                     cancel_jog();
-                    _last_mpg_tick_ms = 0;
                 }
+            }
+        }
+        // Resend the cancel until the controller confirms it has left the Jog state
+        if (_cancel_pending) {
+            uint32_t now   = millis();
+            uint32_t since = now - _cancel_req_ms;
+            if ((state != Jog && since >= CANCEL_MIN_MS) || since >= CANCEL_MAX_MS) {
+                _cancel_pending = false;
+            } else if ((now - _last_cancel_ms) >= CANCEL_RESEND_MS) {
+                fnc_realtime(JogCancel);
+                _last_cancel_ms = now;
             }
         }
     }
