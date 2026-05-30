@@ -1,4 +1,13 @@
-#ifdef DEBUG_TO_USB
+#ifdef PIBOT_PENDANT
+
+// PiBot Pendant V4 routes the FluidNC UART through UART0 on
+// GPIO 1/3. Backlight stays on GPIO 21 (set via setBacklightPin).
+
+constexpr static const int PND_RX_FNC_TX_PIN = GPIO_NUM_1;
+constexpr static const int PND_TX_FNC_RX_PIN = GPIO_NUM_3;
+constexpr static const int FNC_UART_NUM      = 0;
+
+#elif defined(DEBUG_TO_USB)
 
 // This variant lets you have debugging output on the
 // USB serial port, at the expense of not being able

@@ -6,6 +6,7 @@
 #include "System.h"
 #include "FluidNCModel.h"
 #include "NVS.h"
+#include "BootLog.h"
 
 #include <Esp.h>  // ESP.restart()
 
@@ -71,6 +72,10 @@ extern "C" void fnc_putchar(uint8_t c) { uart_putchar_impl(c); }
 extern "C" int  fnc_getchar()          { return uart_getchar_impl(); }
 #endif
 
+// poll_extra: called by fnc_poll() inside fnc_send_line()'s blocking wait loop.
+// In WiFi mode this MUST drive wifi_poll() so the Telnet socket refills _rx_buf
+// and the "ok" response from FluidNC can be observed — otherwise fnc_send_line()
+// blocks for the full 2000 ms timeout on every second jog command.
 extern "C" void poll_extra() {
 #ifdef USE_WIFI
     if (wifi_use_espnow_mode()) {
@@ -140,6 +145,7 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
     uart_set_sw_flow_ctrl(fnc_uart_port, true, 64, 120);
     uint32_t baud;
     uart_get_baudrate(fnc_uart_port, &baud);
+    bootlog_printf("uart: num=%d tx=%d rx=%d baud=%lu", uart_num, tx_pin, rx_pin, (unsigned long)baud);
 }
 
 void init_system() {
@@ -156,7 +162,7 @@ void init_system() {
 }
 void resetFlowControl() {
 #ifdef USE_WIFI
-    if (!wifi_use_uart_mode()) return;
+    if (!wifi_use_uart_mode()) return;  // no-op over WiFi/Telnet
 #endif
     fnc_putchar(0x11);
     uart_ll_force_xon(fnc_uart_port);

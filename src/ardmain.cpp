@@ -3,6 +3,7 @@
 
 #include "System.h"
 #include "FileParser.h"
+#include "FluidNCModel.h"  // pendant_wait_for_fluidnc_ready()
 #include "Scene.h"
 #include "AboutScene.h"
 #if defined(USE_M5) || defined(USE_LOVYANGFX)
@@ -66,10 +67,13 @@ void setup() {
     dbg_printf("FluidNC Pendant %s\n", git_info);
 
 #ifndef USE_WIFI
-    fnc_realtime(StatusReport);  // Kick FluidNC into action via UART
+    // Bounded boot probe — discards stale bootloader noise, asks FluidNC
+    // for a status report, waits up to 7 s for any RX byte. If it times
+    // out the runtime recovery ladder in fnc_is_connected() takes over.
+    pendant_wait_for_fluidnc_ready(7000);
 #else
     if (wifi_use_uart_mode()) {
-        fnc_realtime(StatusReport);  // UART mode in a WiFi build
+        pendant_wait_for_fluidnc_ready(7000);
     }
 #endif
 
@@ -133,6 +137,14 @@ void loop() {
         }
     }
 #endif
-    fnc_poll();
-    dispatch_events();
+    // fnc_poll() drains ONE byte per call. The WiFi transport can refill its
+    // ring buffer with hundreds of bytes per loop iteration (a kernel TCP
+    // window worth — preferences.json bursts in ~5 KB). Drain a chunk per
+    // tick so the ring buffer can't overflow and silently drop bytes,
+    // which corrupts the streaming JSON parser mid-document.
+    for (int i = 0; i < 64; i++) {
+        fnc_poll();
+    }
+    dispatch_events();  // Handle dial, touch, buttons
+    service_redisplay();
 }

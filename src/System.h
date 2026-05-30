@@ -76,6 +76,11 @@ void delay_ms(uint32_t ms);
 
 void resetFlowControl();
 
+// Re-initialize the FluidNC UART driver. Hardware-specific; called from the
+// link-recovery ladder in fnc_is_connected() when the link has gone silent
+// long enough that draining + re-probing didn't help.
+void reinit_fnc_uart();
+
 extern bool round_display;
 
 void system_background();

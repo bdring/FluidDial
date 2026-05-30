@@ -1,5 +1,9 @@
 // 2026 - Figamore
 // FirstBootScene.cpp — one-time setup wizard shown on first boot.
+//
+// Asks the user to choose a transport (WiFi/Telnet or wired UART; ESP-NOW too
+// when built with -DUSE_ESPNOW). The choice is saved to NVS, then transitions
+// directly to the appropriate scene.
 
 #ifdef USE_WIFI
 

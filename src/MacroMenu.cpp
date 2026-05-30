@@ -11,7 +11,31 @@ extern Scene filePreviewScene;
 
 void MacroItem::invoke(void* arg) {
     if (arg && strcmp((char*)arg, "Run") == 0) {
-        send_linef("$Localfs/Run=%s", _filename.c_str());
+        if (_filename.rfind("cmd:", 0) == 0) {
+            // Split on \n, \r, and ';' — FluidNC parses ';' as a line-comment,
+            // so multi-statement macros like "G0 Z45; G0 Y166" must be sent as
+            // separate lines. Trim whitespace and skip empty segments.
+            const char* body = _filename.c_str() + 4;  // strip "cmd:" prefix
+            std::string line;
+            for (const char* p = body;; ++p) {
+                char c = *p;
+                if (c == '\n' || c == '\r' || c == ';' || c == '\0') {
+                    size_t start = line.find_first_not_of(" \t");
+                    if (start != std::string::npos) {
+                        size_t end = line.find_last_not_of(" \t");
+                        send_line(line.substr(start, end - start + 1).c_str());
+                    }
+                    line.clear();
+                    if (c == '\0') {
+                        break;
+                    }
+                } else {
+                    line.push_back(c);
+                }
+            }
+        } else {
+            send_linef("$Localfs/Run=%s", _filename.c_str());
+        }
     } else {
         push_scene(&filePreviewScene, (void*)_filename.c_str());
         // doFileScreen(_name);

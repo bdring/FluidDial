@@ -25,7 +25,7 @@ bool is_homed(int axis) {
 }
 void set_axis_homed(int axis) {
     homed_axes |= 1 << axis;
-    current_scene->reDisplay();
+    request_redisplay();
 }
 
 void detect_homing_info() {
