@@ -356,6 +356,9 @@ void espnow_init() {
     WiFi.disconnect();
     delay(100);
 
+    WiFi.setSleep(false);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+
     if (esp_now_init() != ESP_OK) {
         dbg_println("ESP-NOW: init failed");
         return;
@@ -465,6 +468,8 @@ void espnow_poll() {
         }
     } else if (_reconnect_active && _is_connected) {
         _reconnect_active = false;
+        WiFi.setSleep(false);
+        esp_wifi_set_ps(WIFI_PS_NONE);
         if (current_scene) current_scene->reDisplay();
         Preferences prefs;
         prefs.begin(PREF_NAMESPACE, false);
