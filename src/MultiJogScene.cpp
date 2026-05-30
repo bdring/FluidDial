@@ -20,6 +20,59 @@ static const char* jog_help_text[] = { "Jog Help",
                                        "Swipe left to exit",
                                        NULL };
 
+bool jog_dynamic_mode();
+void jog_toggle_mode();
+
+// Jog settings / help screen (dial center)
+// the green button toggles between the two jogging behaviors
+static const char* jog_help_lines[] = {
+    "Top/Bottom: pick axis",
+    "Left/Right: set digit",
+    "Red/Grn: hold to jog",
+    "Dial: zero   Swipe: exit",
+    NULL,
+};
+
+class JogHelpScene : public Scene {
+    void drawScreen() {
+        drawBackground(BROWN);
+        centered_text("Jog Mode", 18, WHITE, SMALL);
+
+        bool dyn = jog_dynamic_mode();
+        centered_text(dyn ? "Dynamic" : "Precise", 50, dyn ? GREEN : YELLOW, MEDIUM);
+        if (dyn) {
+            centered_text("Follows the handwheel,", 82, WHITE, TINY);
+            centered_text("stops when you stop.", 102, WHITE, TINY);
+        } else {
+            centered_text("Moves the exact number", 82, WHITE, TINY);
+            centered_text("of clicks x step size.", 102, WHITE, TINY);
+        }
+
+        int pos = 134;
+        for (const char** p = jog_help_lines; *p; ++p) {
+            centered_text(*p, pos, WHITE, TINY);
+            pos += 20;
+        }
+        drawButtonLegends("", "Toggle", "Back");
+        refreshDisplay();
+    }
+
+public:
+    JogHelpScene() : Scene("Jog Mode") {}
+    void onEntry(void* arg) override { drawScreen(); }
+    void reDisplay() override { drawScreen(); }
+    void onGreenButtonPress() override {
+        jog_toggle_mode();
+        drawScreen();
+    }
+    void onDialButtonPress() override { pop_scene(); }
+    void onTouchClick() override {
+        if (touchIsCenter()) {
+            pop_scene();
+        }
+    }
+} jogHelpScene;
+
 class MultiJogScene : public Scene {
 private:
     int          _dist_index[3] = { 2, 2, 2 };
@@ -30,6 +83,9 @@ private:
     bool         _cancelling    = false;
     bool         _cancel_held   = false;
     bool         _continuous    = false;
+    // Jog behavior: 1 = Dynamic (paced, handwheel-follow), 0 = Precise (exact
+    // clicks x step size). Persists in NVS
+    int          _dynamic_mode  = 1;
     // MPG jog rate-limiting: accumulate encoder ticks and send at most one
     // jog command per MPG_INTERVAL_MS to avoid flooding FluidNC's planner queue.
     static const uint32_t MPG_INTERVAL_MS = 30;   // min spacing between jog commands
@@ -134,7 +190,9 @@ public:
     void reDisplay() {
         background();
         drawJogBg();
-        drawMenuTitle(current_scene->name());
+        std::string title("Jog (");
+        title += _dynamic_mode ? "Dynamic)" : "Precise)";
+        drawMenuTitle(title.c_str());
         drawStatus();
 
         if (state != Jog && _cancelling) {
@@ -181,6 +239,7 @@ public:
             for (size_t axis = 0; axis < 3; axis++) {
                 getPref("DistanceDigit", axis, &_dist_index[axis]);
             }
+            getPref("JogMode", &_dynamic_mode);
         }
     }
 
@@ -259,6 +318,12 @@ public:
             _last_cancel_ms = _cancel_req_ms;
         }
     }
+    bool dynamicMode() { return _dynamic_mode; }
+    void toggleMode() {
+        cancel_jog();  // never leave motion running across a behavior change
+        _dynamic_mode = !_dynamic_mode;
+        setPref("JogMode", _dynamic_mode);
+    }
     void next_axis() {
         int the_axis = the_selected_axis();
         if (the_axis == -2) {
@@ -328,7 +393,7 @@ public:
             return;
         }
         if (touchIsCenter()) {
-            push_scene(&helpScene, (void*)_help_text);
+            push_scene(&jogHelpScene);
             return;
         }
 
@@ -511,23 +576,47 @@ public:
         _last_mpg_ms = now;
     }
 
+    // Precise mode: move by exactly (detents x step size). Each finite $J
+    // completes on its own, so the final position always equals the dialed-in count
+    void precise_flush() {
+        if (_mpg_accum == 0) {
+            return;
+        }
+        uint32_t now = millis();
+        if ((now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
+            _cancel_pending = false;
+            _cancelling     = false;
+            send_mpg_jog(_mpg_accum, e4_from_int(inInches ? 400 : 10000));
+            _mpg_accum   = 0;
+            _last_mpg_ms = now;
+        }
+    }
+
     void onEncoder(int delta) {
         _mpg_accum += delta;
         _last_mpg_tick_ms = millis();
-        service_mpg();
+        if (_dynamic_mode) {
+            service_mpg();
+        } else {
+            precise_flush();
+        }
     }
 
     void onPoll() override {
-        service_mpg();
-        // Stop jogging once the dial has been still long enough
-        if (_mpg_jogging && _last_mpg_tick_ms != 0) {
-            uint32_t now = millis();
-            if ((now - _last_mpg_tick_ms) >= MPG_STOP_MS) {
-                service_mpg(true);
-                if (_mpg_accum == 0) {
-                    cancel_jog();
+        if (_dynamic_mode) {
+            service_mpg();
+            // Stop jogging once the dial has been still long enough
+            if (_mpg_jogging && _last_mpg_tick_ms != 0) {
+                uint32_t now = millis();
+                if ((now - _last_mpg_tick_ms) >= MPG_STOP_MS) {
+                    service_mpg(true);
+                    if (_mpg_accum == 0) {
+                        cancel_jog();
+                    }
                 }
             }
+        } else {
+            precise_flush();
         }
         // Resend the cancel until the controller confirms it has left the Jog state
         if (_cancel_pending) {
@@ -555,3 +644,6 @@ public:
         cancel_jog();
     }
 } multiJogScene;
+
+bool jog_dynamic_mode() { return multiJogScene.dynamicMode(); }
+void jog_toggle_mode() { multiJogScene.toggleMode(); }
