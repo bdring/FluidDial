@@ -655,10 +655,23 @@ public:
         }
     }
 
+    // Tenths and hundreths unit steps jog more smoothly in precise mode and update fast enough to feel real-time
+    bool dynamic_jog_active() {
+        if (!_dynamic_mode) {
+            return false;
+        }
+        for (int axis = 0; axis < num_axes; axis++) {
+            if (selected(axis) && _dist_index[axis] >= num_digits()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void onEncoder(int delta) {
         _mpg_accum += delta;
         _last_mpg_tick_ms = millis();
-        if (_dynamic_mode) {
+        if (dynamic_jog_active()) {
             service_mpg();
         } else {
             precise_flush();
@@ -666,7 +679,7 @@ public:
     }
 
     void onPoll() override {
-        if (_dynamic_mode) {
+        if (dynamic_jog_active()) {
             service_mpg();
             // Stop jogging once the dial has been still long enough
             if (_mpg_jogging && _last_mpg_tick_ms != 0) {
