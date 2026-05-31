@@ -180,7 +180,7 @@ static void tcp_apply_opts(int fd) {
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
     // Bound how long a blocking send() will wait if FluidNC's RX is full.
-    struct timeval snd_tv = { 2, 0 };
+    struct timeval snd_tv = { 0, 50000 };  // 50 ms
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &snd_tv, sizeof(snd_tv));
 
     // Detect dead peers faster than the default ~2 hour kernel timeout.
@@ -263,17 +263,18 @@ static const char* wifi_status_name(wl_status_t status) {
     }
 }
 
-// Bulk send over the raw socket. Blocks up to SO_SNDTIMEO per chunk;
-// transient EAGAIN drops the remainder of this flush but keeps the
-// socket so the in-flight document survives. Any other errno tears the
+// Bulk send over the raw socket. `flags` is passed to send(); pass MSG_DONTWAIT
+// for the gcode/jog stream so a backpressured socket never blocks the main loop
+// (see ws_send_text). transient EAGAIN drops the remainder of this flush but
+// keeps the socket so the in-flight document survives. Any other errno tears the
 // socket down so wifi_poll() can reconnect.
-static bool tcp_send_all(const uint8_t* payload, size_t length) {
+static bool tcp_send_all(const uint8_t* payload, size_t length, int flags) {
     if (_sock < 0 || length == 0) {
         return _sock >= 0;
     }
     size_t off = 0;
     while (off < length) {
-        ssize_t n = ::send(_sock, payload + off, length - off, 0);
+        ssize_t n = ::send(_sock, payload + off, length - off, flags);
         if (n <= 0) {
             int e = errno;
             if (e == EAGAIN || e == EWOULDBLOCK) {
@@ -295,11 +296,12 @@ static bool tcp_send_all(const uint8_t* payload, size_t length) {
 // Keep the ws_send_text/ws_send_bin spellings for the ws_putchar
 // callsites — both go through the same raw send() now.
 static bool ws_send_text(uint8_t* payload, size_t length) {
-    return tcp_send_all(payload, length);
+    return tcp_send_all(payload, length, MSG_DONTWAIT);
 }
 
+// Realtime bytes ('?', '!', '~', JogCancel, …): kept blocking
 static bool ws_send_bin(const uint8_t* payload, size_t length) {
-    return tcp_send_all(payload, length);
+    return tcp_send_all(payload, length, 0);
 }
 
 // Pull bytes off the socket and push them into the RX ring buffer. Called
@@ -404,6 +406,10 @@ void ws_putchar(uint8_t c) {
 // Receive one byte from the RX ring buffer (-1 if empty).
 int ws_getchar() {
     return rx_pop();
+}
+
+bool ws_rx_available() {
+    return _rx_head != _rx_tail;
 }
 
 // ─── Runtime transport mode ───────────────────────────────────────────────────
@@ -804,6 +810,16 @@ void wifi_force_ws_reconnect() {
         _tcp_next_try_ms = millis() + TCP_RECONNECT_DELAY_MS;
         dbg_println("Telnet: force-closed for reconnect");
     }
+}
+
+// Gracefully tear down the network before leaving WiFi mode
+void wifi_shutdown() {
+    _ws_started = false;
+    tcp_close();
+    delay(60);                  // flush the FIN
+    WiFi.disconnect(true, false);
+    delay(20);
+    dbg_println("WiFi: shut down for transport switch");
 }
 
 bool wifi_in_ap_mode() {

@@ -56,6 +56,8 @@ void TransportScene::onEncoder(int delta) {
 void TransportScene::confirmSelection() {
     TransportMode chosen = kItems[_selected].mode;
     if (chosen != wifi_get_transport()) {
+        // Gracefully close any live WiFi/Telnet connection (FIN) before the reboot
+        wifi_shutdown();
         wifi_set_transport(chosen);
 #ifdef ARDUINO
         ESP.restart();

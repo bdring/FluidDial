@@ -12,6 +12,7 @@ void espnow_poll();
 
 void espnow_putchar(uint8_t c);
 int  espnow_getchar();  // returns -1 if no data
+bool espnow_rx_available();  // true if a received byte is buffered
 
 
 bool espnow_is_paired();

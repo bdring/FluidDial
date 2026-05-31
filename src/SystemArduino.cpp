@@ -55,6 +55,13 @@ static int uart_getchar_impl() {
     return -1;
 }
 
+// True if the UART driver already has a received byte buffered
+static bool uart_rx_waiting() {
+    size_t n = 0;
+    uart_get_buffered_data_len(fnc_uart_port, &n);
+    return n > 0;
+}
+
 #ifdef USE_WIFI
 extern "C" void fnc_putchar(uint8_t c) {
     if (wifi_use_uart_mode())   { uart_putchar_impl(c); return; }
@@ -66,9 +73,16 @@ extern "C" int fnc_getchar() {
     if (wifi_use_espnow_mode()) return espnow_getchar();
     return ws_getchar();
 }
+// Whether another received byte is already buffered for the active transport
+extern "C" bool fnc_rx_waiting() {
+    if (wifi_use_uart_mode())   return uart_rx_waiting();
+    if (wifi_use_espnow_mode()) return espnow_rx_available();
+    return ws_rx_available();
+}
 #else
 // ── UART-only build ───────────────────────────────────────────────────────────
 extern "C" void fnc_putchar(uint8_t c) { uart_putchar_impl(c); }
+extern "C" bool fnc_rx_waiting()        { return uart_rx_waiting(); }
 extern "C" int  fnc_getchar()          { return uart_getchar_impl(); }
 #endif
 

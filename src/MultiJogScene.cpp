@@ -6,6 +6,20 @@
 #include "Scene.h"
 #include "ConfirmScene.h"
 #include "e4math.h"
+#include "System.h"  // dbg_printf()
+
+//   Jog tracing — enable with -DJOG_TRACE
+//   J s  send   t=<ms> a=<accum> dt=<ms since last send> f=<feed mm/min>
+//               e=<estimated exec ms> o=<outstanding queue ms> b=<send block ms>
+//   J rev        direction reversal -> JogCancel issued
+//   J DROP       jog skipped because outstanding queue >= QUEUE_CAP_MS
+//   J STOP       dial-still timeout -> jog cancelled
+//   J P  send   precise-mode send (b=<send block ms>)
+#ifdef JOG_TRACE
+#    define JOG_DBG(...) dbg_printf(__VA_ARGS__)
+#else
+#    define JOG_DBG(...) ((void)0)
+#endif
 
 extern Scene helpScene;
 extern Scene fileSelectScene;
@@ -112,6 +126,8 @@ private:
     static const uint32_t MPG_STOP_MS     = 280;  // dial-still time that ends a jog
     static const uint32_t QUEUE_CAP_MS    = 180;  // max motion kept buffered ahead
     
+    static const int      JOG_MAX_INFLIGHT = 3;
+
     static const uint32_t CANCEL_RESEND_MS = 80;
     static const uint32_t CANCEL_MIN_MS    = 250;
     static const uint32_t CANCEL_MAX_MS    = 1500;
@@ -332,6 +348,7 @@ public:
         _last_mpg_tick_ms = 0;
         _jog_dir          = 0;
         _jog_drain_ms     = 0;
+        jog_reset_inflight();
         if (was_jogging) {
             fnc_realtime(JogCancel);
             _cancel_pending = true;
@@ -490,7 +507,7 @@ public:
                 cmd += e4_to_cstr(delta * distance(axis), inInches ? 3 : 2);
             }
         }
-        send_line(cmd.c_str());
+        send_jog_line(cmd.c_str());
         _mpg_jogging = true;
     }
     void start_button_jog(bool negative) {
@@ -525,7 +542,7 @@ public:
                 cmd += e4_to_cstr(axis_distance, 0);
             }
         }
-        send_line(cmd.c_str());
+        send_jog_line(cmd.c_str());
         _continuous = true;
     }
 
@@ -558,8 +575,15 @@ public:
         int dir = (_mpg_accum > 0) ? 1 : -1;
 
         if (_jog_dir != 0 && dir != _jog_dir) {
+            JOG_DBG("J rev t=%u %d->%d\n", (unsigned)now, _jog_dir, dir);
             fnc_realtime(JogCancel);
+            jog_reset_inflight();
             _jog_drain_ms = now;
+        }
+
+        if (!force && jog_inflight() >= JOG_MAX_INFLIGHT) {
+            JOG_DBG("J WAIT t=%u a=%d if=%d\n", (unsigned)now, _mpg_accum, jog_inflight());
+            return;
         }
 
         _cancel_pending = false;
@@ -581,18 +605,27 @@ public:
 
         uint32_t outstanding = (_jog_drain_ms > now) ? (_jog_drain_ms - now) : 0;
         if (!force && outstanding >= QUEUE_CAP_MS) {
+            JOG_DBG("J DROP t=%u a=%d o=%u\n", (unsigned)now, _mpg_accum, (unsigned)outstanding);
             _mpg_accum   = 0;
             _last_mpg_ms = now;
             return;
         }
 
+        int      acc = _mpg_accum;  // captured for trace
+        uint32_t t0  = millis();
         send_mpg_jog(_mpg_accum, feed);
+        jog_mark_sent();
+        uint32_t blk = millis() - t0;  // time spent ack-gated waiting for the prior "ok"
         _jog_dir = dir;
 
         // Track the estimated buffer drain time
         uint32_t exec_ms = (uint32_t)((int64_t)move * 60000 / feed);
         uint32_t base    = (_jog_drain_ms > now) ? _jog_drain_ms : now;
         _jog_drain_ms    = base + exec_ms;
+
+        JOG_DBG("J s t=%u a=%d dt=%u f=%ld e=%u o=%u b=%u\n",
+                (unsigned)now, acc, (unsigned)dt, (long)(feed / 10000),
+                (unsigned)exec_ms, (unsigned)outstanding, (unsigned)blk);
 
         _mpg_accum   = 0;
         _last_mpg_ms = now;
@@ -606,9 +639,17 @@ public:
         }
         uint32_t now = millis();
         if ((now - _last_mpg_ms) >= MPG_INTERVAL_MS) {
+            if (jog_inflight() >= JOG_MAX_INFLIGHT) {
+                JOG_DBG("J WAIT t=%u a=%d if=%d\n", (unsigned)now, _mpg_accum, jog_inflight());
+                return;
+            }
             _cancel_pending = false;
             _cancelling     = false;
+            int      acc = _mpg_accum;
+            uint32_t t0  = millis();
             send_mpg_jog(_mpg_accum, e4_from_int(inInches ? 400 : 10000));
+            jog_mark_sent();
+            JOG_DBG("J P t=%u a=%d b=%u\n", (unsigned)now, acc, (unsigned)(millis() - t0));
             _mpg_accum   = 0;
             _last_mpg_ms = now;
         }
@@ -633,6 +674,7 @@ public:
                 if ((now - _last_mpg_tick_ms) >= MPG_STOP_MS) {
                     service_mpg(true);
                     if (_mpg_accum == 0) {
+                        JOG_DBG("J STOP t=%u\n", (unsigned)now);
                         cancel_jog();
                     }
                 }

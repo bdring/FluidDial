@@ -559,6 +559,10 @@ int espnow_getchar() {
     return rx_pop();
 }
 
+bool espnow_rx_available() {
+    return _rx_head.load(std::memory_order_acquire) != _rx_tail;
+}
+
 bool        espnow_is_paired()      { return _is_paired; }
 bool        espnow_is_connected()   { return _is_paired && _is_connected; }
 bool        espnow_is_reconnecting(){ return _reconnect_active; }
@@ -657,6 +661,7 @@ void        espnow_init() {}
 void        espnow_poll() {}
 void        espnow_putchar(uint8_t) {}
 int         espnow_getchar() { return -1; }
+bool        espnow_rx_available() { return false; }
 bool        espnow_is_paired() { return false; }
 bool        espnow_is_connected() { return false; }
 const char* espnow_status_str() { return ""; }

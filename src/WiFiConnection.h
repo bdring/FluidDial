@@ -33,6 +33,8 @@ bool websocket_is_connected();  // WebSocket connection to FluidNC is up
 // Force-close the WebSocket so it can reconnect cleanly.
 // Called when fnc_is_connected() declares FluidNC unresponsive.
 void wifi_force_ws_reconnect();
+
+void wifi_shutdown();
 bool wifi_in_ap_mode();         // Running as access point for initial setup
 
 // Start a captive-portal AP named "FluidDial".
@@ -66,6 +68,8 @@ WiFiConfig wifi_active_config();
 void ws_putchar(uint8_t c);
 // Receive one byte from the WebSocket ring buffer (-1 if empty).
 int  ws_getchar();
+// True if a received byte is already buffered (no socket read needed).
+bool ws_rx_available();
 
 TransportMode wifi_get_transport();
 void          wifi_set_transport(TransportMode mode);

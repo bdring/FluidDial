@@ -173,6 +173,39 @@ void send_line(const char* s, int timeout) {
     fnc_send_line(s, timeout);
     dbg_println(s);
 }
+
+// Send a jog command over a networked transport without the per-line "ok" handshake.
+void send_jog_line(const char* s) {
+#ifdef USE_WIFI
+    if (!wifi_use_uart_mode()) {  // WiFi / Telnet / ESP-NOW: stream, no ack-gate
+        for (const char* p = s; *p; ++p) {
+            fnc_putchar((uint8_t)*p);
+        }
+        fnc_putchar('\n');
+        dbg_println(s);
+        return;
+    }
+#endif
+    send_line(s);
+}
+
+static volatile int      s_jog_inflight     = 0;
+static uint32_t          s_jog_inflight_ms  = 0;  // last send/ack — for stale recovery
+static const uint32_t    JOG_INFLIGHT_STALE_MS = 300;
+
+void jog_mark_sent() {
+    ++s_jog_inflight;
+    s_jog_inflight_ms = milliseconds();
+}
+void jog_reset_inflight() {
+    s_jog_inflight = 0;
+}
+int jog_inflight() {
+    if (s_jog_inflight > 0 && (milliseconds() - s_jog_inflight_ms) > JOG_INFLIGHT_STALE_MS) {
+        s_jog_inflight = 0;  // ack(s) presumed lost / FluidNC quiet — recover
+    }
+    return s_jog_inflight;
+}
 static void vsend_linef(const char* fmt, va_list va) {
     static char buf[128];
     vsnprintf(buf, 128, fmt, va);
@@ -218,7 +251,14 @@ static void connect_init() {
 #endif
     send_line("$G");                     // Refresh GCode modes
     send_line("$RI=200");                // Enable auto-reporting every 200 ms
-    init_file_list();                    // Request SD file list
+
+    // Pre-populate the SD file list on the FIRST connect only. Re-fetching it
+    // on every reconnect is both wasteful and harmful over ESP-NOW
+    static bool s_file_list_primed = false;
+    if (!s_file_list_primed) {
+        s_file_list_primed = true;
+        init_file_list();                // Request SD file list (once)
+    }
     detect_homing_info();                // Probe axis homing state
 }
 
@@ -295,6 +335,11 @@ extern "C" void show_ok() {
 #ifdef FNC_RX_TRACE
     dbg_printf("[rx-ok]\n");
 #endif
+    
+    if (s_jog_inflight > 0) {
+        --s_jog_inflight;
+        s_jog_inflight_ms = milliseconds();
+    }
     if (json_in_progress()) {
         // "ok" ends a reply; if a torn JSON doc was in flight, clean up.
         json_reset_depth();
