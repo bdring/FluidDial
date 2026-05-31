@@ -7,6 +7,12 @@
 
 #include <stdint.h>
 
+enum class TransportMode : uint8_t {
+    UART    = 0,
+    WIFI    = 1,
+    ESPNOW  = 2,
+};
+
 struct WiFiConfig {
     char ssid[64];
     char password[64];
@@ -27,6 +33,8 @@ bool websocket_is_connected();  // WebSocket connection to FluidNC is up
 // Force-close the WebSocket so it can reconnect cleanly.
 // Called when fnc_is_connected() declares FluidNC unresponsive.
 void wifi_force_ws_reconnect();
+
+void wifi_shutdown();
 bool wifi_in_ap_mode();         // Running as access point for initial setup
 
 // Start a captive-portal AP named "FluidDial".
@@ -60,13 +68,16 @@ WiFiConfig wifi_active_config();
 void ws_putchar(uint8_t c);
 // Receive one byte from the WebSocket ring buffer (-1 if empty).
 int  ws_getchar();
+// True if a received byte is already buffered (no socket read needed).
+bool ws_rx_available();
 
-// ── Runtime transport mode ────────────────────────────────────────────────────
-// When uart_mode is true the WiFi stack is not started and
-// fnc_putchar/fnc_getchar route to the ESP-IDF UART driver instead.
-// The mode is persisted in NVS (namespace "fluidwifi", key "uart_mode").
-bool wifi_use_uart_mode();          // cached after first read
-void wifi_set_uart_mode(bool uart); // write to NVS and update cache
+TransportMode wifi_get_transport();
+void          wifi_set_transport(TransportMode mode);
+
+bool wifi_use_uart_mode();
+bool wifi_use_espnow_mode();
+
+void wifi_set_uart_mode(bool uart);
 
 bool wifi_is_first_boot();
 

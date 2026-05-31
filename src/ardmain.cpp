@@ -13,6 +13,8 @@
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
 #    include "WiFiSetupScene.h"
+#    include "PeerLink.h"
+#    include "ESPNowPairingScene.h"
 extern Scene firstBootScene;
 static bool _wifi_initialized  = false;
 static bool _first_boot_active = false;
@@ -20,6 +22,7 @@ static bool _first_boot_active = false;
 
 extern void base_display();
 extern void show_logo();
+extern "C" bool fnc_rx_waiting();
 
 extern const char* git_info;
 
@@ -32,13 +35,17 @@ extern WiFiSetupScene wifiSetupScene;
 void first_boot_complete() {
     _first_boot_active = false;
 
-    if (wifi_use_uart_mode()) {
+    TransportMode transport = wifi_get_transport();
+    if (transport == TransportMode::UART) {
         fnc_realtime(StatusReport);
         activate_scene(&menuScene);
+    } else if (transport == TransportMode::ESPNOW) {
+        if (!_wifi_initialized) {
+            _wifi_initialized = true;
+            espnow_init();
+        }
+        activate_scene(&espnowPairingScene, &firstBootScene);
     } else {
-        // WiFi mode — credentials don't exist yet on a true first boot,
-        // so go straight to the WiFi setup scene.  wifi_init() will run
-        // on the next loop() iteration and auto-start the AP.
         activate_scene(&wifiSetupScene);
     }
 }
@@ -74,8 +81,17 @@ void setup() {
     extern Scene* initMenus();
     Scene* menu = initMenus();
 
+#ifdef USE_WIFI
+    if (wifi_use_espnow_mode() && !_wifi_initialized) {
+        _wifi_initialized = true;
+        espnow_init();
+    }
+#endif
+
     // For debugging certain views without setting WiFi/UART transports
-#ifdef DEV_SKIP_TO_SCENE
+#if defined(DEV_SKIP_TO_ESPNOW_PAIRING) && defined(USE_WIFI)
+    activate_scene(&espnowPairingScene);
+#elif defined(DEV_SKIP_TO_SCENE)
     extern Scene DEV_SKIP_TO_SCENE;
     activate_scene(&DEV_SKIP_TO_SCENE);
 #elif defined(USE_WIFI)
@@ -86,7 +102,10 @@ void setup() {
     if (wifi_is_first_boot()) {
         _first_boot_active = true;
         activate_scene(&firstBootScene);
-    } else if (!wifi_use_uart_mode() && !wifi_load_config().valid) {
+    } else if (wifi_use_espnow_mode() && !espnow_has_saved_pairing()) {
+        activate_scene(&espnowPairingScene, &wifiSetupScene);
+    } else if (!wifi_use_uart_mode() && !wifi_use_espnow_mode()
+               && !wifi_load_config().valid) {
         // WiFi mode selected but no credentials configured yet.
         // Land in WiFiSetupScene; wifi_init() (deferred to loop) will
         // auto-start AP so the user can set credentials via browser.
@@ -103,11 +122,20 @@ void loop() {
 #ifdef USE_WIFI
     if (!_first_boot_active) {
         if (!_wifi_initialized) {
-        // Defer WiFi init until after setup() has returned + 1st render is complete - ensure sprite caches allocate before WiFi consumes heap.
+            // Defer transport init until after setup() returned + 1st render is
+            // complete — ensures sprite caches allocate before WiFi/ESP-NOW consumes heap.
             _wifi_initialized = true;
-            wifi_init();
+            if (wifi_use_espnow_mode()) {
+                espnow_init();
+            } else {
+                wifi_init();
+            }
         }
-        wifi_poll();
+        if (wifi_use_espnow_mode()) {
+            espnow_poll();
+        } else {
+            wifi_poll();
+        }
     }
 #endif
     // fnc_poll() drains ONE byte per call. The WiFi transport can refill its
@@ -115,8 +143,14 @@ void loop() {
     // window worth — preferences.json bursts in ~5 KB). Drain a chunk per
     // tick so the ring buffer can't overflow and silently drop bytes,
     // which corrupts the streaming JSON parser mid-document.
+    //
+    // Drain all pending data, but stop when RX is empty to avoid 
+    // unnecessary Wi-Fi polling and reduce idle-loop jitter that can make small jog movements choppy.
     for (int i = 0; i < 64; i++) {
         fnc_poll();
+        if (!fnc_rx_waiting()) {
+            break;
+        }
     }
     dispatch_events();  // Handle dial, touch, buttons
     service_redisplay();

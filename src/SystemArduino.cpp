@@ -12,6 +12,7 @@
 
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
+#    include "PeerLink.h"
 #endif
 
 // ── UART transport ─────────────────────────────────────────────────────────────
@@ -54,19 +55,34 @@ static int uart_getchar_impl() {
     return -1;
 }
 
+// True if the UART driver already has a received byte buffered
+static bool uart_rx_waiting() {
+    size_t n = 0;
+    uart_get_buffered_data_len(fnc_uart_port, &n);
+    return n > 0;
+}
+
 #ifdef USE_WIFI
-// ── Routing: dispatch fnc_putchar/fnc_getchar to WiFi or UART ────────────────
 extern "C" void fnc_putchar(uint8_t c) {
-    if (wifi_use_uart_mode()) uart_putchar_impl(c);
-    else ws_putchar(c);
+    if (wifi_use_uart_mode())   { uart_putchar_impl(c); return; }
+    if (wifi_use_espnow_mode()) { espnow_putchar(c);    return; }
+    ws_putchar(c);
 }
 extern "C" int fnc_getchar() {
-    if (wifi_use_uart_mode()) return uart_getchar_impl();
+    if (wifi_use_uart_mode())   return uart_getchar_impl();
+    if (wifi_use_espnow_mode()) return espnow_getchar();
     return ws_getchar();
+}
+// Whether another received byte is already buffered for the active transport
+extern "C" bool fnc_rx_waiting() {
+    if (wifi_use_uart_mode())   return uart_rx_waiting();
+    if (wifi_use_espnow_mode()) return espnow_rx_available();
+    return ws_rx_available();
 }
 #else
 // ── UART-only build ───────────────────────────────────────────────────────────
 extern "C" void fnc_putchar(uint8_t c) { uart_putchar_impl(c); }
+extern "C" bool fnc_rx_waiting()        { return uart_rx_waiting(); }
 extern "C" int  fnc_getchar()          { return uart_getchar_impl(); }
 #endif
 
@@ -76,7 +92,11 @@ extern "C" int  fnc_getchar()          { return uart_getchar_impl(); }
 // blocks for the full 2000 ms timeout on every second jog command.
 extern "C" void poll_extra() {
 #ifdef USE_WIFI
-    wifi_poll();
+    if (wifi_use_espnow_mode()) {
+        espnow_poll();
+    } else {
+        wifi_poll();
+    }
 #endif
 #ifdef DEBUG_TO_USB
     if (debugPort.available()) {

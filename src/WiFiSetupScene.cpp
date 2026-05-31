@@ -1,12 +1,12 @@
 // 2026 - Figamore
-// Use of this source code is governed by a GPLv3 license.
-//
-// Shows connection status and offers AP-mode setup.
 
 #ifdef USE_WIFI
 
 #include "WiFiSetupScene.h"
 #include "WiFiConnection.h"
+#include "PeerLink.h"
+#include "ESPNowPairingScene.h"
+#include "TransportScene.h"
 #include "Drawing.h"
 #include "Menu.h"
 #include "System.h"
@@ -20,7 +20,7 @@ extern const char* git_info;
 
 static constexpr int BX = 20, BY = 28, BW = 200, BH = 34;       // status badge
 static constexpr int CX = 15, CW = 210, CH = 28, CI = 8;        // info cards
-static constexpr int SBX = 20, SBY = 160, SBW = 200, SBH = 36;  // switch button
+static constexpr int SBX = 12, SBY = 160, SBW = 216, SBH = 36;  // switch button
 
 static constexpr int CARD_Y0    = 68;
 static constexpr int CARD_PITCH = CH + 4;  // 32 px per card row
@@ -59,18 +59,11 @@ static const char* signal_str(int bars) {
 void WiFiSetupScene::onEntry(void* arg)    { reDisplay(); }
 void WiFiSetupScene::onStateChange(state_t){ reDisplay(); }
 
-void WiFiSetupScene::switchModeAndRestart() {
-    wifi_set_uart_mode(!wifi_use_uart_mode());
-#ifdef ARDUINO
-    ESP.restart();
-#endif
-}
-
 void WiFiSetupScene::onModeSwitchButtonPress() {
     if (wifi_in_ap_mode()) {
         wifi_stop_ap_and_restart();
     } else {
-        switchModeAndRestart();
+        push_scene(&transportScene);
     }
 }
 
@@ -84,8 +77,13 @@ void WiFiSetupScene::onRedButtonPress() {
 }
 
 void WiFiSetupScene::onGreenButtonPress() {
-    if (!wifi_in_ap_mode() && !wifi_use_uart_mode()) {
-        // WiFi mode: launch AP for credential entry
+    if (wifi_in_ap_mode()) {
+#ifdef ARDUINO
+        ESP.restart();
+#endif
+    } else if (wifi_use_espnow_mode()) {
+        push_scene(&espnowPairingScene);
+    } else if (!wifi_use_uart_mode()) {
         wifi_start_ap_setup();
         reDisplay();
     } else {
@@ -140,10 +138,12 @@ void WiFiSetupScene::drawApView() {
 }
 
 void WiFiSetupScene::drawSettingsView() {
-    bool       uart_mode = wifi_use_uart_mode();
-    WiFiConfig cfg       = wifi_active_config();  // cached — no NVS read on every frame
-    bool       ws_ok     = websocket_is_connected();
-    bool       wf_ok     = wifi_is_connected();
+    TransportMode transport  = wifi_get_transport();
+    bool          uart_mode  = (transport == TransportMode::UART);
+    bool          espnow_mode = (transport == TransportMode::ESPNOW);
+    WiFiConfig    cfg        = wifi_active_config();
+    bool          ws_ok      = websocket_is_connected();
+    bool          wf_ok      = wifi_is_connected();
 
     // ── Status badge ──────────────────────────────────────────────────────────
     int         badge_fill;
@@ -156,6 +156,29 @@ void WiFiSetupScene::drawSettingsView() {
         badge_outline = 0x4da6ff;
         badge_label   = "UART Mode";
         badge_text    = 0x4da6ff;
+    } else if (espnow_mode) {
+        if (espnow_is_connected()) {
+            badge_fill    = 0x003300;
+            badge_outline = 0xcc66ff;
+            badge_label   = "Using ESP-NOW";
+            badge_text    = 0xcc66ff;
+        } else if (espnow_is_reconnecting()) {
+            static const char* rc_frames[] = {"Searching", "Searching.", "Searching..", "Searching..."};
+            badge_fill    = 0x1a0033;
+            badge_outline = 0xcc66ff;
+            badge_label   = rc_frames[(millis() / 400) % 4];
+            badge_text    = 0xcc66ff;
+        } else if (espnow_is_paired()) {
+            badge_fill    = 0x1a001a;
+            badge_outline = 0xcc66ff;
+            badge_label   = "ESP-NOW Paired";
+            badge_text    = 0xcc66ff;
+        } else {
+            badge_fill    = 0x1a001a;
+            badge_outline = 0xcc66ff;
+            badge_label   = "ESP-NOW";
+            badge_text    = 0xcc66ff;
+        }
     } else if (!cfg.valid) {
         badge_fill    = 0x4d0000;
         badge_outline = 0xe02b2b;
@@ -167,21 +190,18 @@ void WiFiSetupScene::drawSettingsView() {
         badge_label   = "Ready";
         badge_text    = 0x66ff66;
     } else if (wf_ok) {
-        // WiFi up — waiting for FluidNC WebSocket
-        static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
+        static const char* nc_frames[] = {"FluidNC", "FluidNC.", "FluidNC..", "FluidNC..."};
         badge_fill    = 0x332200;
         badge_outline = YELLOW;
         badge_label   = nc_frames[(millis() / 400) % 4];
         badge_text    = YELLOW;
     } else if (wifi_last_error()) {
-        // WiFi connection failed (wrong password / network not found)
         badge_fill    = 0x4d0000;
         badge_outline = RED;
         badge_label   = "WiFi Error";
         badge_text    = WHITE;
     } else {
-        // WiFi not yet connected — still trying
-        static const char* wifi_frames[] = { "WiFi", "WiFi.", "WiFi..", "WiFi..." };
+        static const char* wifi_frames[] = {"WiFi", "WiFi.", "WiFi..", "WiFi..."};
         badge_fill    = 0x2a0000;
         badge_outline = 0xe02b2b;
         badge_label   = wifi_frames[(millis() / 400) % 4];
@@ -204,31 +224,54 @@ void WiFiSetupScene::drawSettingsView() {
         centered_text("1 Mbaud", y, 0xe02b2b, SMALL);
         y += 20;
         centered_text("Wired UART", y, WHITE, TINY);
+    } else if (espnow_mode) {
+        y += (round_display ? 8 : 14);
+        if (!espnow_is_paired()) {
+            centered_text("Not yet paired", y, DARKGREY, TINY);
+            y += 18;
+            centered_text("Press green to pair", y, 0xcc66ff, TINY);
+        } else if (espnow_is_reconnecting()) {
+            centered_text("Connection lost", y, YELLOW, TINY);
+            y += 18;
+            centered_text("Scanning...", y, 0xcc66ff, TINY);
+        } else {
+            y += 18;
+            y += (round_display ? 14 : 20);
+            y += 14;
+            if (espnow_is_connected()) {
+                int8_t rssi = espnow_rssi();
+                if (rssi != 0) {
+                    char rssi_buf[16];
+                    snprintf(rssi_buf, sizeof(rssi_buf), "%d dBm", rssi);
+                    centered_text(rssi_buf, y, 0xcc66ff, SMALL);
+                } else {
+                    // centered_text(espnow_status_str(), y, 0xcc66ff, SMALL);
+                }
+            } else {
+                centered_text(espnow_status_str(), y, DARKGREY, SMALL);
+            }
+        }
     } else if (!cfg.valid) {
         y += 14;
         centered_text("Press green button", y, 0xe02b2b, TINY);
         y += 18;
         centered_text("to setup WiFi", y, 0xe02b2b, TINY);
     } else {
-        // Network label + SSID — always visible so the user knows what we're connecting to
         y += (round_display ? 8 : 10);
         centered_text("Network", y, DARKGREY, TINY);
         y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
         y += (round_display ? 14 : 20);
-
-        drawRect(40, y, 160, 1, 0, DARKGREY);  // divider
+        drawRect(40, y, 160, 1, 0, DARKGREY);
         y += 14;
 
         if (wifi_last_error()) {
-            // Show the failure reason instead of the FluidNC IP
             centered_text("WiFi Error", y, DARKGREY, TINY);
             y += 20;
             centered_text(wifi_last_error(), y, RED, SMALL);
             y += 20;
             centered_text("Retrying...", y, 0x888888, TINY);
         } else {
-            // FluidNC label + IP, coloured by connection phase
             centered_text("FluidNC Address", y, DARKGREY, TINY);
             y += 20;
             int ip_color = ws_ok ? GREEN : wf_ok ? YELLOW : LIGHTGREY;
@@ -237,31 +280,31 @@ void WiFiSetupScene::drawSettingsView() {
         }
     }
 
-    // ── Mode-switch button ────────────────────────────────────────────────────
     {
-        const char* sw_label      = uart_mode ? "Switch to WiFi" : "Switch to Wired";
-        int         sw_fill       = uart_mode ? 0x003300: 0x001a4d;
-        int         sw_outline    = uart_mode ? 0x66ff66: 0x4da6ff;
-
         int sbx = round_display ? 40 : SBX;
         int sbw = round_display ? 160 : SBW;
         int sby = round_display ? SBY : SBY + 6;
         modeSwitchBtn.font = round_display ? TINY : SMALL;
-        modeSwitchBtn.set(sbx, sby, sbw, SBH, sw_label, sw_fill, sw_outline, sw_outline, [this]() { onModeSwitchButtonPress(); });
+        modeSwitchBtn.set(sbx, sby, sbw, SBH, "Switch Mode",
+                          0x001a4d, 0x4da6ff, 0x4da6ff,
+                          [this]() { onModeSwitchButtonPress(); });
     }
 
     // ── Button legends ────────────────────────────────────────────────────────
-    const char* red_label   = "Back";
-    const char* green_label = uart_mode ? "Restart" : "Setup";
-    drawButtonLegends(red_label, green_label, "More");
+    const char* green_label;
+    if (uart_mode)   green_label = "Restart";
+    else if (espnow_mode) green_label = espnow_is_paired() ? "Re-pair" : "Pair";
+    else             green_label = "Setup";
+    drawButtonLegends("Back", green_label, "More");
 }
 
 void WiFiSetupScene::reDisplay() {
     background();
 
     const char* title;
-    if (round_display) {
-        // Shorter titles for M5 Dial: top of circle is narrow (~104px at y=12)
+    if (wifi_use_espnow_mode()) {
+        title = round_display ? "ESP-NOW" : "Connection Settings";
+    } else if (round_display) {
         if (wifi_in_ap_mode() || wifi_use_uart_mode() || !wifi_active_config().valid) {
             title = "WiFi Setup";
         } else if (websocket_is_connected()) {

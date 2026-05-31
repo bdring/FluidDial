@@ -23,6 +23,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
+#include <atomic>
 
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
@@ -149,7 +150,7 @@ static void start_dns_resolve() {
     _dns_ok        = false;
     _dns_resolving = true;
     dbg_printf("Resolving hostname (async): %s\n", _active_cfg.fluidnc_ip);
-    BaseType_t task_created = xTaskCreate(dnsResolveTask, "dns_resolve", 4096, nullptr, 1, nullptr);
+    BaseType_t task_created = xTaskCreate(dnsResolveTask, "dns_resolve", 8192, nullptr, 1, nullptr);
     if (task_created != pdPASS) {
         _dns_resolving = false;
         _wifi_error_msg = "DNS resolve task start failed";
@@ -179,7 +180,7 @@ static void tcp_apply_opts(int fd) {
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
     // Bound how long a blocking send() will wait if FluidNC's RX is full.
-    struct timeval snd_tv = { 2, 0 };
+    struct timeval snd_tv = { 0, 50000 };  // 50 ms
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &snd_tv, sizeof(snd_tv));
 
     // Detect dead peers faster than the default ~2 hour kernel timeout.
@@ -262,17 +263,18 @@ static const char* wifi_status_name(wl_status_t status) {
     }
 }
 
-// Bulk send over the raw socket. Blocks up to SO_SNDTIMEO per chunk;
-// transient EAGAIN drops the remainder of this flush but keeps the
-// socket so the in-flight document survives. Any other errno tears the
+// Bulk send over the raw socket. `flags` is passed to send(); pass MSG_DONTWAIT
+// for the gcode/jog stream so a backpressured socket never blocks the main loop
+// (see ws_send_text). transient EAGAIN drops the remainder of this flush but
+// keeps the socket so the in-flight document survives. Any other errno tears the
 // socket down so wifi_poll() can reconnect.
-static bool tcp_send_all(const uint8_t* payload, size_t length) {
+static bool tcp_send_all(const uint8_t* payload, size_t length, int flags) {
     if (_sock < 0 || length == 0) {
         return _sock >= 0;
     }
     size_t off = 0;
     while (off < length) {
-        ssize_t n = ::send(_sock, payload + off, length - off, 0);
+        ssize_t n = ::send(_sock, payload + off, length - off, flags);
         if (n <= 0) {
             int e = errno;
             if (e == EAGAIN || e == EWOULDBLOCK) {
@@ -294,11 +296,12 @@ static bool tcp_send_all(const uint8_t* payload, size_t length) {
 // Keep the ws_send_text/ws_send_bin spellings for the ws_putchar
 // callsites — both go through the same raw send() now.
 static bool ws_send_text(uint8_t* payload, size_t length) {
-    return tcp_send_all(payload, length);
+    return tcp_send_all(payload, length, MSG_DONTWAIT);
 }
 
+// Realtime bytes ('?', '!', '~', JogCancel, …): kept blocking
 static bool ws_send_bin(const uint8_t* payload, size_t length) {
-    return tcp_send_all(payload, length);
+    return tcp_send_all(payload, length, 0);
 }
 
 // Pull bytes off the socket and push them into the RX ring buffer. Called
@@ -405,28 +408,53 @@ int ws_getchar() {
     return rx_pop();
 }
 
-// ─── Runtime transport mode ───────────────────────────────────────────────────
-
-static int _uart_mode_cached = -1;  // -1 = not yet read from NVS
-
-bool wifi_use_uart_mode() {
-    if (_uart_mode_cached < 0) {
-        Preferences prefs;
-        prefs.begin(PREF_NAMESPACE, false);  // read-write ensures namespace exists
-        _uart_mode_cached = prefs.getBool("uart_mode", false) ? 1 : 0;
-        prefs.end();
-    }
-    return _uart_mode_cached == 1;
+bool ws_rx_available() {
+    return _rx_head != _rx_tail;
 }
 
-void wifi_set_uart_mode(bool uart) {
+// ─── Runtime transport mode ───────────────────────────────────────────────────
+
+static int _transport_cached = -1;  // -1 = not yet loaded from NVS
+
+TransportMode wifi_get_transport() {
+    if (_transport_cached >= 0) return (TransportMode)_transport_cached;
+
     Preferences prefs;
     prefs.begin(PREF_NAMESPACE, false);
-    prefs.putBool("uart_mode",   uart);
-    prefs.putBool("setup_done",  true);  // clears first-boot flag
+
+    if (prefs.isKey("transport")) {
+        _transport_cached = (int)prefs.getUChar("transport", (uint8_t)TransportMode::WIFI);
+    } else {
+        bool uart = prefs.getBool("uart_mode", false);
+        _transport_cached = uart ? (int)TransportMode::UART : (int)TransportMode::WIFI;
+    }
     prefs.end();
-    _uart_mode_cached = uart ? 1 : 0;
-    dbg_printf("Transport mode set to: %s\n", uart ? "UART" : "WiFi");
+#ifndef USE_ESPNOW
+    // ESP-NOW excluded from this build: if a saved pairing selected it, fall back
+    // to WiFi so nothing downstream tries to use the unavailable transport
+    if (_transport_cached == (int)TransportMode::ESPNOW) {
+        _transport_cached = (int)TransportMode::WIFI;
+    }
+#endif
+    return (TransportMode)_transport_cached;
+}
+
+void wifi_set_transport(TransportMode mode) {
+    Preferences prefs;
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.putUChar("transport",  (uint8_t)mode);
+    prefs.putBool("setup_done", true);  // clears first-boot flag
+    prefs.end();
+    _transport_cached = (int)mode;
+    const char* names[] = {"UART", "WiFi", "ESP-NOW"};
+    dbg_printf("Transport mode set to: %s\n", names[(int)mode < 3 ? (int)mode : 1]);
+}
+
+bool wifi_use_uart_mode()   { return wifi_get_transport() == TransportMode::UART; }
+bool wifi_use_espnow_mode() { return wifi_get_transport() == TransportMode::ESPNOW; }
+
+void wifi_set_uart_mode(bool uart) {
+    wifi_set_transport(uart ? TransportMode::UART : TransportMode::WIFI);
 }
 
 bool wifi_is_first_boot() {
@@ -505,7 +533,17 @@ function doScan(){
   btn.disabled=true; btn.textContent='Scanning...';
   st.textContent='Scanning for networks, please wait...';
   lst.style.display='none';
-  fetch('/scan').then(function(r){return r.json();}).then(function(nets){
+  pollScan();
+}
+function pollScan(){
+  fetch('/scan').then(function(r){
+    if(r.status===202){setTimeout(pollScan,1500);return null;}
+    return r.json();
+  }).then(function(nets){
+    if(!nets)return;
+    var lst=document.getElementById('netList');
+    var st=document.getElementById('scanStatus');
+    var btn=document.getElementById('scanBtn');
     lst.innerHTML='<option value="">-- select a network --</option>';
     nets.sort(function(a,b){return b.rssi-a.rssi;});
     nets.forEach(function(n){
@@ -518,8 +556,9 @@ function doScan(){
     st.textContent=nets.length+' network'+(nets.length!==1?'s':'')+' found.';
     btn.disabled=false; btn.textContent='Scan';
   }).catch(function(){
-    st.textContent='Scan failed. Try again.';
-    btn.disabled=false; btn.textContent='Scan';
+    document.getElementById('scanStatus').textContent='Scan failed. Try again.';
+    document.getElementById('scanBtn').disabled=false;
+    document.getElementById('scanBtn').textContent='Scan';
   });
 }
 function pickNet(sel){
@@ -612,12 +651,24 @@ static void handleSave() {
 }
 
 static void handleScan() {
-    int n = WiFi.scanNetworks(false, false);  // blocking, no hidden networks
+    int n = WiFi.scanComplete();
+
+    if (n == WIFI_SCAN_RUNNING) {
+        httpServer.sendHeader("Cache-Control", "no-cache");
+        httpServer.send(202, "application/json", "[]");
+        return;
+    }
+
+    if (n == WIFI_SCAN_FAILED || n < 0) {
+        WiFi.scanNetworks(true, false);
+        httpServer.sendHeader("Cache-Control", "no-cache");
+        httpServer.send(202, "application/json", "[]");
+        return;
+    }
 
     String json = "[";
     for (int i = 0; i < n && i < 32; i++) {
         if (i > 0) json += ",";
-        // Escape backslashes and double-quotes to produce valid JSON.
         String ssid = WiFi.SSID(i);
         String safe;
         safe.reserve(ssid.length());
@@ -761,6 +812,16 @@ void wifi_force_ws_reconnect() {
     }
 }
 
+// Gracefully tear down the network before leaving WiFi mode
+void wifi_shutdown() {
+    _ws_started = false;
+    tcp_close();
+    delay(60);                  // flush the FIN
+    WiFi.disconnect(true, false);
+    delay(20);
+    dbg_println("WiFi: shut down for transport switch");
+}
+
 bool wifi_in_ap_mode() {
     return _ap_mode;
 }
@@ -771,6 +832,7 @@ const char* wifi_ap_ssid() {
 
 const char* wifi_status_str() {
     if (wifi_use_uart_mode())   return "UART Mode";
+    if (wifi_use_espnow_mode()) return "ESP-NOW Mode";
     if (_ap_mode)               return "AP Setup Mode";
     if (!wifi_is_connected())   return "Connecting to WiFi";
     if (!_ws_connected)         return "Connecting to FluidNC";
@@ -809,8 +871,13 @@ static void onWiFiDisconnect(WiFiEvent_t event, WiFiEventInfo_t info) {
 }
 
 void wifi_init(bool auto_ap) {
-    if (wifi_use_uart_mode()) {
+    TransportMode transport = wifi_get_transport();
+    if (transport == TransportMode::UART) {
         dbg_println("Transport: UART mode — WiFi stack not started");
+        return;
+    }
+    if (transport == TransportMode::ESPNOW) {
+        dbg_println("Transport: ESP-NOW mode — WebSocket stack not started");
         return;
     }
     if (wifi_is_first_boot()) {
@@ -866,8 +933,9 @@ void wifi_init(bool auto_ap) {
 }
 
 void wifi_poll() {
-    if (!_wifi_stack_started) return;  // wifi_init() never ran (first boot or UART mode)
-    if (wifi_use_uart_mode()) return;
+    if (!_wifi_stack_started) return;  // wifi_init() never ran (first boot or UART/ESP-NOW mode)
+    if (wifi_use_uart_mode())   return;
+    if (wifi_use_espnow_mode()) return;
 
     if (_ap_mode) {
         dnsServer.processNextRequest();
@@ -982,6 +1050,9 @@ void wifi_poll() {
         dbg_printf("WiFi connected — IP: %s\n",
                    WiFi.localIP().toString().c_str());
         // Initialise mDNS so ".local" names resolve via the lwIP mDNS resolver.
+        // Always call end() first — if WiFi reconnects (signal drop, router reboot,
+        // etc.) without end(), each begin() leaks heap and a task, eventually crashing.
+        MDNS.end();
         if (!MDNS.begin("fluiddial")) {
             dbg_println("mDNS init failed — .local hostnames may not resolve");
         }
@@ -1010,12 +1081,15 @@ void wifi_poll() {
     // Handle async DNS completion (hostname -> IP resolution).
     // Only act if WiFi is still up and the Telnet socket hasn't already started.
     if (_dns_done && !_ws_started && now_connected) {
+        std::atomic_thread_fence(std::memory_order_acquire);
         bool ok = _dns_ok;
         _dns_done = false;
         if (ok) {
+            char resolved_host[sizeof(_dns_result_str)];
+            memcpy(resolved_host, _dns_result_str, sizeof(resolved_host));
             dbg_printf("Hostname resolved: %s -> %s\n",
-                       _active_cfg.fluidnc_ip, _dns_result_str);
-            tcp_begin(_dns_result_str);
+                       _active_cfg.fluidnc_ip, resolved_host);
+            tcp_begin(resolved_host);
         } else {
             dbg_printf("Hostname resolution failed: %s — retrying in %d ms\n",
                        _active_cfg.fluidnc_ip, DNS_RETRY_DELAY_MS);

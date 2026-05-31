@@ -47,7 +47,12 @@ extern uint32_t           mySelectedTool;
 int num_digits();
 
 void send_line(const char* s, int timeout = 2000);
+void send_jog_line(const char* s);  // jog send without the "ok" handshake
 void send_linef(const char* fmt, ...);
+
+void jog_mark_sent();       // record that a jog line was just streamed
+int  jog_inflight();        // jogs sent but not yet acked (self-heals if stalled)
+void jog_reset_inflight();  // clear (on JogCancel / jog stop)
 
 const char* intToCStr(int val);
 const char* axisNumToCStr(int axis);

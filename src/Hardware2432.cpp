@@ -287,6 +287,8 @@ void init_resistive_cyd() {
 
     setBacklightPin(GPIO_NUM_21);
 
+    pinMode(lockout_pin, INPUT);
+
     enc_a = GPIO_NUM_22;
     enc_b = GPIO_NUM_27;
 #    ifdef CYD_BUTTONS
@@ -558,46 +560,37 @@ void system_background() {
     drawBackground(BLACK);
 }
 
-static constexpr int32_t BUTTON_DEBOUNCE_MS = 50;
 
 bool switch_button_touched(bool& pressed, int& button) {
-    static int     last_red    = -1;
-    static int     last_green  = -1;
-    static int     last_dial   = -1;
-    static int32_t expire_red   = 0;
-    static int32_t expire_dial  = 0;
-    static int32_t expire_green = 0;
-
-    int32_t now = (int32_t)milliseconds();
-    bool    state;
+    static int last_red    = -1;
+    static int last_green  = -1;
+    static int last_dial   = -1;
+    bool       state;
 
     if (red_button_pin != -1) {
         state = digitalRead(red_button_pin);
-        if ((int)state != last_red && (now - expire_red) >= 0) {
-            last_red   = state;
-            expire_red = now + BUTTON_DEBOUNCE_MS;
-            button     = 0;
-            pressed    = !state;
+        if ((int)state != last_red) {
+            last_red = state;
+            button   = 0;
+            pressed  = !state;
             return true;
         }
     }
     if (dial_button_pin != -1) {
         state = digitalRead(dial_button_pin);
-        if ((int)state != last_dial && (now - expire_dial) >= 0) {
-            last_dial   = state;
-            expire_dial = now + BUTTON_DEBOUNCE_MS;
-            button      = 1;
-            pressed     = !state;
+        if ((int)state != last_dial) {
+            last_dial = state;
+            button    = 1;
+            pressed   = !state;
             return true;
         }
     }
     if (green_button_pin != -1) {
         state = digitalRead(green_button_pin);
-        if ((int)state != last_green && (now - expire_green) >= 0) {
-            last_green   = state;
-            expire_green = now + BUTTON_DEBOUNCE_MS;
-            button       = 2;
-            pressed      = !state;
+        if ((int)state != last_green) {
+            last_green = state;
+            button     = 2;
+            pressed    = !state;
             return true;
         }
     }
@@ -607,6 +600,12 @@ bool switch_button_touched(bool& pressed, int& button) {
 bool screen_encoder(int x, int y, int& delta) {
     return false;
 }
+
+struct button_debounce_t {
+    bool    debouncing;
+    bool    skipped;
+    int32_t timeout;
+} debounce[n_buttons] = { { false, false, 0 } };
 
 bool    touch_debounce = false;
 int32_t touch_timeout  = 0;
@@ -707,6 +706,12 @@ int battery_level() {
         return cached_level;
     }
 
+    // Skip EMA when charger is connected
+    if (millivolts > 4250) {
+        cached_level = 100;
+        return cached_level;
+    }
+
     // Exponential moving average (alpha=0.25)
     smoothed_mv = (smoothed_mv < 3000) ? millivolts : (smoothed_mv * 3 + millivolts) / 4;
     millivolts  = smoothed_mv;
@@ -716,16 +721,10 @@ int battery_level() {
         int pct;
     };
     static constexpr LevelPoint curve[] = {
-        { 4200, 100 },
-        { 4100, 90 },
-        { 4000, 80 },
-        { 3930, 70 },
-        { 3860, 60 },
-        { 3800, 50 },
-        { 3750, 40 },
-        { 3700, 30 },
-        { 3650, 20 },
-        { 3550, 10 },
+        { 4050, 100 },
+        { 3800, 75 },
+        { 3700, 50 },
+        { 3600, 25 },
         { 3300, 0 },
     };
 
@@ -753,9 +752,12 @@ bool battery_charging() {
 #ifndef CYD_BATTERY_ADC
     return false;
 #else
-    static int cached = -1;
-    if (cached < 0) {
-        cached = (battery_millivolts() > 4250) ? 1 : 0;
+    static int      cached       = -1;
+    static uint32_t next_read_ms = 0;
+    uint32_t        now          = millis();
+    if (cached < 0 || now >= next_read_ms) {
+        cached       = (battery_millivolts() > 4250) ? 1 : 0;
+        next_read_ms = now + 1000;
     }
     return cached == 1;
 #endif

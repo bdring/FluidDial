@@ -107,9 +107,8 @@ void dispatch_touch() {
         }
         int button;
        
-        bool btn_touching = (t.state & m5::touch_state_t::mask_touch) != 0;
-        if (screen_button_touched(btn_touching, t.x, t.y, button)) {
-            if (t.state == m5::touch_state_t::touch_begin) {
+        if (screen_button_touched(t.state == m5::touch_state_t::touch, t.x, t.y, button)) {
+            if (t.state == m5::touch_state_t::touch) {
                 dispatch_button(true, button);
             } else if (t.state == m5::touch_state_t::none) {
                 dispatch_button(false, button);
@@ -219,6 +218,7 @@ void dispatch_events() {
 #endif
             extern Scene menuScene;
             activate_at_top_level(&menuScene);
+            fnc_realtime(StatusReport);
         }
     }
     if (action) {
