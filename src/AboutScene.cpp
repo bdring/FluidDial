@@ -34,7 +34,7 @@ void AboutScene::onRedButtonPress() {
     set_disconnected_state();
 #    ifdef ARDUINO
     background();
-    centered_text("Use red button to wakeup", 118, RED, TINY);
+    centered_text("Press WAKE (M5) to wakeup", 118, RED, TINY);
     refreshDisplay();
     delay_ms(2000);
 

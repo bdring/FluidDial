@@ -7,6 +7,8 @@
 #include "DisplaySettingsScene.h"
 #include "BrightnessScene.h"
 #include "WiFiSetupScene.h"
+#include "WiFiConnection.h"   // wifi_request_ota_reboot()
+#include "OTAScene.h"         // otaScene (simulator entry path)
 #include "Drawing.h"
 #include "System.h"
 #include "FluidNCModel.h"
@@ -19,21 +21,22 @@ struct SysItem {
 static const SysItem items[] = {
     { "Restart",    ""                   },
 #ifdef USE_M5
-    { "Sleep",      "Press red to wake"  },
+    { "Sleep",      ""  },
     { "Brightness", ""     },
 #else
-    { "Display",    "Adjust orientation" },
+    { "Orientation",    "" },
     { "Brightness", ""     },
 #endif
+    { "OTA Update", ""  },
 };
 static const int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
 
-static constexpr int ITEM_H_ROUND     = 48;
-static constexpr int ITEM_PITCH_ROUND = 48;
-static constexpr int ITEM_H_CYD       = 48;
-static constexpr int ITEM_PITCH_CYD   = 60;
-static constexpr int START_Y_ROUND    = 50;
-static constexpr int START_Y_CYD      = 50;
+static constexpr int ITEM_H_ROUND     = 38;
+static constexpr int ITEM_PITCH_ROUND = 38;
+static constexpr int ITEM_H_CYD       = 40;
+static constexpr int ITEM_PITCH_CYD   = 42;
+static constexpr int START_Y_ROUND    = 38;
+static constexpr int START_Y_CYD      = 46;
 
 int SystemScene::itemCount() { return N_ITEMS; }
 
@@ -61,7 +64,7 @@ void SystemScene::activateSelected() {
             set_disconnected_state();
 #    ifdef ARDUINO
             background();
-            centered_text("Red button to wake", 118, RED, TINY);
+            centered_text("Hold WAKE (M5) to wake", 118, RED, TINY);
             refreshDisplay();
             delay_ms(2000);
             deep_sleep(0);
@@ -72,6 +75,14 @@ void SystemScene::activateSelected() {
             break;
         case 2:
             activate_scene(&brightnessScene);
+            break;
+        case 3:
+            // The simulator can't reboot, so just push the scene to preview it.
+#ifdef ARDUINO
+            wifi_request_ota_reboot();
+#else
+            push_scene(&otaScene);
+#endif
             break;
     }
 }
@@ -101,22 +112,23 @@ void SystemScene::reDisplay() {
     int start_y    = round_display ? START_Y_ROUND   : START_Y_CYD;
 
     background();
-    drawMenuTitle("System");
-    drawRect(55, 22, 130, 1, 0, DARKGREY);
+    centered_text("Settings", 16);
+    drawRect(55, 26, 130, 1, 0, DARKGREY);
 
     for (int i = 0; i < N_ITEMS; i++) {
         int  y   = start_y + i * item_pitch;
         bool sel = (i == _selected);
 
         if (sel) {
-            drawOutlinedRect(30, y - 2, 180, item_h - 4, 0x001a4d, 0x4da6ff);
+            drawOutlinedRect(30, y, 180, item_h - 4, 0x001a4d, 0x4da6ff);
         }
 
-        bool has_sub = items[i].sublabel[0] != '\0';
-        int  label_y = has_sub ? y + 12 : y + item_h / 2;
+        bool has_sub  = items[i].sublabel[0] != '\0';
+        int  label_y  = has_sub ? y + item_h / 4 : y + item_h / 2;
+        int  sub_y    = y + item_h * 3 / 4;
         centered_text(items[i].label,    label_y, sel ? WHITE    : LIGHTGREY, SMALL);
         if (has_sub) {
-            centered_text(items[i].sublabel, y + 32, sel ? 0x4da6ff : DARKGREY, TINY);
+            centered_text(items[i].sublabel, sub_y, sel ? 0x4da6ff : DARKGREY, TINY);
         }
     }
 

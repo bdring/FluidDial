@@ -70,8 +70,14 @@ void reinit_fnc_uart() {
 
 Point sprite_offset { 0, 0 };
 
+extern const char* git_info;
+
 void show_logo() {
     display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+    display.setFont(&fonts::FreeSansBold9pt7b);
+    display.setTextDatum(datum_t::middle_center);
+    display.setTextColor(TFT_DARKGREY);
+    display.drawString(git_info, display.width() / 2, display.height() - 40);
 }
 
 void base_display() {
@@ -148,11 +154,11 @@ int32_t layout_num = 0;
 void redrawButtons() {}
 
 int battery_level() {
-    return M5Dial.Power.getBatteryLevel();
+    return -1;  // M5 Dial does not expose battery measuring circuitry
 }
 
 bool battery_charging() {
-    return M5Dial.Power.isCharging();
+    return false;
 }
 
 #include <driver/rtc_io.h>

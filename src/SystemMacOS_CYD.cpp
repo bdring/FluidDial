@@ -201,6 +201,8 @@ extern "C" int fnc_getchar() {
 
 extern "C" void poll_extra() {}
 
+extern "C" bool fnc_rx_waiting() { return false; }
+
 void resetFlowControl() {}
 void reinit_fnc_uart() {}
 
@@ -346,6 +348,7 @@ void        wifi_poll()                                  {}
 bool        wifi_is_connected()                          { return true; }
 bool        websocket_is_connected()                     { return true; }
 void        wifi_force_ws_reconnect()                    {}
+void        wifi_shutdown()                              {}
 bool        wifi_in_ap_mode()                            {
 #ifdef DEV_SIMULATED_AP_MODE
     return true;
@@ -372,6 +375,25 @@ bool          wifi_is_first_boot()                           { return false; }
 TransportMode wifi_get_transport()                           { return TransportMode::WIFI; }
 void          wifi_set_transport(TransportMode)              {}
 bool          wifi_use_espnow_mode()                         { return false; }
+void          wifi_request_ota_reboot()                      {}
+bool          wifi_ota_boot_requested()                      { return false; }
+
+// ---- OTA stubs -----
+// Default to the STA "ready" view. Define DEV_SIMULATED_OTA_AP to preview the
+// AP-credentials view instead
+void        wifi_start_ota_server()    {}
+void        wifi_stop_ota_server()     {}
+void        wifi_ota_force_ap_setup()  {}
+int         wifi_ota_progress()        { return 0; }
+const char* wifi_ota_ip()              { return "192.168.1.100"; }
+const char* wifi_ota_error()           { return nullptr; }
+#ifdef DEV_SIMULATED_OTA_AP
+bool        wifi_ota_ap_mode()         { return true; }
+bool        wifi_ota_sta_connected()   { return false; }
+#else
+bool        wifi_ota_ap_mode()         { return false; }
+bool        wifi_ota_sta_connected()   { return true; }
+#endif
 
 // ESP-NOW stubs
 void        espnow_init()                                {}

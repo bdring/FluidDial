@@ -6,10 +6,12 @@
 #include "Config.h"
 #include "Encoder.h"
 
+// minimum refresh rate in milliseconds - moved here for access in all builds
+constexpr static const int UPDATE_RATE_MS = 30;
+
 #ifdef ARDUINO
 #    include <Arduino.h>
 #    include <LittleFS.h>
-constexpr static const int UPDATE_RATE_MS = 30;  // minimum refresh rate in milliseconds
 extern Stream&             debugPort;
 void init_fnc_uart(int uart_num, int tx_pin, int rx_pin);
 #endif  // ARDUINO
