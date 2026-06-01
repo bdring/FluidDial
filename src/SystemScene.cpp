@@ -64,7 +64,7 @@ void SystemScene::activateSelected() {
             set_disconnected_state();
 #    ifdef ARDUINO
             background();
-            centered_text("Red button to wake", 118, RED, TINY);
+            centered_text("Hold WAKE (M5) to wake", 118, RED, TINY);
             refreshDisplay();
             delay_ms(2000);
             deep_sleep(0);

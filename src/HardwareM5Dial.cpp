@@ -148,11 +148,11 @@ int32_t layout_num = 0;
 void redrawButtons() {}
 
 int battery_level() {
-    return M5Dial.Power.getBatteryLevel();
+    return -1;  // M5 Dial does not expose battery measuring circuitry
 }
 
 bool battery_charging() {
-    return M5Dial.Power.isCharging();
+    return false;
 }
 
 #include <driver/rtc_io.h>

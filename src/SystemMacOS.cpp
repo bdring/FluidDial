@@ -294,9 +294,9 @@ bool ui_locked(bool redrawButtonsFlag) {
 
 void redrawButtons() {}
 
-// ── Battery stubs for macOS preview builds ────────────────────────────────────
-int  battery_level()    { return 75; }   // simulate 75% for layout preview
-bool battery_charging() { return true; }
+// -- Battery stubs for macOS preview builds (M5 Dial has no battery circuitry) --
+int  battery_level()    { return -1; }
+bool battery_charging() { return false; }
 
 #ifdef USE_WIFI
 // ── WiFi stubs for macOS preview builds ───────────────────────────────────────
