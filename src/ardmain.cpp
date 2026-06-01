@@ -132,6 +132,8 @@ void setup() {
 void loop() {
 #ifdef USE_WIFI
     if (_ota_boot_mode) {
+        // Drive the OTA state machine
+        wifi_poll();
         dispatch_events();
         service_redisplay();
         return;

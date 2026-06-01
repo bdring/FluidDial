@@ -813,7 +813,7 @@ input[type=file]{width:100%;padding:8px;border:1px solid #444;border-radius:6px;
 </div>
 
 <div class="card">
-  <h2>GitHub Releases</h2>
+  <h2>Official Releases</h2>
   <div id="rb"><div class="msg"><span class="spin"></span>Loading from GitHub...</div></div>
 </div>
 
