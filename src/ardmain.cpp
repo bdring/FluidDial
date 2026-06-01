@@ -15,9 +15,11 @@
 #    include "WiFiSetupScene.h"
 #    include "PeerLink.h"
 #    include "ESPNowPairingScene.h"
+#    include "OTAScene.h"
 extern Scene firstBootScene;
 static bool _wifi_initialized  = false;
 static bool _first_boot_active = false;
+static bool _ota_boot_mode     = false;  // booted into the dedicated OTA-only loop
 #endif
 
 extern void base_display();
@@ -66,6 +68,15 @@ void setup() {
     base_display();
 
     dbg_printf("FluidNC Pendant %s\n", git_info);
+
+#ifdef USE_WIFI
+    if (wifi_ota_boot_requested()) {
+        _ota_boot_mode = true;
+        dbg_println("Booting into OTA update mode");
+        activate_scene(&otaScene);
+        return;
+    }
+#endif
 
 #ifndef USE_WIFI
     // Bounded boot probe — discards stale bootloader noise, asks FluidNC
@@ -120,6 +131,11 @@ void setup() {
 
 void loop() {
 #ifdef USE_WIFI
+    if (_ota_boot_mode) {
+        dispatch_events();
+        service_redisplay();
+        return;
+    }
     if (!_first_boot_active) {
         if (!_wifi_initialized) {
             // Defer transport init until after setup() returned + 1st render is

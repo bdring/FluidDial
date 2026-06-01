@@ -18,12 +18,16 @@
 #include "Scene.h"   // request_redisplay()
 
 #include <Esp.h>
+#include <esp_attr.h>     // RTC_NOINIT_ATTR - survives soft reboot, cleared on power loss
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
+#include <Update.h>
 #include <atomic>
+
+extern const char* git_info;
 
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
@@ -55,6 +59,16 @@ static uint32_t         _tcp_next_try_ms = 0;
 static char             _fluidnc_remote_ip[40] = {};  // dotted-decimal, cached for reconnects
 static WebServer        httpServer(80);
 static DNSServer        dnsServer;
+
+static bool _ota_server_active   = false;
+static bool _ota_ap_mode         = false;
+static bool _ota_started_ap      = false;
+static bool _ota_started_sta     = false;
+static volatile int _ota_progress = 0;
+static char _ota_ip_str[40]      = {};
+static wl_status_t _ota_last_sta = WL_IDLE_STATUS;
+static const char* _ota_error_msg     = nullptr;
+static uint32_t    _ota_connect_start_ms = 0;
 
 static bool _ap_mode            = false;
 static bool _ws_connected       = false;
@@ -465,6 +479,156 @@ bool wifi_is_first_boot() {
     return !done;
 }
 
+// --- OTA credentials HTML (served from AP when no WiFi is configured) ---
+
+static const char OTA_CREDENTIALS_HTML[] = R"HTML(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FluidDial - WiFi Setup</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#111;color:#eee;padding:20px;max-width:480px;margin:0 auto}
+h1{color:#4CAF50;font-size:20px;margin-bottom:6px}
+.sub{color:#888;font-size:13px;margin-bottom:20px;line-height:1.5}
+label{display:block;margin:14px 0 5px;color:#ccc;font-size:14px}
+input,select{width:100%;padding:10px;border-radius:6px;border:1px solid #555;background:#2a2a2a;color:#eee;font-size:15px}
+input:focus,select:focus{outline:none;border-color:#4CAF50}
+.row{display:flex;gap:8px}
+.row input{flex:1}
+.scan-btn{padding:10px 14px;background:#2a2a2a;color:#4CAF50;border:1px solid #4CAF50;border-radius:6px;font-size:14px;cursor:pointer;white-space:nowrap;font-weight:bold}
+.scan-btn:hover{background:#1e3d1e}
+.scan-btn:disabled{color:#555;border-color:#555;cursor:default}
+#netList{display:none;margin-top:6px}
+.scan-status{font-size:13px;color:#aaa;margin-top:4px;min-height:18px}
+.eye-btn{padding:10px 12px;background:#2a2a2a;color:#aaa;border:1px solid #555;border-radius:6px;font-size:18px;cursor:pointer;line-height:1}
+.eye-btn:hover{color:#4CAF50;border-color:#4CAF50}
+button[type=submit]{margin-top:22px;width:100%;padding:13px;background:#4CAF50;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer;font-weight:bold}
+button[type=submit]:hover{background:#45a049}
+.note{margin-top:16px;font-size:13px;color:#666;line-height:1.5;text-align:center}
+.divider{margin:26px 0 6px;border-top:1px solid #333;text-align:center}
+.divider span{position:relative;top:-11px;background:#111;padding:0 12px;color:#666;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.manual{font-size:13px;color:#888;margin-bottom:10px;line-height:1.5}
+input[type=file]{padding:8px;font-size:13px}
+.upbtn{margin-top:12px;width:100%;padding:12px;background:#2a2a2a;color:#4CAF50;border:1px solid #4CAF50;border-radius:6px;font-size:15px;cursor:pointer;font-weight:bold}
+.upbtn:hover{background:#1e3d1e}.upbtn:disabled{color:#555;border-color:#555;cursor:default}
+.bar-bg{display:none;background:#222;border-radius:4px;height:18px;margin:12px 0 4px;border:1px solid #444;overflow:hidden}
+#ubar{height:100%;background:#4CAF50;width:0%;transition:width .2s}
+#ustat{text-align:center;font-size:13px;color:#888;min-height:18px}
+</style>
+</head>
+<body>
+<h1>FluidDial WiFi Setup</h1>
+<p class="sub">Please enter your WiFi credentials to fetch online updates. The device will restart and join your network.</p>
+<form method="POST" action="/wifi-save">
+  <label>Network Name (SSID)</label>
+  <div class="row">
+    <input type="text" name="ssid" id="ssid" placeholder="Your WiFi network" autocomplete="off" required>
+    <button type="button" class="scan-btn" id="scanBtn" onclick="doScan()">Scan</button>
+  </div>
+  <select id="netList" onchange="pickNet(this)">
+    <option value="">-- select a network --</option>
+  </select>
+  <div id="scanStatus" class="scan-status"></div>
+  <label>Password</label>
+  <div class="row">
+    <input type="text" name="pass" id="pass" placeholder="Leave blank for open networks">
+    <button type="button" class="eye-btn" id="eyeBtn" onclick="togglePass()">&#x1F441;</button>
+  </div>
+  <button type="submit">Save &amp; Connect</button>
+</form>
+<p class="note">After connecting, open <strong>fluiddial.local</strong> in your browser to access OTA updates.</p>
+
+<div class="divider"><span>or</span></div>
+<p class="manual">Already have a firmware <strong>.bin</strong> and don't want to connect to WiFi? Upload it directly (use the app-only <strong>firmware.bin</strong>, not the merged image).</p>
+<form id="uf">
+  <input type="file" id="ufile" accept=".bin" required>
+  <button class="upbtn" type="submit" id="ubtn">Upload &amp; Flash</button>
+</form>
+<div class="bar-bg" id="ubarbg"><div id="ubar"></div></div>
+<div id="ustat"></div>
+
+<script>
+function doScan(){
+  var btn=document.getElementById('scanBtn');
+  var st=document.getElementById('scanStatus');
+  btn.disabled=true; btn.textContent='Scanning...';
+  st.textContent='Scanning for networks, please wait...';
+  document.getElementById('netList').style.display='none';
+  pollScan();
+}
+function pollScan(){
+  fetch('/scan').then(function(r){
+    if(r.status===202){setTimeout(pollScan,1500);return null;}
+    return r.json();
+  }).then(function(nets){
+    if(!nets)return;
+    var lst=document.getElementById('netList');
+    var st=document.getElementById('scanStatus');
+    var btn=document.getElementById('scanBtn');
+    lst.innerHTML='<option value="">-- select a network --</option>';
+    nets.sort(function(a,b){return b.rssi-a.rssi;});
+    nets.forEach(function(n){
+      var o=document.createElement('option');
+      o.value=n.ssid;
+      o.textContent=n.ssid+(n.secure?' [secured]':'')+'  ('+n.rssi+' dBm)';
+      lst.appendChild(o);
+    });
+    lst.style.display='block';
+    st.textContent=nets.length+' network'+(nets.length!==1?'s':'')+' found.';
+    btn.disabled=false; btn.textContent='Scan';
+  }).catch(function(){
+    document.getElementById('scanStatus').textContent='Scan failed. Try again.';
+    document.getElementById('scanBtn').disabled=false;
+    document.getElementById('scanBtn').textContent='Scan';
+  });
+}
+function pickNet(sel){
+  if(sel.value) document.getElementById('ssid').value=sel.value;
+}
+function togglePass(){
+  var p=document.getElementById('pass');
+  var b=document.getElementById('eyeBtn');
+  if(p.type==='text'){p.type='password';b.style.color='#555';}
+  else{p.type='text';b.style.color='#aaa';}
+}
+document.getElementById('uf').onsubmit=function(e){
+  e.preventDefault();
+  var f=document.getElementById('ufile').files[0];
+  if(!f)return;
+  var bg=document.getElementById('ubarbg'),bar=document.getElementById('ubar');
+  var st=document.getElementById('ustat'),btn=document.getElementById('ubtn');
+  bg.style.display='block'; btn.disabled=true; st.textContent='Uploading '+f.name+'...';
+  var fd=new FormData(); fd.append('firmware',f);
+  var x=new XMLHttpRequest(); x.open('POST','/update');
+  x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.round(ev.loaded/ev.total*100);bar.style.width=p+'%';st.textContent='Uploading... '+p+'%';}};
+  x.onload=function(){bar.style.width='100%';st.textContent=(x.status===200)?'Done - device restarting...':'Upload failed ('+x.status+')';if(x.status!==200)btn.disabled=false;};
+  x.onerror=function(){st.textContent='Upload failed';btn.disabled=false;};
+  x.send(fd);
+};
+</script>
+</body>
+</html>
+)HTML";
+
+static const char OTA_CREDENTIALS_SAVED_HTML[] = R"HTML(
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FluidDial - Saved</title>
+<style>body{font-family:sans-serif;background:#111;color:#eee;text-align:center;padding:60px 16px}
+h1{color:#4CAF50}p{color:#888;margin-top:12px;line-height:1.6}</style>
+</head>
+<body>
+<h1>&#10003; Saved!</h1>
+<p>Device is restarting and joining your WiFi network.<br>
+Open <strong>fluiddial.local</strong> in your browser to access OTA updates.</p>
+</body>
+</html>
+)HTML";
+
 // ─── Captive portal HTML ──────────────────────────────────────────────────────
 
 static const char SETUP_HTML[] = R"HTML(
@@ -592,6 +756,247 @@ static const char SAVED_HTML[] = R"HTML(
 </html>
 )HTML";
 
+// --- OTA HTML ---
+// Served over STA WiFi at fluiddial.local (or device IP).
+// Browser is on the same network and has internet - it fetches GitHub directly.
+
+static const char OTA_HTML[] = R"HTML(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FluidDial Firmware</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#111;color:#eee;padding:16px;max-width:500px;margin:0 auto}
+h1{color:#4CAF50;font-size:20px;margin-bottom:4px}
+.sub{color:#888;font-size:13px;margin-bottom:18px}
+.card{background:#1e1e1e;border:1px solid #333;border-radius:8px;padding:14px;margin-bottom:12px}
+h2{font-size:12px;color:#666;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+.info{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+.lbl{color:#666}.val{color:#eee}
+.row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:6px;background:#2a2a2a;margin-bottom:6px}
+.tag{font-size:15px;font-weight:bold}.tag.cur{color:#4CAF50}
+.right{display:flex;align-items:center;gap:8px}
+.badge{font-size:11px;padding:2px 7px;border-radius:4px;background:#0d2d0d;color:#4CAF50;border:1px solid #1a4a1a}
+.ibtn{padding:5px 12px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;border-radius:5px;cursor:pointer;font-size:13px}
+.ibtn:hover{background:#1a3a1a}.ibtn:disabled{border-color:#444;color:#444;cursor:default}
+.msg{font-size:13px;color:#888;text-align:center;padding:10px 0}
+#pw{display:none}
+.bar-bg{background:#222;border-radius:4px;height:18px;margin:8px 0;border:1px solid #444;overflow:hidden}
+#bar{height:100%;background:#4CAF50;width:0%;transition:width .2s}
+#pct{text-align:center;font-size:13px;color:#888}
+input[type=file]{width:100%;padding:8px;border:1px solid #444;border-radius:6px;background:#222;color:#eee;font-size:13px;margin:8px 0}
+.primary{width:100%;padding:11px;background:#4CAF50;color:#fff;border:none;border-radius:6px;font-size:15px;cursor:pointer;font-weight:bold;margin-top:4px}
+.primary:hover{background:#45a049}.primary:disabled{background:#1a3a1a;color:#555;cursor:default}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #333;border-top-color:#4CAF50;border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.nbtn{padding:5px 10px;border:1px solid #555;background:transparent;color:#aaa;border-radius:5px;cursor:pointer;font-size:13px}
+.nbtn:hover{border-color:#888;color:#ddd}
+.notes{display:none;background:#161616;border:1px solid #333;border-radius:6px;margin:-2px 0 8px;padding:10px 12px;font-size:13px;color:#bbb;line-height:1.5;overflow-wrap:anywhere}
+.notes h1,.notes h2,.notes h3,.notes h4{color:#ddd;font-size:14px;margin:8px 0 4px;text-transform:none;letter-spacing:0}
+.notes ul,.notes ol{margin:4px 0 4px 18px}.notes li{margin:2px 0}
+.notes a{color:#4CAF50}.notes p{margin:4px 0}
+.notes code{background:#000;padding:1px 4px;border-radius:3px;font-size:12px}
+.notes pre{background:#000;padding:8px;border-radius:4px;overflow-x:auto;white-space:pre-wrap}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+</head>
+<body>
+<h1>FluidDial Firmware</h1>
+<p class="sub">Update the device firmware.</p>
+
+<div class="card">
+  <h2>Device</h2>
+  <div class="info"><span class="lbl">Version</span><span class="val" id="cur">...</span></div>
+</div>
+
+<div class="card">
+  <h2>GitHub Releases</h2>
+  <div id="rb"><div class="msg"><span class="spin"></span>Loading from GitHub...</div></div>
+</div>
+
+<div id="pw" class="card">
+  <h2 id="pt">Working...</h2>
+  <div class="bar-bg"><div id="bar"></div></div>
+  <p id="pct">0%</p>
+</div>
+
+<div class="card">
+  <h2>Manual Upload</h2>
+  <p class="sub" style="margin-bottom:0">Upload an app-only image (<strong>firmware.bin</strong> from the build), not the merged/full-flash image.</p>
+  <form id="uf">
+    <input type="file" id="ufile" accept=".bin" required>
+    <button class="primary" type="submit" id="ubtn">Upload</button>
+  </form>
+</div>
+
+<script>
+var busy=false,board='',curVer='',rels=[];
+var API='https://api.github.com/repos/bdring/FluidDial/releases';
+var RAW='https://raw.githubusercontent.com/bdring/fluiddial-releases/main/releases';
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function setBar(p){document.getElementById('bar').style.width=p+'%';document.getElementById('pct').textContent=p+'%';}
+function showProg(t){document.getElementById('pw').style.display='block';document.getElementById('pt').textContent=t;setBar(0);}
+
+fetch('/releases').then(r=>r.json()).then(d=>{
+  curVer=d.current||'?'; board=d.board||'';
+  document.getElementById('cur').textContent=curVer;
+}).catch(()=>{}).finally(loadGitHub);
+
+function loadGitHub(){
+  fetch(API,{headers:{'Accept':'application/vnd.github+json'}})
+    .then(r=>r.json()).then(function(releases){
+      var list=releases.filter(r=>!r.draft&&!r.prerelease).slice(0,10);
+      if(!list.length){document.getElementById('rb').innerHTML='<div class="msg">No releases found.</div>';return;}
+      var curBase=(curVer.match(/^[\d.]+/)||[''])[0];
+      var h=''; rels=[];
+      list.forEach(function(r,i){
+        var tag=r.tag_name||r.name,isCur=(tag===curBase);
+        rels.push({tag:tag,body:r.body||''});
+        h+='<div class="row"><span class="tag'+(isCur?' cur':'')+'">'+esc(tag)+'</span>';
+        h+='<span class="right">'+(isCur?'<span class="badge">installed</span>':'')+
+           '<button class="nbtn" onclick="toggleNotes('+i+',this)">Notes</button>'+
+           '<button class="ibtn" onclick="inst(\''+esc(tag)+'\')">Install</button></span></div>';
+        h+='<div class="notes" id="n'+i+'"></div>';
+      });
+      document.getElementById('rb').innerHTML=h;
+    }).catch(function(){
+      document.getElementById('rb').innerHTML=
+        '<div class="msg" style="color:#f80">Could not reach GitHub.</div>'+
+        '<button onclick="loadGitHub()" style="margin-top:8px;width:100%;padding:8px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;border-radius:5px;cursor:pointer">Retry</button>';
+    });
+}
+
+// Render a release's markdown notes. Uses marked (CDN) when present; otherwise
+// falls back to escaped plaintext so notes still show without the library.
+function renderMd(md){
+  if(!md||!md.trim())return '<p style="color:#666">No release notes.</p>';
+  if(window.marked){try{return marked.parse?marked.parse(md):marked(md);}catch(e){}}
+  return '<pre>'+esc(md)+'</pre>';
+}
+function toggleNotes(i,btn){
+  var el=document.getElementById('n'+i);
+  if(!el)return;
+  if(el.style.display==='block'){el.style.display='none';btn.textContent='Notes';return;}
+  if(!el.dataset.rendered){el.innerHTML=renderMd(rels[i].body);el.dataset.rendered='1';}
+  el.style.display='block'; btn.textContent='Hide';
+}
+
+// XHR download with progress callback (returns Promise<ArrayBuffer>)
+function xhrGet(url,onProg){
+  return new Promise(function(res,rej){
+    var x=new XMLHttpRequest(); x.open('GET',url); x.responseType='arraybuffer';
+    x.onprogress=function(e){if(e.lengthComputable&&onProg)onProg(e.loaded/e.total);};
+    x.onload=function(){x.status===200?res(x.response):rej('HTTP '+x.status);};
+    x.onerror=function(){rej('Network error');};
+    x.send();
+  });
+}
+
+// Extract the app image out of a merged full-flash image. The merged image is
+// bootloader@0x0 + partition table@0x8000 + app@0x10000 + LittleFS (much later).
+// OTA flashes straight into the app OTA partition, so we must hand it just the
+// app — not the bootloader before it nor the filesystem after it. The app's
+// exact byte length is self-described by the ESP32 image header (header + N
+// segments + checksum + optional appended SHA-256), so we compute it precisely
+// instead of guessing, which is what lets us reuse the published merged image
+// for OTA without building a separate app-only artifact.
+function extractApp(ab){
+  var APP_OFF=0x10000;
+  var b=new Uint8Array(ab);
+  if(b.length<APP_OFF+24||b[APP_OFF]!==0xE9)throw 'Bad app image (no 0xE9 at 0x10000)';
+  var segCount=b[APP_OFF+1];
+  var hashAppended=b[APP_OFF+23]===1;
+  var p=APP_OFF+24;                                 // past 24-byte image header
+  for(var i=0;i<segCount;i++){
+    var len=(b[p+4]|(b[p+5]<<8)|(b[p+6]<<16)|(b[p+7]<<24))>>>0; // data_len, LE
+    p+=8+len;                                       // 8-byte seg header + data
+  }
+  var imgLen=p-APP_OFF;
+  imgLen+=(16-((imgLen+1)%16))%16;                  // pad so checksum is 16-aligned
+  imgLen+=1;                                         // checksum byte
+  if(hashAppended)imgLen+=32;                        // appended SHA-256
+  if(APP_OFF+imgLen>b.length)throw 'App image overruns download';
+  return ab.slice(APP_OFF,APP_OFF+imgLen);
+}
+
+// Numeric dotted-version compare: returns -1/0/1 for a<b / a==b / a>b.
+function verCmp(a,b){
+  var pa=String(a).split('.').map(Number),pb=String(b).split('.').map(Number);
+  for(var i=0;i<Math.max(pa.length,pb.length);i++){
+    var x=pa[i]||0,y=pb[i]||0;
+    if(x<y)return -1; if(x>y)return 1;
+  }
+  return 0;
+}
+
+function inst(tag){
+  if(busy||!board)return;
+  // Versions before 1.3.1 have no OTA support — installing one removes the
+  // ability to update over WiFi, leaving USB reflashing as the only way back.
+  var v=(String(tag).match(/\d+(\.\d+)*/)||['0'])[0];
+  if(verCmp(v,'1.3.1')<0){
+    if(!confirm('Version '+tag+' does not support over-the-air (OTA) updates.\n\n'+
+                'If you install it, OTA updates will not be available and '+
+                'you subsequent updates will require a USB connection.\n\nInstall anyway?'))return;
+  }
+  busy=true;
+  showProg('Loading manifest...');
+  // 1. Fetch the release manifest to find this board's published image.
+  xhrGet(RAW+'/'+tag+'/manifest.json',null)
+    .then(function(buf){
+      var manifest=JSON.parse(new TextDecoder().decode(buf));
+      // The published image is the merged full-flash image (offset 0x0000); we
+      // carve the app partition out of it client-side (see extractApp).
+      var imgInfo=manifest.images&&manifest.images[board];
+      if(!imgInfo)throw 'No image for board: '+board;
+      // 2. Download the merged image.
+      document.getElementById('pt').textContent='Downloading '+tag+'...';
+      return xhrGet(RAW+'/'+tag+'/'+imgInfo.path,function(p){
+        setBar(Math.round(p*50));
+        document.getElementById('pt').textContent='Downloading '+tag+'... '+Math.round(p*100)+'%';
+      });
+    })
+    .then(function(buf){
+      // 3. Extract the app and upload only that.
+      uploadBin(extractApp(buf),tag);
+    })
+    .catch(function(e){
+      document.getElementById('pt').textContent='Failed: '+String(e);
+      document.getElementById('pct').style.color='#f55'; busy=false;
+    });
+}
+
+function uploadBin(buf,label){
+  document.getElementById('pt').textContent='Uploading to device...'; setBar(50);
+  var fd=new FormData();
+  fd.append('firmware',new Blob([buf],{type:'application/octet-stream'}),'firmware.bin');
+  var x=new XMLHttpRequest(); x.open('POST','/update');
+  x.upload.onprogress=function(e){if(e.lengthComputable)setBar(50+Math.round(e.loaded/e.total*50));};
+  x.onload=function(){setBar(100);document.getElementById('pt').textContent='Done - device restarting...';};
+  x.onerror=function(){document.getElementById('pt').textContent='Upload failed';busy=false;};
+  x.send(fd);
+}
+
+document.getElementById('uf').onsubmit=function(e){
+  e.preventDefault();
+  var f=document.getElementById('ufile').files[0];
+  if(!f||busy)return; busy=true; showProg('Uploading '+f.name+'...');
+  var fd=new FormData(); fd.append('firmware',f);
+  var x=new XMLHttpRequest(); x.open('POST','/update');
+  x.upload.onprogress=function(ev){if(ev.lengthComputable)setBar(Math.round(ev.loaded/ev.total*100));};
+  x.onload=function(){setBar(100);document.getElementById('pt').textContent='Done - device restarting...';};
+  x.onerror=function(){document.getElementById('pt').textContent='Upload failed';busy=false;};
+  document.getElementById('ubtn').disabled=true; x.send(fd);
+};
+</script>
+</body>
+</html>
+)HTML";
+
 // ─── HTTP request handlers ────────────────────────────────────────────────────
 
 static String htmlEscape(const String& input) {
@@ -612,10 +1017,20 @@ static String htmlEscape(const String& input) {
 }
 
 static void handleRoot() {
+    if (_ota_server_active && _ota_ap_mode) {
+        httpServer.send(200, "text/html", OTA_CREDENTIALS_HTML);
+        return;
+    }
     WiFiConfig cfg = wifi_load_config();
     String page = SETUP_HTML;
     page.replace("%SSID_VAL%", cfg.valid ? htmlEscape(String(cfg.ssid)) : "");
-    page.replace("%IP_VAL%",   cfg.valid ? htmlEscape(String(cfg.fluidnc_ip)) : "");
+    // Prefill the FluidNC address with "fluidnc.local" when none is stored, so a
+    // first-time user has a working default instead of an
+    // empty required field.
+    String ipVal = (cfg.valid && cfg.fluidnc_ip[0])
+                       ? htmlEscape(String(cfg.fluidnc_ip))
+                       : "fluidnc.local";
+    page.replace("%IP_VAL%", ipVal);
     httpServer.send(200, "text/html", page);
 }
 
@@ -693,9 +1108,99 @@ static void handleScan() {
 }
 
 static void handleNotFound() {
-    // Redirect everything to the setup page (captive portal behaviour).
+    // Captive portal: redirect to setup page.
     httpServer.sendHeader("Location", "http://192.168.4.1/", true);
     httpServer.send(302, "text/plain", "");
+}
+
+static void handleOtaRoot() {
+    if (_ota_ap_mode) {
+        httpServer.send(200, "text/html", OTA_CREDENTIALS_HTML);
+        return;
+    }
+    httpServer.send(200, "text/html", OTA_HTML);
+}
+
+static void handleOtaUploadDone() {
+    if (Update.hasError()) {
+        httpServer.send(500, "text/plain", "Update failed");
+        _ota_progress = -1;
+        request_redisplay();
+    } else {
+        httpServer.send(200, "text/plain", "OK");
+        _ota_progress = 100;
+        request_redisplay();
+        delay(1500);
+        ESP.restart();
+    }
+}
+
+static size_t _ota_content_length = 0;
+
+static void handleOtaUploadData() {
+    HTTPUpload& upload = httpServer.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        String cl = httpServer.header("Content-Length");
+        _ota_content_length = cl.length() ? (size_t)cl.toInt() : 0;
+        dbg_printf("OTA: upload start — %s (content-length=%u)\n",
+                   upload.filename.c_str(), (unsigned)_ota_content_length);
+        _ota_progress = 1;
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+            dbg_println("OTA: Update.begin() failed");
+            _ota_progress = -1;
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (_ota_progress >= 0) {
+            if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                dbg_println("OTA: Update.write() failed");
+                _ota_progress = -1;
+            } else if (_ota_content_length > 0) {
+                _ota_progress = (int)((upload.totalSize * 99ULL) / _ota_content_length) + 1;
+                if (_ota_progress > 99) _ota_progress = 99;
+            }
+        }
+        request_redisplay();
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (_ota_progress >= 0 && !Update.end(true)) {
+            dbg_println("OTA: Update.end() failed");
+            _ota_progress = -1;
+        }
+        dbg_printf("OTA: upload end — %u bytes total\n", (unsigned)upload.totalSize);
+        request_redisplay();
+    }
+}
+
+static void handleOtaWifiSave() {
+    String ssid = httpServer.arg("ssid");
+    String pass = httpServer.arg("pass");
+    ssid.trim();
+    if (ssid.length() == 0) {
+        httpServer.send(400, "text/plain", "SSID required");
+        return;
+    }
+    WiFiConfig existing = wifi_load_config();
+    
+    const char* ip = (existing.valid && existing.fluidnc_ip[0])
+                         ? existing.fluidnc_ip
+                         : "fluidnc.local";
+    wifi_save_config(ssid.c_str(), pass.c_str(), ip);
+    httpServer.send(200, "text/html", OTA_CREDENTIALS_SAVED_HTML);
+    delay(1500);
+    // Re-arm OTA to reboot straight back into the OTA server (now with credentials) + serve fluiddial.local without the user
+    // having to re-open the OTA menu.
+    wifi_request_ota_reboot();
+}
+
+static void handleGetReleases() {
+    String j = "{\"current\":\""; j += git_info; j += "\",\"board\":\"";
+#ifdef USE_M5
+    j += "m5dial";
+#else
+    j += "cyddial";
+#endif
+    j += "\"}";
+    httpServer.sendHeader("Cache-Control", "no-cache");
+    httpServer.send(200, "application/json", j);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -730,7 +1235,7 @@ WiFiConfig wifi_load_config() {
     String ip   = prefs.isKey("ip")   ? prefs.getString("ip",   "") : "";
     prefs.end();
 
-    if (ssid.length() > 0 && ip.length() > 0) {
+    if (ssid.length() > 0) {
         dbg_printf("NVS loaded: ssid='%s' (len=%d) ip='%s' (len=%d)\n",
                    ssid.c_str(), ssid.length(), ip.c_str(), ip.length());
         strncpy(cfg.ssid,      ssid.c_str(), sizeof(cfg.ssid)      - 1);
@@ -870,6 +1375,14 @@ static void onWiFiDisconnect(WiFiEvent_t event, WiFiEventInfo_t info) {
     _wifi_disconnect_reason = info.wifi_sta_disconnected.reason;
 }
 
+static void ensure_wifi_event_registered() {
+    static bool registered = false;
+    if (!registered) {
+        WiFi.onEvent(onWiFiDisconnect, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+        registered = true;
+    }
+}
+
 void wifi_init(bool auto_ap) {
     TransportMode transport = wifi_get_transport();
     if (transport == TransportMode::UART) {
@@ -915,11 +1428,7 @@ void wifi_init(bool auto_ap) {
     _handshake_timeout_count = 0;
     _dns_retry_at            = 0;
 
-    static bool _event_registered = false;
-    if (!_event_registered) {
-        WiFi.onEvent(onWiFiDisconnect, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
-        _event_registered = true;
-    }
+    ensure_wifi_event_registered();
 
     WiFi.persistent(false);
     WiFi.disconnect(true);  // Ensure clean driver state (especially after AP mode).
@@ -933,6 +1442,47 @@ void wifi_init(bool auto_ap) {
 }
 
 void wifi_poll() {
+    if (_ota_server_active) {
+        if (_ota_ap_mode) {
+            dnsServer.processNextRequest();
+        } else {
+            wl_status_t sta = WiFi.status();
+            if (sta != _ota_last_sta) {
+                _ota_last_sta = sta;
+                if (sta == WL_CONNECTED) {
+                    _ota_error_msg = nullptr;
+                    MDNS.end();
+                    MDNS.begin("fluiddial");
+                    strncpy(_ota_ip_str, WiFi.localIP().toString().c_str(),
+                            sizeof(_ota_ip_str) - 1);
+                    dbg_printf("OTA: STA connected — %s (fluiddial.local)\n", _ota_ip_str);
+                }
+                request_redisplay();
+            }
+            // Surface why a connect is failing so the pendant can offer to
+            // re-enter credentials instead of spinning on "Connecting..." forever.
+            if (sta != WL_CONNECTED && !_ota_error_msg) {
+                if (_wifi_disconnect_reason) {
+                    uint8_t reason          = _wifi_disconnect_reason;
+                    _wifi_disconnect_reason = 0;
+                    if (reason == WIFI_REASON_AUTH_FAIL   ||
+                        reason == WIFI_REASON_AUTH_EXPIRE ||
+                        reason == WIFI_REASON_MIC_FAILURE) {
+                        _ota_error_msg = "Check password";
+                        request_redisplay();
+                    }
+                }
+                if (!_ota_error_msg && _ota_connect_start_ms &&
+                    (millis() - _ota_connect_start_ms) > 15000) {
+                    _ota_error_msg = "Cannot connect";
+                    request_redisplay();
+                }
+            }
+        }
+        httpServer.handleClient();
+        return;
+    }
+
     if (!_wifi_stack_started) return;  // wifi_init() never ran (first boot or UART/ESP-NOW mode)
     if (wifi_use_uart_mode())   return;
     if (wifi_use_espnow_mode()) return;
@@ -1056,7 +1606,9 @@ void wifi_poll() {
         if (!MDNS.begin("fluiddial")) {
             dbg_println("mDNS init failed — .local hostnames may not resolve");
         }
-        if (is_dotted_decimal(_active_cfg.fluidnc_ip)) {
+        if (_active_cfg.fluidnc_ip[0] == '\0') {
+            dbg_println("No FluidNC address configured — WiFi up, Telnet idle");
+        } else if (is_dotted_decimal(_active_cfg.fluidnc_ip)) {
             // Plain IP address — open Telnet socket immediately.
             tcp_begin(_active_cfg.fluidnc_ip);
         } else if (!_dns_resolving) {
@@ -1146,5 +1698,145 @@ void wifi_poll() {
         ws_send_bin(&qmark, 1);
     }
 }
+
+// --- OTA firmware update ---
+
+static RTC_NOINIT_ATTR uint32_t _ota_boot_flag;
+static constexpr uint32_t OTA_BOOT_MAGIC = 0x07A0B007;  // "OTA BOOT"
+
+void wifi_request_ota_reboot() {
+    _ota_boot_flag = OTA_BOOT_MAGIC;
+    delay(40);          // let the display/log settle before the reset
+    ESP.restart();
+}
+
+bool wifi_ota_boot_requested() {
+    if (_ota_boot_flag == OTA_BOOT_MAGIC) {
+        _ota_boot_flag = 0;
+        return true;
+    }
+    return false;
+}
+
+static void start_ota_ap_credentials() {
+    httpServer.stop();
+    dnsServer.stop();
+
+    _ota_progress   = 0;
+    _ota_error_msg  = nullptr;
+    _ota_ap_mode    = true;
+    _ota_started_ap = true;
+    _ap_mode        = true;
+
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(WIFI_AP_SSID, nullptr);
+    IPAddress apIP(192, 168, 4, 1);
+    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+    dnsServer.start(53, "*", apIP);
+
+    static const char* ota_ap_headers[] = { "Content-Length" };
+    httpServer.collectHeaders(ota_ap_headers, 1);
+
+    httpServer.on("/",                    HTTP_GET,  handleRoot);
+    httpServer.on("/generate_204",        HTTP_GET,  handleRoot);
+    httpServer.on("/hotspot-detect.html", HTTP_GET,  handleRoot);
+    httpServer.on("/scan",                HTTP_GET,  handleScan);
+    httpServer.on("/wifi-save",           HTTP_POST, handleOtaWifiSave);
+    httpServer.on("/update",              HTTP_POST, handleOtaUploadDone, handleOtaUploadData);
+    httpServer.onNotFound(handleNotFound);
+    httpServer.begin();
+
+    _ota_server_active = true;
+    dbg_printf("OTA: AP started for credentials — SSID: %s\n", WIFI_AP_SSID);
+}
+
+void wifi_start_ota_server() {
+    if (_ota_server_active) return;
+
+    httpServer.stop();
+    _ota_progress         = 0;
+    _ota_content_length   = 0;
+    _ota_last_sta         = WL_IDLE_STATUS;
+    _ota_ap_mode          = false;
+    _ota_started_ap       = false;
+    _ota_started_sta      = false;
+    _ota_error_msg        = nullptr;
+    _ota_connect_start_ms = 0;
+
+    WiFiConfig cfg = wifi_load_config();
+
+    if (!cfg.valid) {
+        // No WiFi credentials saved — collect them over an AP first. After the
+        // user saves, the device restarts and re-enters STA mode below.
+        start_ota_ap_credentials();
+        return;
+    }
+
+    // Has credentials — connect STA and serve the OTA page at fluiddial.local.
+    if (!wifi_is_connected()) {
+        ensure_wifi_event_registered();   // so disconnect reasons are captured
+        _wifi_disconnect_reason = 0;
+        WiFi.mode(WIFI_STA);
+        WiFi.setSleep(false);
+        WiFi.setAutoReconnect(true);      // self-heal transient handshake timeouts
+        WiFi.begin(cfg.ssid, cfg.password[0] ? cfg.password : nullptr);
+        _ota_started_sta      = true;
+        _ota_connect_start_ms = millis();
+        dbg_printf("OTA: connecting STA to %s\n", cfg.ssid);
+    } else {
+        strncpy(_ota_ip_str, WiFi.localIP().toString().c_str(), sizeof(_ota_ip_str) - 1);
+        dbg_printf("OTA: using existing WiFi — %s\n", _ota_ip_str);
+    }
+
+    static const char* ota_headers[] = { "Content-Length" };
+    httpServer.collectHeaders(ota_headers, 1);
+
+    httpServer.on("/",         HTTP_GET,  handleOtaRoot);
+    httpServer.on("/update",   HTTP_GET,  handleOtaRoot);
+    httpServer.on("/update",   HTTP_POST, handleOtaUploadDone, handleOtaUploadData);
+    httpServer.on("/releases", HTTP_GET,  handleGetReleases);
+    httpServer.onNotFound([]() { httpServer.send(404, "text/plain", "Not found"); });
+    httpServer.begin();
+
+    _ota_server_active = true;
+    dbg_println("OTA: STA server started — open fluiddial.local in browser");
+}
+
+void wifi_ota_force_ap_setup() {
+    if (_ota_started_sta) {
+        WiFi.disconnect(true);
+        _ota_started_sta = false;
+    }
+    _ota_last_sta         = WL_IDLE_STATUS;
+    _ota_connect_start_ms = 0;
+    start_ota_ap_credentials();
+    request_redisplay();
+}
+
+void wifi_stop_ota_server() {
+    if (!_ota_server_active) return;
+    httpServer.stop();
+    dnsServer.stop();
+    if (_ota_started_ap) {
+        WiFi.softAPdisconnect(true);
+        _ap_mode        = false;
+        _ota_started_ap = false;
+    }
+    if (_ota_started_sta) {
+        WiFi.disconnect(true);
+        _ota_started_sta = false;
+    }
+    _ota_server_active = false;
+    _ota_ap_mode       = false;
+    _ota_progress      = 0;
+    dbg_println("OTA: server stopped");
+}
+
+bool wifi_ota_server_active() { return _ota_server_active; }
+bool wifi_ota_ap_mode()       { return _ota_ap_mode; }
+bool wifi_ota_sta_connected() { return _ota_server_active && !_ota_ap_mode && (WiFi.status() == WL_CONNECTED); }
+int  wifi_ota_progress()      { return _ota_progress; }
+const char* wifi_ota_ip()     { return _ota_ip_str; }
+const char* wifi_ota_error()  { return _ota_error_msg; }
 
 #endif  // ARDUINO

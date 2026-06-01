@@ -81,4 +81,19 @@ void wifi_set_uart_mode(bool uart);
 
 bool wifi_is_first_boot();
 
+// --- OTA UPDATE ---
+void        wifi_start_ota_server();
+void        wifi_stop_ota_server();
+bool        wifi_ota_server_active();
+bool        wifi_ota_ap_mode();
+bool        wifi_ota_sta_connected();
+int         wifi_ota_progress();      // -1=error, 0=waiting, 1-99=uploading, 100=done
+const char* wifi_ota_ip();
+const char* wifi_ota_error();
+// Re-enter AP credential entry after a failed STA connect (pendant retry).
+void        wifi_ota_force_ap_setup();
+
+void        wifi_request_ota_reboot();
+bool        wifi_ota_boot_requested();
+
 #endif  // USE_WIFI
