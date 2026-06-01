@@ -51,11 +51,15 @@ extern const char* git_info;
 #define WIFI_RETRY_DELAY_MS 15000     // Retry WiFi.begin() this long after a failure
 #define DNS_RETRY_DELAY_MS  5000     // Retry hostname resolution this long after a failure
 #define TCP_RECONNECT_DELAY_MS 2000   // Retry TCP connect this long after a failure
+#define TCP_CONNECT_TIMEOUT_MS 4000   // Give up an in-progress (non-blocking) connect after this long
+#define WIFI_RX_STALL_MS       3000   // Drop a connected-but-silent socket after this long (wedged half-open)
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
 static int              _sock = -1;
 static uint32_t         _tcp_next_try_ms = 0;
+static int              _connecting_fd = -1;          // fd of an in-progress non-blocking connect, else -1
+static uint32_t         _tcp_connect_deadline_ms = 0; // abandon the in-progress connect at this time
 static char             _fluidnc_remote_ip[40] = {};  // dotted-decimal, cached for reconnects
 static WebServer        httpServer(80);
 static DNSServer        dnsServer;
@@ -96,6 +100,7 @@ static int     _tx_len = 0;
 
 // Timers.
 static uint32_t _last_status_ms = 0;
+static uint32_t _last_rx_ms     = 0;   // millis() of the last byte received; drives the RX-stall watchdog
 
 // ─── Async hostname resolution ────────────────────────────────────────────────
 static volatile bool _dns_resolving    = false;  // background task is in flight
@@ -181,6 +186,11 @@ static void tcp_close() {
         ::close(_sock);
         _sock = -1;
     }
+    if (_connecting_fd >= 0) {
+        ::close(_connecting_fd);
+        _connecting_fd = -1;
+    }
+    _tcp_connect_deadline_ms = 0;
     _ws_connected = false;
     // Any JSON document still being streamed across chunks is now lost;
     // reset the depth tracker so the next document starts cleanly.
@@ -208,9 +218,23 @@ static void tcp_apply_opts(int fd) {
     setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
 }
 
-// Open a raw TCP socket to FluidNC's telnet server (port 23). Synchronous;
-// returns true on success. Called from wifi_poll() once WiFi STA is up and
-// the FluidNC IP has been resolved.
+static void tcp_promote_connected(int fd, const char* host) {
+    int fl = ::fcntl(fd, F_GETFL, 0);
+    if (fl != -1) {
+        ::fcntl(fd, F_SETFL, fl & ~O_NONBLOCK);
+    }
+    tcp_apply_opts(fd);
+    _sock                    = fd;
+    _connecting_fd           = -1;
+    _tcp_connect_deadline_ms = 0;
+    _ws_connected            = true;
+    _last_status_ms          = 0;
+    _last_rx_ms              = millis();   // grace window before the RX-stall watchdog can fire
+    dbg_printf("Telnet: connected to %s:%d (fd=%d)\n", host, FLUIDNC_TELNET_PORT, fd);
+    request_redisplay();
+}
+
+// Begin a non-blocking connect to FluidNC's telnet server
 static bool tcp_open(const char* host) {
     dbg_printf("Starting Telnet: %s:%d\n", host, FLUIDNC_TELNET_PORT);
     IPAddress ip;
@@ -223,23 +247,66 @@ static bool tcp_open(const char* host) {
         dbg_printf("Telnet: socket errno=%d\n", errno);
         return false;
     }
+    int fl = ::fcntl(fd, F_GETFL, 0);
+    if (fl == -1 || ::fcntl(fd, F_SETFL, fl | O_NONBLOCK) == -1) {
+        dbg_printf("Telnet: fcntl errno=%d\n", errno);
+        ::close(fd);
+        return false;
+    }
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family      = AF_INET;
     dest.sin_port        = htons(FLUIDNC_TELNET_PORT);
     dest.sin_addr.s_addr = (uint32_t)ip;
-    if (::connect(fd, (struct sockaddr*)&dest, sizeof(dest)) != 0) {
+    int rc = ::connect(fd, (struct sockaddr*)&dest, sizeof(dest));
+    if (rc == 0) {
+        tcp_promote_connected(fd, host);
+        return true;
+    }
+    if (errno != EINPROGRESS) {
+        // Fast failure (e.g. EHOSTUNREACH=113) — no SYN timeout to wait on.
         dbg_printf("Telnet: connect errno=%d\n", errno);
         ::close(fd);
         return false;
     }
-    tcp_apply_opts(fd);
-    _sock = fd;
-    _ws_connected   = true;
-    _last_status_ms = 0;
-    dbg_printf("Telnet: connected to %s:%d (fd=%d)\n", host, FLUIDNC_TELNET_PORT, fd);
-    request_redisplay();
+    // Connect is in flight; tcp_poll_connect() will finish it.
+    _connecting_fd           = fd;
+    _tcp_connect_deadline_ms = millis() + TCP_CONNECT_TIMEOUT_MS;
     return true;
+}
+
+// Drive an in-progress non-blocking connect.
+static void tcp_poll_connect() {
+    if (_connecting_fd < 0) {
+        return;
+    }
+    fd_set wfds;
+    FD_ZERO(&wfds);
+    FD_SET(_connecting_fd, &wfds);
+    struct timeval tv = { 0, 0 };  // poll, don't block
+    int sel = ::select(_connecting_fd + 1, nullptr, &wfds, nullptr, &tv);
+    if (sel > 0 && FD_ISSET(_connecting_fd, &wfds)) {
+        int       so_error = 0;
+        socklen_t len      = sizeof(so_error);
+        ::getsockopt(_connecting_fd, SOL_SOCKET, SO_ERROR, &so_error, &len);
+        if (so_error == 0) {
+            tcp_promote_connected(_connecting_fd, _fluidnc_remote_ip);
+            return;
+        }
+        dbg_printf("Telnet: connect failed errno=%d\n", so_error);
+        ::close(_connecting_fd);
+        _connecting_fd           = -1;
+        _tcp_connect_deadline_ms = 0;
+        _tcp_next_try_ms         = millis() + TCP_RECONNECT_DELAY_MS;
+        return;
+    }
+    if ((int32_t)(millis() - _tcp_connect_deadline_ms) >= 0) {
+        dbg_println("Telnet: connect timed out");
+        ::close(_connecting_fd);
+        _connecting_fd           = -1;
+        _tcp_connect_deadline_ms = 0;
+        _tcp_next_try_ms         = millis() + TCP_RECONNECT_DELAY_MS;
+    }
 }
 
 static void tcp_begin(const char* host) {
@@ -359,6 +426,7 @@ static void tcp_refill_rx() {
             rx_push(c);
         }
         update_rx_time();
+        _last_rx_ms = millis();
         if ((size_t)n < want) {
             // Kernel had less than we asked for; nothing more for now.
             return;
@@ -1665,8 +1733,18 @@ void wifi_poll() {
     // Service the Telnet socket: refill RX from the kernel buffer, and if
     // the socket is down, attempt periodic reconnects.
     if (_ws_started && now_connected) {
-        if (_sock >= 0) {
+        if (_connecting_fd >= 0) {
+            tcp_poll_connect();
+        } else if (_sock >= 0) {
             tcp_refill_rx();
+            // RX-stall watchdog. A healthy FluidNC answers the 500 ms '?' polls,
+            // so prolonged total silence on a live socket means it's wedged half-open
+            if (_sock >= 0 && (int32_t)(millis() - _last_rx_ms) > WIFI_RX_STALL_MS) {
+                dbg_println("Telnet: RX stalled — dropping wedged socket, reconnecting");
+                tcp_close();
+                set_disconnected_state();
+                _tcp_next_try_ms = millis() + TCP_RECONNECT_DELAY_MS;
+            }
         } else if (_tcp_next_try_ms && (int32_t)(millis() - _tcp_next_try_ms) >= 0) {
             _tcp_next_try_ms = 0;
             dbg_println("Telnet: reconnect attempt");

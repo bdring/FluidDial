@@ -23,7 +23,7 @@ static constexpr int N_TRANSPORT = 2;
 
 static const TransportItem kItems[N_TRANSPORT] = {
     { "Wired",    "UART serial cable",  TransportMode::UART,   0x001a4d, 0x4da6ff },
-    { "WiFi",     "WebSocket / IP",     TransportMode::WIFI,   0x003300, 0x66ff66 },
+    { "WiFi",     "TCP",     TransportMode::WIFI,   0x003300, 0x66ff66 },
 #ifdef USE_ESPNOW
     { "ESP-NOW",  "No router needed",   TransportMode::ESPNOW, 0x1a001a, 0xcc66ff },
 #endif
