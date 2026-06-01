@@ -531,10 +531,16 @@ void redrawButtons() {
     display.endWrite();
 }
 
+extern const char* git_info;
+
 void show_logo() {
     display.clear();
     display.drawPngFile(
         LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+    display.setFont(&fonts::FreeSansBold9pt7b);
+    display.setTextDatum(datum_t::middle_center);
+    display.setTextColor(TFT_DARKGREY);
+    display.drawString(git_info, sprite_offset.x + sprite_wh / 2, sprite_offset.y + sprite_wh - 20);
 }
 
 void base_display() {

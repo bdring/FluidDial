@@ -70,8 +70,14 @@ void reinit_fnc_uart() {
 
 Point sprite_offset { 0, 0 };
 
+extern const char* git_info;
+
 void show_logo() {
     display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+    display.setFont(&fonts::FreeSansBold9pt7b);
+    display.setTextDatum(datum_t::middle_center);
+    display.setTextColor(TFT_DARKGREY);
+    display.drawString(git_info, display.width() / 2, display.height() - 40);
 }
 
 void base_display() {
