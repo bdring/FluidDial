@@ -671,10 +671,25 @@ int adc_millivolts(int pin) {
     return analogReadMilliVolts(pin);
 }
 
+static bool battery_adc_available() {
+#ifndef CYD_BATTERY_ADC
+    return false;
+#elif defined(RESISTIVE_CYD) && !defined(CAPACITIVE_CYD)
+    return false;
+#elif defined(RESISTIVE_CYD) && defined(CAPACITIVE_CYD)
+    return display_num != 1;
+#else
+    return true;
+#endif
+}
+
 int battery_adc_millivolts() {
 #ifndef CYD_BATTERY_ADC
     return -1;
 #else
+    if (!battery_adc_available()) {
+        return -1;
+    }
     return adc_millivolts(CYD_BATTERY_ADC_PIN);
 #endif
 }
@@ -683,23 +698,22 @@ int battery_millivolts() {
 #ifndef CYD_BATTERY_ADC
     return -1;
 #else
-    return (battery_adc_millivolts() * CYD_BATTERY_ADC_MULTIPLIER_NUM) / CYD_BATTERY_ADC_MULTIPLIER_DEN;
+    int mv = battery_adc_millivolts();
+    if (mv < 0) {
+        return -1;
+    }
+    return (mv * CYD_BATTERY_ADC_MULTIPLIER_NUM) / CYD_BATTERY_ADC_MULTIPLIER_DEN;
 #endif
 }
 
 int battery_level() {
-#ifndef CYD_BATTERY_ADC
-    return -1;
-#else
     static int      cached_level  = -1;
     static int      smoothed_mv   = -1;
     static uint32_t next_read_ms  = 0;
 
-#    if defined(RESISTIVE_CYD) && defined(CAPACITIVE_CYD)
-    if (display_num == 1) {
+    if (!battery_adc_available()) {
         return -1;
     }
-#    endif
 
     uint32_t now = millis();
     if (now < next_read_ms) {
@@ -751,22 +765,20 @@ int battery_level() {
 
     cached_level = 0;
     return cached_level;
-#endif
 }
 
 bool battery_charging() {
-#ifndef CYD_BATTERY_ADC
-    return false;
-#else
     static int      cached       = -1;
     static uint32_t next_read_ms = 0;
+    if (!battery_adc_available()) {
+        return false;
+    }
     uint32_t        now          = millis();
     if (cached < 0 || now >= next_read_ms) {
         cached       = (battery_millivolts() > 4250) ? 1 : 0;
         next_read_ms = now + 1000;
     }
     return cached == 1;
-#endif
 }
 
 void deep_sleep(int us) {}
