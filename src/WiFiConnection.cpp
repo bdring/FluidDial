@@ -837,37 +837,32 @@ static const char OTA_HTML[] = R"HTML(
 <title>FluidDial Firmware</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:sans-serif;background:#111;color:#eee;padding:16px;max-width:500px;margin:0 auto}
-h1{color:#4CAF50;font-size:20px;margin-bottom:4px}
-.sub{color:#888;font-size:13px;margin-bottom:18px}
-.card{background:#1e1e1e;border:1px solid #333;border-radius:8px;padding:14px;margin-bottom:12px}
-h2{font-size:12px;color:#666;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
-.info{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
-.lbl{color:#666}.val{color:#eee}
-.row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:6px;background:#2a2a2a;margin-bottom:6px}
-.tag{font-size:15px;font-weight:bold}.tag.cur{color:#4CAF50}
-.right{display:flex;align-items:center;gap:8px}
-.badge{font-size:11px;padding:2px 7px;border-radius:4px;background:#0d2d0d;color:#4CAF50;border:1px solid #1a4a1a}
-.ibtn{padding:5px 12px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;border-radius:5px;cursor:pointer;font-size:13px}
-.ibtn:hover{background:#1a3a1a}.ibtn:disabled{border-color:#444;color:#444;cursor:default}
-.msg{font-size:13px;color:#888;text-align:center;padding:10px 0}
+body{font-family:sans-serif;background:#1c1e22;color:#eee;padding:20px;max-width:700px;margin:0 auto;font-size:16px}
+h1{color:#4CAF50;font-size:24px;margin-bottom:6px}
+.sub{color:#aaa;font-size:16px;margin-bottom:20px}
+.card{background:#252830;border:1px solid #353840;border-radius:8px;padding:18px;margin-bottom:14px}
+h2{font-size:14px;color:#9aa;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+.info{display:flex;justify-content:space-between;font-size:17px;margin-bottom:5px}
+.lbl{color:#9aa}.val{color:#eee}
+.ibtn{padding:7px 16px;border:1px solid #4CAF50;background:transparent;color:#4CAF50;border-radius:5px;cursor:pointer;font-size:14px}
+.ibtn:hover{background:#1a3a1a}.ibtn:disabled{border-color:#444;color:#555;cursor:default}
+.msg{font-size:14px;color:#888;text-align:center;padding:12px 0}
 #pw{display:none}
-.bar-bg{background:#222;border-radius:4px;height:18px;margin:8px 0;border:1px solid #444;overflow:hidden}
+.bar-bg{background:#2a2d36;border-radius:4px;height:20px;margin:10px 0;border:1px solid #444;overflow:hidden}
 #bar{height:100%;background:#4CAF50;width:0%;transition:width .2s}
-#pct{text-align:center;font-size:13px;color:#888}
-input[type=file]{width:100%;padding:8px;border:1px solid #444;border-radius:6px;background:#222;color:#eee;font-size:13px;margin:8px 0}
-.primary{width:100%;padding:11px;background:#4CAF50;color:#fff;border:none;border-radius:6px;font-size:15px;cursor:pointer;font-weight:bold;margin-top:4px}
+#pct{text-align:center;font-size:14px;color:#aaa;margin-top:4px}
+input[type=file]{width:100%;padding:9px;border:1px solid #454850;border-radius:6px;background:#2a2d36;color:#eee;font-size:14px;margin:8px 0}
+.primary{width:100%;padding:12px;background:#4CAF50;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer;font-weight:bold;margin-top:6px}
 .primary:hover{background:#45a049}.primary:disabled{background:#1a3a1a;color:#555;cursor:default}
-.spin{display:inline-block;width:14px;height:14px;border:2px solid #333;border-top-color:#4CAF50;border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #3a3d46;border-top-color:#4CAF50;border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.nbtn{padding:5px 10px;border:1px solid #555;background:transparent;color:#aaa;border-radius:5px;cursor:pointer;font-size:13px}
-.nbtn:hover{border-color:#888;color:#ddd}
-.notes{display:none;background:#161616;border:1px solid #333;border-radius:6px;margin:-2px 0 8px;padding:10px 12px;font-size:13px;color:#bbb;line-height:1.5;overflow-wrap:anywhere}
-.notes h1,.notes h2,.notes h3,.notes h4{color:#ddd;font-size:14px;margin:8px 0 4px;text-transform:none;letter-spacing:0}
-.notes ul,.notes ol{margin:4px 0 4px 18px}.notes li{margin:2px 0}
-.notes a{color:#4CAF50}.notes p{margin:4px 0}
-.notes code{background:#000;padding:1px 4px;border-radius:3px;font-size:12px}
-.notes pre{background:#000;padding:8px;border-radius:4px;overflow-x:auto;white-space:pre-wrap}
+.notes{display:none;background:#22252e;border:1px solid #3a3e4a;border-radius:6px;margin:0 0 8px;padding:14px 18px;font-size:15px;color:#d8d8d8;line-height:1.7;overflow-wrap:anywhere}
+.notes .ver-tag{color:#4CAF50;font-size:17px;font-weight:bold;margin:14px 0 8px;display:block}
+.notes h1,.notes h2,.notes h3,.notes h4{color:#f0f0f0;font-size:16px;margin:10px 0 5px;text-transform:none;letter-spacing:0}
+.notes ul,.notes ol{margin:5px 0 5px 20px}.notes li{margin:3px 0}
+.notes a{color:#4CAF50}.notes p{margin:5px 0}
+.notes code{background:#161820;padding:2px 5px;border-radius:3px;font-size:13px}
+.notes pre{background:#161820;padding:10px;border-radius:4px;overflow-x:auto;white-space:pre-wrap;font-size:13px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 </head>
@@ -877,12 +872,16 @@ input[type=file]{width:100%;padding:8px;border:1px solid #444;border-radius:6px;
 
 <div class="card">
   <h2>Device</h2>
-  <div class="info"><span class="lbl">Version</span><span class="val" id="cur">...</span></div>
+  <div class="info"><span class="lbl">Current Version</span><span class="val" id="cur">...</span></div>
 </div>
 
-<div class="card">
-  <h2>Official Releases</h2>
-  <div id="rb"><div class="msg"><span class="spin"></span>Loading from GitHub...</div></div>
+<div class="card" id="manualCard">
+  <h2>Manual Upload</h2>
+  <p class="sub" style="margin-bottom:0">Upload an app-only image (<strong>firmware.bin</strong> from the build), not the merged/full-flash image.</p>
+  <form id="uf">
+    <input type="file" id="ufile" accept=".bin" required>
+    <button class="primary" type="submit" id="ubtn">Upload</button>
+  </form>
 </div>
 
 <div id="pw" class="card">
@@ -892,12 +891,8 @@ input[type=file]{width:100%;padding:8px;border:1px solid #444;border-radius:6px;
 </div>
 
 <div class="card">
-  <h2>Manual Upload</h2>
-  <p class="sub" style="margin-bottom:0">Upload an app-only image (<strong>firmware.bin</strong> from the build), not the merged/full-flash image.</p>
-  <form id="uf">
-    <input type="file" id="ufile" accept=".bin" required>
-    <button class="primary" type="submit" id="ubtn">Upload</button>
-  </form>
+  <h2>Official Releases</h2>
+  <div id="rb"><div class="msg"><span class="spin"></span>Loading from GitHub...</div></div>
 </div>
 
 <script>
@@ -907,7 +902,13 @@ var RAW='https://raw.githubusercontent.com/bdring/fluiddial-releases/main/releas
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function setBar(p){document.getElementById('bar').style.width=p+'%';document.getElementById('pct').textContent=p+'%';}
-function showProg(t){document.getElementById('pw').style.display='block';document.getElementById('pt').textContent=t;setBar(0);}
+function setBusy(on){
+  busy=on;
+  document.getElementById('pw').style.display=on?'block':'none';
+  document.getElementById('manualCard').style.display=on?'none':'block';
+  var ib=document.getElementById('instBtn'); if(ib)ib.style.display=on?'none':'';
+}
+function showProg(t){setBusy(true);document.getElementById('pt').textContent=t;setBar(0);}
 
 fetch('/releases').then(r=>r.json()).then(d=>{
   curVer=d.current||'?'; board=d.board||'';
@@ -920,17 +921,19 @@ function loadGitHub(){
       var list=releases.filter(r=>!r.draft&&!r.prerelease).slice(0,10);
       if(!list.length){document.getElementById('rb').innerHTML='<div class="msg">No releases found.</div>';return;}
       var curBase=(curVer.match(/^[\d.]+/)||[''])[0];
-      var h=''; rels=[];
+      rels=[];
+      var opts='';
       list.forEach(function(r,i){
         var tag=r.tag_name||r.name,isCur=(tag===curBase);
         rels.push({tag:tag,body:r.body||''});
-        h+='<div class="row"><span class="tag'+(isCur?' cur':'')+'">'+esc(tag)+'</span>';
-        h+='<span class="right">'+(isCur?'<span class="badge">installed</span>':'')+
-           '<button class="nbtn" onclick="toggleNotes('+i+',this)">Notes</button>'+
-           '<button class="ibtn" onclick="inst(\''+esc(tag)+'\')">Install</button></span></div>';
-        h+='<div class="notes" id="n'+i+'"></div>';
+        opts+='<option value="'+i+'"'+(isCur?' selected':'')+'>'+esc(tag)+(isCur?' (installed)':'')+'</option>';
       });
-      document.getElementById('rb').innerHTML=h;
+      document.getElementById('rb').innerHTML=
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">'+
+        '<select id="relSel" onchange="onRelChange()" style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid #444;background:#222;color:#eee;font-size:14px">'+opts+'</select>'+
+        '<button class="ibtn" id="instBtn" onclick="instSelected()">Install</button></div>'+
+        '<div class="notes" id="relNotes"></div>';
+      onRelChange();
     }).catch(function(){
       document.getElementById('rb').innerHTML=
         '<div class="msg" style="color:#f80">Could not reach GitHub.</div>'+
@@ -945,12 +948,35 @@ function renderMd(md){
   if(window.marked){try{return marked.parse?marked.parse(md):marked(md);}catch(e){}}
   return '<pre>'+esc(md)+'</pre>';
 }
-function toggleNotes(i,btn){
-  var el=document.getElementById('n'+i);
-  if(!el)return;
-  if(el.style.display==='block'){el.style.display='none';btn.textContent='Notes';return;}
-  if(!el.dataset.rendered){el.innerHTML=renderMd(rels[i].body);el.dataset.rendered='1';}
-  el.style.display='block'; btn.textContent='Hide';
+
+function onRelChange(){
+  var sel=document.getElementById('relSel');
+  var notes=document.getElementById('relNotes');
+  var btn=document.getElementById('instBtn');
+  if(!sel||!notes||!btn)return;
+  var i=parseInt(sel.value,10);
+  var cmp=curVer?verCmp(rels[i].tag,curVer):1;
+  btn.disabled=(cmp===0);
+  btn.textContent=(cmp===0)?'Installed':'Install';
+  if(cmp>0){
+    // Accumulate notes for every version between the target and the installed one.
+    // rels is newest-first, so walk forward until we reach or pass curVer.
+    var parts=[];
+    for(var j=i;j<rels.length;j++){
+      if(verCmp(rels[j].tag,curVer)<=0)break;
+      parts.push('<div class="ver-tag">'+rels[j].tag+'</div>\n\n'+(rels[j].body||'No release notes.'));
+    }
+    notes.innerHTML=renderMd(parts.join('\n\n---\n\n'));
+  }else{
+    notes.innerHTML=renderMd(rels[i].body);
+  }
+  notes.style.display='block';
+}
+
+function instSelected(){
+  var sel=document.getElementById('relSel');
+  if(!sel||busy)return;
+  inst(rels[parseInt(sel.value,10)].tag);
 }
 
 // XHR download with progress callback (returns Promise<ArrayBuffer>)
@@ -1034,7 +1060,7 @@ function inst(tag){
     })
     .catch(function(e){
       document.getElementById('pt').textContent='Failed: '+String(e);
-      document.getElementById('pct').style.color='#f55'; busy=false;
+      document.getElementById('pct').style.color='#f55'; setBusy(false);
     });
 }
 
@@ -1045,20 +1071,21 @@ function uploadBin(buf,label){
   var x=new XMLHttpRequest(); x.open('POST','/update');
   x.upload.onprogress=function(e){if(e.lengthComputable)setBar(50+Math.round(e.loaded/e.total*50));};
   x.onload=function(){setBar(100);document.getElementById('pt').textContent='Done - device restarting...';};
-  x.onerror=function(){document.getElementById('pt').textContent='Upload failed';busy=false;};
+  x.onerror=function(){document.getElementById('pt').textContent='Upload failed';setBusy(false);};
   x.send(fd);
 }
 
 document.getElementById('uf').onsubmit=function(e){
   e.preventDefault();
   var f=document.getElementById('ufile').files[0];
-  if(!f||busy)return; busy=true; showProg('Uploading '+f.name+'...');
+  if(!f||busy)return;
+  showProg('Uploading '+f.name+'...');
   var fd=new FormData(); fd.append('firmware',f);
   var x=new XMLHttpRequest(); x.open('POST','/update');
   x.upload.onprogress=function(ev){if(ev.lengthComputable)setBar(Math.round(ev.loaded/ev.total*100));};
   x.onload=function(){setBar(100);document.getElementById('pt').textContent='Done - device restarting...';};
-  x.onerror=function(){document.getElementById('pt').textContent='Upload failed';busy=false;};
-  document.getElementById('ubtn').disabled=true; x.send(fd);
+  x.onerror=function(){document.getElementById('pt').textContent='Upload failed';setBusy(false);};
+  x.send(fd);
 };
 </script>
 </body>
