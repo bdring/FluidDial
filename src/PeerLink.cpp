@@ -7,6 +7,7 @@
 
 #ifdef USE_ESPNOW
 
+#include "ESPNowCrypto.h"
 #include "FluidNCModel.h"
 #include "System.h"
 #include "Scene.h"
@@ -14,11 +15,10 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
-#include <esp_efuse.h>
 #include <Preferences.h>
-#include <mbedtls/sha256.h>
 #include <string.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <atomic>
 
 #define PREF_NAMESPACE             "fluidespnow"
@@ -31,8 +31,10 @@
 #define RX_BUF_SIZE                2048
 #define TX_BUF_SIZE                512
 #define MAX_FRAGS                  8
-#define FRAG_HEADER_SIZE           4
-#define FRAG_PAYLOAD_MAX           (250 - FRAG_HEADER_SIZE)  // 246 bytes
+#define FRAG_HEADER_SIZE           12  // type + nonce(4) + counter(4) + seq + idx + total
+#define FRAG_PAYLOAD_MAX           (250 - FRAG_HEADER_SIZE)  // 238 bytes
+#define ART_TAG_SIZE               8   // anti-replay tag: nonce(4) + counter(4)
+#define PAIR_TAG_SIZE              16  // HMAC-SHA256 truncated tag for pairing packets
 #define FRAG_REASSEMBLY_TIMEOUT_MS 3000   // discard stale partial reassembly
 
 #define PKT_DISCOVERY  0x01
@@ -44,21 +46,25 @@
 static const uint8_t PROBE_ORDER[13] = {6, 11, 1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13};
 
 struct __attribute__((packed)) DiscoveryPkt {
-    uint8_t  type;          // PKT_DISCOVERY
-    uint8_t  mac[6];        // FluidDial MAC
-    uint8_t  code_hash[4];  // SHA-256(lmk)[0:4]
-    uint8_t  channel;       // channel FluidDial is currntly using
+    uint8_t  type;                // PKT_DISCOVERY
+    uint8_t  mac[6];              // FluidDial MAC
+    uint8_t  channel;             // channel FluidDial is currently using
+    uint8_t  pair_nonce[4];       // fresh pairing-session nonce
+    uint8_t  auth_tag[PAIR_TAG_SIZE];
 };
 
 struct __attribute__((packed)) PairAckPkt {
-    uint8_t  type;       // PKT_PAIR_ACK
-    uint8_t  mac[6];     // FluidNC MAC
-    uint8_t  channel;    // FluidNC's operational WiFi channel
-    uint32_t timestamp;  // millis() on FluidNC
+    uint8_t  type;                // PKT_PAIR_ACK
+    uint8_t  mac[6];              // FluidNC MAC
+    uint8_t  channel;             // FluidNC's operational WiFi channel
+    uint8_t  pair_nonce[4];       // echoed pairing-session nonce
+    uint8_t  auth_tag[PAIR_TAG_SIZE];
 };
 
 struct __attribute__((packed)) FragHeader {
-    uint8_t type;        // PKT_DATA
+    uint8_t type;         // PKT_DATA
+    uint8_t nonce[4];     // receiver's current challenge (anti-replay)
+    uint8_t counter[4];   // sender's monotonic counter, little-endian (anti-replay)
     uint8_t seq;
     uint8_t frag_idx;
     uint8_t total_frags;
@@ -68,7 +74,9 @@ struct __attribute__((packed)) FragHeader {
 static uint8_t          _peer_mac[6]  = {};
 static uint8_t          _lmk[16]      = {};
 static uint8_t          _op_channel   = ESPNOW_PAIR_CHANNEL;
+static uint8_t          _preferred_channel = ESPNOW_PAIR_CHANNEL;
 static volatile bool    _is_paired    = false;
+static std::atomic<uint32_t> _pairing_nonce {0};
 
 static volatile bool     _is_connected     = false;
 static volatile uint32_t _last_rx_ms       = 0;
@@ -97,6 +105,8 @@ static bool     _reconnect_active    = false;
 static uint8_t  _reconnect_probe_idx = 0;
 static uint32_t _reconnect_beacon_ms = 0;
 static uint32_t _reconnect_start_ms  = 0;
+static uint8_t  _reconnect_saved_ch  = ESPNOW_PAIR_CHANNEL;
+static std::atomic<uint8_t> _rx_channel_hint {0};
 
 static const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -122,34 +132,20 @@ static uint8_t _tx_buf[TX_BUF_SIZE];
 static int     _tx_len = 0;
 static uint8_t _tx_seq = 0;
 
-static void derive_lmk(const char* code, uint8_t out_lmk[16]) {
-    const char* prefix     = "fluiddial-espnow:";
-    size_t      prefix_len = strlen(prefix);
-    size_t      code_len   = strlen(code);
-    uint8_t     input[48]; // prefix (17) + code (6) + margin
-    memcpy(input, prefix, prefix_len);
-    memcpy(input + prefix_len, code, code_len);
-    uint8_t hash[32];
-    mbedtls_sha256(input, prefix_len + code_len, hash, 0);
-    memcpy(out_lmk, hash, 16);
-}
+// ---- anti-replay ----------------------------------------------------------
+// Each side issues a random 32-bit "challenge" nonce for the traffic it
+// receives and advertises it in its keepalives. The peer stamps every
+// DATA/REALTIME frame with challenge; (a monotonic 32 bit counter). The
+// receiver accepts a frame only if the nonce matches its current challenge and
+// the counter is ahead of a 64-entry sliding window, so a captured frame can't
+// be replayed. A fresh challenge is issued on every reconnect.
+static std::atomic<uint32_t> _rx_nonce      {0};  // challenge to the peer
+static std::atomic<uint32_t> _tx_peer_nonce {0};  // peer's challenge, learned via keepalive
+static std::atomic<bool>     _tx_peer_known {false};
+static std::atomic<uint32_t> _tx_counter    {0};  // monotonic send counter
 
-static void derive_device_code(char out[9]) {
-    uint8_t mac[6];
-    esp_efuse_mac_get_default(mac);
-    const char*             salt = "fluiddial-code-v2:";
-    uint8_t                 hash[32];
-    mbedtls_sha256_context  ctx;
-    mbedtls_sha256_init(&ctx);
-    mbedtls_sha256_starts(&ctx, 0);
-    mbedtls_sha256_update(&ctx, (const uint8_t*)salt, strlen(salt));
-    mbedtls_sha256_update(&ctx, mac, 6);
-    mbedtls_sha256_finish(&ctx, hash);
-    mbedtls_sha256_free(&ctx);
-    uint32_t n = ((uint32_t)hash[0] << 24 | (uint32_t)hash[1] << 16 |
-                  (uint32_t)hash[2] << 8  | (uint32_t)hash[3]) % 100000000u;
-    snprintf(out, 9, "%08u", n);
-}
+// receiver sliding-window state - touched only in the recv callback
+static ESPNowCrypto::ReplayState _rx_replay;
 
 static void register_peer(const uint8_t mac[6], uint8_t channel, bool encrypt, const uint8_t lmk[16]) {
     if (esp_now_is_peer_exist(mac)) {
@@ -187,6 +183,99 @@ static inline int rx_pop() {
     return (unsigned char)c;
 }
 
+static void set_connected_now() {
+    _last_rx_ms   = millis();
+    _is_connected = true;
+}
+
+static uint8_t current_wifi_channel() {
+    uint8_t primary = 0;
+    wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+    if (esp_wifi_get_channel(&primary, &second) != ESP_OK) {
+        return 0;
+    }
+    return primary;
+}
+
+static void note_rx_channel(uint8_t channel) {
+    if (channel >= 1 && channel <= 14) {
+        _rx_channel_hint.store(channel, std::memory_order_release);
+    }
+}
+
+static void send_keepalive(const uint8_t mac[6]) {
+    uint32_t n = _rx_nonce.load(std::memory_order_acquire);
+    if (!_tx_peer_known.load(std::memory_order_acquire)) {
+        uint8_t pkt[5];
+        pkt[0] = PKT_KEEPALIVE;
+        memcpy(pkt + 1, &n, 4);
+        esp_now_send(mac, pkt, sizeof(pkt));
+        return;
+    }
+
+    uint8_t pkt[1 + 4 + ART_TAG_SIZE];
+    pkt[0] = PKT_KEEPALIVE;
+    memcpy(pkt + 1, &n, 4);   // auth'd advertisement of the challenge
+    if (!ESPNowCrypto::stampAntiReplayTag(_tx_peer_known, _tx_peer_nonce, _tx_counter, pkt + 5)) return;
+    esp_now_send(mac, pkt, sizeof(pkt));
+}
+
+static int accept_keepalive(const uint8_t* data, int len) {
+    if (len >= 1 + 4 + ART_TAG_SIZE) {
+        uint32_t advertised, nonce, counter;
+        memcpy(&advertised, data + 1, 4);
+        memcpy(&nonce,      data + 5, 4);
+        memcpy(&counter,    data + 9, 4);
+        if (!ESPNowCrypto::acceptReplay(_rx_nonce, _rx_replay, nonce, counter, millis()) || advertised == 0) return 0;
+        _tx_peer_nonce.store(advertised, std::memory_order_release);
+        _tx_peer_known.store(true, std::memory_order_release);
+        return 2;
+    }
+
+    if (len >= 5 && !_tx_peer_known.load(std::memory_order_acquire)) {
+        uint32_t advertised;
+        memcpy(&advertised, data + 1, 4);
+        if (advertised == 0) return 0;
+        _tx_peer_nonce.store(advertised, std::memory_order_release);
+        _tx_peer_known.store(true, std::memory_order_release);
+        return 1;
+    }
+
+    return 0;
+}
+
+static bool accept_pair_ack(const uint8_t* src, const uint8_t* data, int len) {
+    if (!_pairing_active || len != (int)sizeof(PairAckPkt)) return false;
+
+    PairAckPkt ack;
+    memcpy(&ack, data, sizeof(ack));
+    if (!mac_eq(src, ack.mac)) return false;
+
+    uint32_t expected_nonce = _pairing_nonce.load(std::memory_order_acquire);
+    uint32_t ack_nonce;
+    memcpy(&ack_nonce, ack.pair_nonce, 4);
+    if (ack_nonce == 0 || ack_nonce != expected_nonce) return false;
+
+    if (!ESPNowCrypto::verifyPairingAuthTag(_pairing_lmk,
+                                            reinterpret_cast<const uint8_t*>(&ack),
+                                            offsetof(PairAckPkt, auth_tag),
+                                            ack.auth_tag)) {
+        return false;
+    }
+
+    memcpy(&_pair_ack_pending_pkt, &ack, sizeof(ack));
+    _pair_ack_pending.store(true, std::memory_order_release);
+    return true;
+}
+
+static void send_realtime(uint8_t c) {
+    uint8_t pkt[1 + ART_TAG_SIZE + 1];
+    pkt[0] = PKT_REALTIME;
+    if (!ESPNowCrypto::stampAntiReplayTag(_tx_peer_known, _tx_peer_nonce, _tx_counter, pkt + 1)) return;   // peer challenge not learned yet -> drop
+    pkt[1 + ART_TAG_SIZE] = c;
+    esp_now_send(_peer_mac, pkt, sizeof(pkt));
+}
+
 static void send_fragments(const uint8_t* data, size_t len) {
     if (!_is_paired || len == 0) return;
 
@@ -206,9 +295,10 @@ static void send_fragments(const uint8_t* data, size_t len) {
         size_t chunk = len - offset;
         if (chunk > FRAG_PAYLOAD_MAX) chunk = FRAG_PAYLOAD_MAX;
         pkt[0] = PKT_DATA;
-        pkt[1] = seq;
-        pkt[2] = i;
-        pkt[3] = total;
+        if (!ESPNowCrypto::stampAntiReplayTag(_tx_peer_known, _tx_peer_nonce, _tx_counter, pkt + 1)) return;   // peer challenge not learned yet -> drop
+        pkt[9]  = seq;                     // 1 + ART_TAG_SIZE
+        pkt[10] = i;
+        pkt[11] = total;
         memcpy(pkt + FRAG_HEADER_SIZE, data + offset, chunk);
         esp_now_send(_peer_mac, pkt, FRAG_HEADER_SIZE + chunk);
         offset += chunk;
@@ -218,8 +308,9 @@ static void send_fragments(const uint8_t* data, size_t len) {
 static void complete_pairing_from_ack(const PairAckPkt& ack) {
     memcpy(_peer_mac, ack.mac, 6);
     memcpy(_lmk, _pairing_lmk, 16);
-    _op_channel = (ack.channel > 0 && ack.channel <= 14)
-                  ? ack.channel : ESPNOW_PAIR_CHANNEL;
+    _preferred_channel = (ack.channel > 0 && ack.channel <= 14)
+                         ? ack.channel : ESPNOW_PAIR_CHANNEL;
+    _op_channel = _preferred_channel;
 
     register_peer(_peer_mac, _op_channel, true, _lmk);
     esp_wifi_set_channel(_op_channel, WIFI_SECOND_CHAN_NONE);
@@ -228,15 +319,19 @@ static void complete_pairing_from_ack(const PairAckPkt& ack) {
     prefs.begin(PREF_NAMESPACE, false);
     prefs.putBytes("espnow_mac", _peer_mac, 6);
     prefs.putBytes("espnow_lmk", _lmk, 16);
-    prefs.putUChar("espnow_ch",  _op_channel);
+    prefs.putUChar("espnow_ch",  _preferred_channel);
     prefs.end();
 
     _is_paired        = true;
     _pairing_complete = true;
     _pairing_active   = false;
     _probe_active     = false;
-    _last_rx_ms       = millis();
-    _is_connected     = true;
+    set_connected_now();
+
+    // Start a fresh anti-replay session + re-learn the peer's challenge from
+    // its first keepalive before sending any DATA/REALTIME frames.
+    _tx_peer_known.store(false, std::memory_order_release);
+    ESPNowCrypto::issueRxChallenge(_rx_nonce);
 
     dbg_printf("ESP-NOW: pairing complete — peer %02x:%02x:%02x:%02x:%02x:%02x ch=%d\n",
                _peer_mac[0], _peer_mac[1], _peer_mac[2],
@@ -247,41 +342,44 @@ static void complete_pairing_from_ack(const PairAckPkt& ack) {
 static void on_data_recv(const esp_now_recv_info_t* recv_info,
                          const uint8_t* data, int len) {
     const uint8_t* src = recv_info ? recv_info->src_addr : nullptr;
+    uint8_t rx_channel = (recv_info && recv_info->rx_ctrl) ? recv_info->rx_ctrl->channel : 0;
     if (_is_paired && mac_eq(src, _peer_mac) && recv_info && recv_info->rx_ctrl) {
         update_rssi((int8_t)recv_info->rx_ctrl->rssi);
     }
 #else
 static void on_data_recv(const uint8_t* src,
                          const uint8_t* data, int len) {
+    uint8_t rx_channel = current_wifi_channel();
 #endif
     if (len < 1) return;
     uint8_t pkt_type = data[0];
 
     // pair handshake
-    if (pkt_type == PKT_PAIR_ACK && _pairing_active
-        && len >= (int)sizeof(PairAckPkt)) {
-        memcpy(&_pair_ack_pending_pkt, data, sizeof(PairAckPkt));
-        _pair_ack_pending.store(true, std::memory_order_release);
+    if (pkt_type == PKT_PAIR_ACK && accept_pair_ack(src, data, len)) {
         return;
     }
 
     if (!_is_paired) return;
     if (!mac_eq(src, _peer_mac)) return;
 
-    // Refresh liveness timestamp on packet rx
-    _last_rx_ms   = millis();
-    _is_connected = true;
-
     if (pkt_type == PKT_KEEPALIVE) {
-        if (len >= 2) {
-            update_rssi((int8_t)data[1]);
+        int keepalive_state = accept_keepalive(data, len);
+        if (keepalive_state == 2) {
+            note_rx_channel(rx_channel);
+            set_connected_now();
+            update_rx_time();
         }
-        update_rx_time();
         return;
     }
 
-    if (pkt_type == PKT_REALTIME && len >= 2) {
-        rx_push(data[1]);
+    if (pkt_type == PKT_REALTIME && len >= 1 + ART_TAG_SIZE + 1) {
+        uint32_t nonce, counter;
+        memcpy(&nonce,   data + 1, 4);
+        memcpy(&counter, data + 5, 4);
+        if (!ESPNowCrypto::acceptReplay(_rx_nonce, _rx_replay, nonce, counter, millis())) return;   // replay / stale -> drop
+        note_rx_channel(rx_channel);
+        set_connected_now();
+        rx_push(data[1 + ART_TAG_SIZE]);
         update_rx_time();
         return;
     }
@@ -289,6 +387,13 @@ static void on_data_recv(const uint8_t* src,
     // DATA FRAG
     if (pkt_type == PKT_DATA && len >= FRAG_HEADER_SIZE) {
         const FragHeader* hdr   = (const FragHeader*)data;
+        uint32_t          nonce, counter;
+        memcpy(&nonce,   hdr->nonce,   4);
+        memcpy(&counter, hdr->counter, 4);
+        if (!ESPNowCrypto::acceptReplay(_rx_nonce, _rx_replay, nonce, counter, millis())) return;   // replay / stale ->>> drop
+        note_rx_channel(rx_channel);
+        set_connected_now();
+
         uint8_t           idx   = hdr->frag_idx;
         uint8_t           total = hdr->total_frags;
         uint8_t           seq   = hdr->seq;
@@ -368,14 +473,15 @@ void espnow_init() {
     }
 
     {
-        const char* pmk_seed = "fluiddial-espnow-pmk-v1";
-        uint8_t     hash[32];
-        mbedtls_sha256((const uint8_t*)pmk_seed, strlen(pmk_seed), hash, 0);
-        esp_now_set_pmk(hash);
+        uint8_t pmk[16];
+        ESPNowCrypto::derivePmk(pmk);
+        esp_now_set_pmk(pmk);
     }
 
     esp_now_register_recv_cb(on_data_recv);
     esp_now_register_send_cb(on_data_sent);
+
+    ESPNowCrypto::issueRxChallenge(_rx_nonce);   // anti-replay challenge advertised in keepalives
 
 #if ESP_IDF_VERSION_MAJOR < 5
     {
@@ -393,7 +499,8 @@ void espnow_init() {
     if (has_mac && has_lmk) {
         prefs.getBytes("espnow_mac", _peer_mac, 6);
         prefs.getBytes("espnow_lmk", _lmk, 16);
-        _op_channel = prefs.getUChar("espnow_ch", ESPNOW_PAIR_CHANNEL);
+        _preferred_channel = prefs.getUChar("espnow_ch", ESPNOW_PAIR_CHANNEL);
+        _op_channel = _preferred_channel;
         prefs.end();
 
         esp_wifi_set_channel(_op_channel, WIFI_SECOND_CHAN_NONE);
@@ -405,12 +512,25 @@ void espnow_init() {
         dbg_println("ESP-NOW: no saved pairing");
     }
 
-    derive_device_code(_pairing_code);
+    if (ESPNowCrypto::deriveDeviceCode(_pairing_code)) {
+        dbg_println("ESP-NOW: burnt device secret in eFuse");
+    }
     dbg_printf("ESP-NOW: device pairing code = %s\n", _pairing_code);
+    _pairing_nonce.store(ESPNowCrypto::randomNonce(), std::memory_order_release);
 }
 
 void espnow_poll() {
     uint32_t now = millis();
+
+    uint8_t rx_channel = _rx_channel_hint.exchange(0, std::memory_order_acq_rel);
+    if (rx_channel >= 1 && rx_channel <= 14 && rx_channel != _op_channel) {
+        _preferred_channel = rx_channel;
+        _op_channel = rx_channel;
+        esp_wifi_set_channel(_op_channel, WIFI_SECOND_CHAN_NONE);
+        if (_is_paired) {
+            register_peer(_peer_mac, _op_channel, true, _lmk);
+        }
+    }
 
     if (_pair_ack_pending.load(std::memory_order_acquire)) {
         PairAckPkt ack;
@@ -422,6 +542,11 @@ void espnow_poll() {
 
     if (_is_connected && (now - _last_rx_ms) > CONNECT_TIMEOUT_MS) {
         _is_connected = false;
+        // Roll the anti-replay session: a new challenge invalidates frames the
+        // peer stamped for the previous session + force to re-learn the
+        // peer's challenge before sending again
+        _tx_peer_known.store(false, std::memory_order_release);
+        ESPNowCrypto::issueRxChallenge(_rx_nonce);
         set_disconnected_state();
         if (current_scene) current_scene->reDisplay();
     }
@@ -429,11 +554,15 @@ void espnow_poll() {
     static bool _was_connected = false;
     if (_is_connected != _was_connected) {
         _was_connected = _is_connected;
-        if (_is_connected) {
-            fnc_realtime(StatusReport);
-        }
         if (current_scene) current_scene->reDisplay();
     }
+
+    static bool _was_tx_known = false;
+    bool tx_known = _tx_peer_known.load(std::memory_order_acquire);
+    if (tx_known && !_was_tx_known) {
+        fnc_realtime(StatusReport);
+    }
+    _was_tx_known = tx_known;
 
     if (state == Disconnected) {
         static uint32_t _badge_tick_ms = 0;
@@ -450,22 +579,29 @@ void espnow_poll() {
             _reconnect_probe_idx = 0;
             _reconnect_beacon_ms = 0;
             _reconnect_start_ms  = now;
-            dbg_printf("ESP-NOW: reconnect started — saved ch=%d\n", _op_channel);
+            _reconnect_saved_ch  = _preferred_channel;
+            dbg_printf("ESP-NOW: reconnect started — saved ch=%d\n", _preferred_channel);
             if (current_scene) current_scene->reDisplay();
         }
 
         if ((now - _reconnect_beacon_ms) >= RECONNECT_PROBE_MS) {
             _reconnect_beacon_ms = now;
 
-            uint8_t ch = PROBE_ORDER[_reconnect_probe_idx % 13];
-            _reconnect_probe_idx = (_reconnect_probe_idx + 1) % 13;
+            uint8_t ch;
+            if (_reconnect_probe_idx < 3 && _reconnect_saved_ch >= 1 && _reconnect_saved_ch <= 13) {
+                ch = _reconnect_saved_ch;
+            } else {
+                uint8_t sweep_idx = (uint8_t)((_reconnect_probe_idx - 3) % 13);
+                ch = PROBE_ORDER[sweep_idx];
+            }
+            _reconnect_probe_idx++;
 
             _op_channel = ch;
             esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
             register_peer(_peer_mac, ch, true, _lmk);
 
-            uint8_t pkt[1] = {PKT_KEEPALIVE};
-            esp_now_send(_peer_mac, pkt, 1);
+            send_keepalive(_peer_mac);
+            send_keepalive(_peer_mac);
             dbg_printf("ESP-NOW: probe #%d ch=%d (+%lums)\n",
                        _reconnect_probe_idx, ch, (unsigned long)(now - _reconnect_start_ms));
         }
@@ -476,7 +612,8 @@ void espnow_poll() {
         if (current_scene) current_scene->reDisplay();
         Preferences prefs;
         prefs.begin(PREF_NAMESPACE, false);
-        prefs.putUChar("espnow_ch", _op_channel);
+        _preferred_channel = _op_channel;
+        prefs.putUChar("espnow_ch", _preferred_channel);
         prefs.end();
         dbg_printf("ESP-NOW: reconnected on ch=%d (RSSI %d dBm)\n",
                    _op_channel, (int)_peer_rssi);
@@ -485,14 +622,14 @@ void espnow_poll() {
     // Keepalive heartbeat
     if (_is_paired && _is_connected && (now - _keepalive_last_ms) >= KEEPALIVE_INTERVAL_MS) {
         _keepalive_last_ms = now;
-        uint8_t pkt[1] = {PKT_KEEPALIVE};
-        esp_now_send(_peer_mac, pkt, 1);
+        send_keepalive(_peer_mac);
     }
 
     if (!_pairing_active) return;
 
     if ((now - _code_start_ms) >= CODE_LIFETIME_MS) {
         _code_start_ms = now;
+        _pairing_nonce.store(ESPNowCrypto::randomNonce(), std::memory_order_release);
     }
 
     if ((now - _beacon_last_ms) >= BEACON_INTERVAL_MS) {
@@ -517,11 +654,16 @@ void espnow_poll() {
         uint8_t my_mac[6];
         esp_wifi_get_mac(WIFI_IF_STA, my_mac);
 
-        DiscoveryPkt pkt;
+        DiscoveryPkt pkt = {};
+        uint32_t     pairing_nonce = _pairing_nonce.load(std::memory_order_acquire);
         pkt.type    = PKT_DISCOVERY;
         memcpy(pkt.mac, my_mac, 6);
-        memcpy(pkt.code_hash, _pairing_lmk, 4);
         pkt.channel = _op_channel;
+        memcpy(pkt.pair_nonce, &pairing_nonce, 4);
+        ESPNowCrypto::pairingAuthTag(_pairing_lmk,
+                         reinterpret_cast<const uint8_t*>(&pkt),
+                         offsetof(DiscoveryPkt, auth_tag),
+                         pkt.auth_tag);
 
         esp_now_send(BROADCAST_MAC, (const uint8_t*)&pkt, sizeof(pkt));
     }
@@ -531,17 +673,11 @@ void espnow_putchar(uint8_t c) {
     if (c == 0x11 || c == 0x13) return;
 
     if (c == 0x18 || (c >= 0x80 && c <= 0x9F) || (c >= 0xB0 && c <= 0xB3)) {
-        if (_is_paired) {
-            uint8_t pkt[2] = {PKT_REALTIME, c};
-            esp_now_send(_peer_mac, pkt, 2);
-        }
+        if (_is_paired) send_realtime(c);
         return;
     }
     if (_tx_len == 0 && (c == '?' || c == '!' || c == '~')) {
-        if (_is_paired) {
-            uint8_t pkt[2] = {PKT_REALTIME, c};
-            esp_now_send(_peer_mac, pkt, 2);
-        }
+        if (_is_paired) send_realtime(c);
         return;
     }
 
@@ -595,7 +731,8 @@ const char* espnow_start_pairing() {
         esp_now_del_peer(BROADCAST_MAC);
     }
 
-    derive_lmk(_pairing_code, _pairing_lmk);
+    ESPNowCrypto::deriveLmk(_pairing_code, _pairing_lmk);
+    _pairing_nonce.store(ESPNowCrypto::randomNonce(), std::memory_order_release);
 
     _code_start_ms    = millis();
     _pairing_active   = true;
@@ -623,7 +760,7 @@ uint32_t espnow_code_remaining_ms() {
 
 bool espnow_has_saved_pairing() {
     Preferences prefs;
-    prefs.begin(PREF_NAMESPACE, true);
+    prefs.begin(PREF_NAMESPACE, false);
     bool has = prefs.isKey("espnow_mac") && prefs.isKey("espnow_lmk");
     prefs.end();
     return has;
@@ -641,6 +778,10 @@ void espnow_clear_pairing() {
     _peer_rssi        = -100;
 
     _tx_len = 0;
+
+    _tx_peer_known.store(false, std::memory_order_release);
+    _tx_peer_nonce.store(0, std::memory_order_release);
+    ESPNowCrypto::issueRxChallenge(_rx_nonce);
 
     Preferences prefs;
     prefs.begin(PREF_NAMESPACE, false);

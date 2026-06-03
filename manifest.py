@@ -105,13 +105,13 @@ def makeManifest():
     addMCU(mcu, "ESP32-WROOM", "Firmware variant")
 
     addDialType("FluidDial for CYD", "FluidDial for CYD Dial", "FluidDial type")
-    addInstallable(fresh_install, True, ["cyddial"])
+    addInstallable(fresh_install, False, ["cyddial"])
 
     mcu = "esp32s3"
     addMCU(mcu, "ESP32-S3-WROOM-1", "Firmware variant")
 
     addDialType("FluidDial for M5Dial", "FluidDial for M5Dial", "FluidDial type")
-    addInstallable(fresh_install, True, ["m5dial"])
+    addInstallable(fresh_install, False, ["m5dial"])
 
 makeManifest()
 
