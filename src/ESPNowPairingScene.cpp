@@ -18,14 +18,6 @@ int         badge_outline;
 int         badge_text;
 const char* badge_label;
 
-static void draw_code(const char* code) {
-    if (round_display) {
-        centered_text(code, 88, WHITE, LARGE);
-    } else {
-        centered_text(code, 105, WHITE, LARGE);
-    }
-}
-
 void ESPNowPairingScene::onEntry(void* arg) {
     _fallback = arg ? static_cast<Scene*>(arg) : &firstBootScene;
     set_disconnected_state();
@@ -64,11 +56,9 @@ void ESPNowPairingScene::reDisplay() {
         drawRect(55, 22, 130, 1, 0, DARKGREY);
     }
 
-    const char* code = espnow_pairing_code();
-
     badge_fill    = 0x001a4d;
     badge_outline = 0x4da6ff;
-    badge_label   = "Pairing Code";
+    badge_label   = "Pairing Mode";
     badge_text    = 0x4da6ff;
 
     static constexpr int BX = 20, BY = 36, BW = 200, BH = 34;
@@ -82,25 +72,17 @@ void ESPNowPairingScene::reDisplay() {
     centered_text(badge_label, ty, badge_text, round_display ? TINY : SMALL);
 
     if (round_display) {
-        draw_code(code);
-        centered_text("Add to config.yaml:", 118, DARKGREY, TINY);
+        centered_text("Waiting", 88, WHITE, LARGE);
+        centered_text("Run in FluidNC:", 118, DARKGREY, TINY);
 
         drawOutlinedRect(BX-8, 132, BW+12, 40, BLACK, badge_outline);
-        text("espnow:", 50, 144, 0x4da6ff, TINY);
-
-        char hint[28];
-        snprintf(hint, sizeof(hint), "  pair_code: %s", code);
-        centered_text(hint, 158, 0x4da6ff, TINY);
+        centered_text("$ESPNow/Pair", 154, 0x4da6ff, TINY);
     } else {
-        draw_code(code);
-        centered_text("Add to config.yaml:", 150, DARKGREY, TINY);
+        centered_text("Waiting", 105, WHITE, LARGE);
+        centered_text("Run in FluidNC:", 150, DARKGREY, TINY);
 
         drawOutlinedRect(BX-10, 166, BW+18, 40, BLACK, badge_outline);
-        text("espnow:", 50, 176, 0x4da6ff, TINY);
-
-        char hint[28];
-        snprintf(hint, sizeof(hint), "  pair_code: %s", code);
-        centered_text(hint, 194, 0x4da6ff, TINY);
+        centered_text("$ESPNow/Pair", 190, 0x4da6ff, TINY);
     }
 
     drawButtonLegends("Back", "", "");

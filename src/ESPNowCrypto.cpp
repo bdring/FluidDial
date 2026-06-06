@@ -6,56 +6,39 @@
 
 #include "ESPNowCrypto.h"
 
-#include <esp_efuse.h>
 #include <esp_random.h>
+#include <mbedtls/ecdh.h>
+#include <mbedtls/ecp.h>
 #include <mbedtls/md.h>
-#include <mbedtls/pkcs5.h>
 #include <mbedtls/sha256.h>
 #include <string.h>
 
 namespace {
 
-constexpr uint32_t kPBKDF2Iterations = 5000;
 constexpr uint32_t kReplayRegenMs = 3000;
 constexpr uint32_t kReplayUnderflowLimit = 8;
-constexpr uint8_t kPairCodeKdfLabel[] = "fluiddial-espnow-v3";
+constexpr char kPairingWindowLabel[] = "fluidnc-espnow-pairing-window-v1";
+constexpr char kPairingSessionLabel[] = "fluidnc-espnow-pairing-session-v1";
 constexpr char kEspNowPmkLabel[] = "fluiddial-espnow-pmk-v1";
-constexpr char kDeviceCodeContext[] = "fluiddial-code-v3:";
-constexpr char kB32Alphabet[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-bool loadOrCreateDeviceSecret(uint8_t out[8]) {
-    esp_efuse_read_block(EFUSE_BLK3, out, 0, 8 * 8);
-
-    bool empty = true;
-    for (int i = 0; i < 8; ++i) {
-        if (out[i]) {
-            empty = false;
-            break;
-        }
+int ecdhRng(void*, unsigned char* output, size_t len) {
+    for (size_t i = 0; i < len; i += sizeof(uint32_t)) {
+        uint32_t word = esp_random();
+        size_t chunk = (len - i < sizeof(word)) ? (len - i) : sizeof(word);
+        memcpy(output + i, &word, chunk);
     }
-
-    if (!empty) {
-        return false;
-    }
-
-    esp_fill_random(out, 8);
-    esp_efuse_write_block(EFUSE_BLK3, out, 0, 8 * 8);
-    return true;
+    return 0;
 }
 
 }  // namespace
 
 namespace ESPNowCrypto {
 
-void deriveLmk(const char* code, uint8_t out_lmk[16]) {
-    mbedtls_md_context_t ctx;
-    mbedtls_md_init(&ctx);
-    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 1);
-    mbedtls_pkcs5_pbkdf2_hmac(&ctx,
-                              reinterpret_cast<const uint8_t*>(code), strlen(code),
-                              kPairCodeKdfLabel, sizeof(kPairCodeKdfLabel) - 1,
-                              kPBKDF2Iterations, 16, out_lmk);
-    mbedtls_md_free(&ctx);
+void derivePairingWindowLmk(uint8_t out_lmk[16]) {
+    uint8_t hash[32];
+    mbedtls_sha256(reinterpret_cast<const uint8_t*>(kPairingWindowLabel), strlen(kPairingWindowLabel), hash, 0);
+    memcpy(out_lmk, hash, 16);
+    secureZero(hash, sizeof(hash));
 }
 
 void derivePmk(uint8_t out_pmk[16]) {
@@ -82,31 +65,122 @@ void pairingAuthTag(const uint8_t key[16], const uint8_t* data, size_t len, uint
 bool verifyPairingAuthTag(const uint8_t key[16], const uint8_t* data, size_t len, const uint8_t tag[16]) {
     uint8_t expected[16];
     pairingAuthTag(key, data, len, expected);
-    return memcmp(expected, tag, 16) == 0;
+    bool ok = constantTimeEquals(expected, tag, 16);
+    secureZero(expected, sizeof(expected));
+    return ok;
 }
 
-bool deriveDeviceCode(char out[9]) {
-    uint8_t secret[8];
-    bool minted = loadOrCreateDeviceSecret(secret);
+bool generateEcdhKeypair(uint8_t private_key[ECDH_PRIVATE_KEY_SIZE], uint8_t public_key[ECDH_PUBLIC_KEY_SIZE]) {
+    mbedtls_ecp_group group;
+    mbedtls_mpi d;
+    mbedtls_ecp_point q;
+    size_t olen = 0;
+    bool ok = false;
 
-    uint8_t hash[32];
-    mbedtls_sha256_context ctx;
-    mbedtls_sha256_init(&ctx);
-    mbedtls_sha256_starts(&ctx, 0);
-    mbedtls_sha256_update(&ctx, reinterpret_cast<const uint8_t*>(kDeviceCodeContext), strlen(kDeviceCodeContext));
-    mbedtls_sha256_update(&ctx, secret, sizeof(secret));
-    mbedtls_sha256_finish(&ctx, hash);
-    mbedtls_sha256_free(&ctx);
+    mbedtls_ecp_group_init(&group);
+    mbedtls_mpi_init(&d);
+    mbedtls_ecp_point_init(&q);
 
-    uint64_t value = ((uint64_t)hash[0] << 32) | ((uint64_t)hash[1] << 24) |
-                     ((uint64_t)hash[2] << 16) | ((uint64_t)hash[3] << 8) |
-                     (uint64_t)hash[4];
-    for (int i = 7; i >= 0; --i) {
-        out[i] = kB32Alphabet[value & 31];
-        value >>= 5;
+    if (mbedtls_ecp_group_load(&group, MBEDTLS_ECP_DP_SECP256R1) == 0 &&
+        mbedtls_ecp_gen_keypair(&group, &d, &q, ecdhRng, nullptr) == 0 &&
+        mbedtls_mpi_write_binary(&d, private_key, ECDH_PRIVATE_KEY_SIZE) == 0 &&
+        mbedtls_ecp_point_write_binary(&group,
+                                       &q,
+                                       MBEDTLS_ECP_PF_UNCOMPRESSED,
+                                       &olen,
+                                       public_key,
+                                       ECDH_PUBLIC_KEY_SIZE) == 0 &&
+        olen == ECDH_PUBLIC_KEY_SIZE) {
+        ok = true;
     }
-    out[8] = '\0';
-    return minted;
+
+    mbedtls_ecp_point_free(&q);
+    mbedtls_mpi_free(&d);
+    mbedtls_ecp_group_free(&group);
+    if (!ok) {
+        secureZero(private_key, ECDH_PRIVATE_KEY_SIZE);
+        secureZero(public_key, ECDH_PUBLIC_KEY_SIZE);
+    }
+    return ok;
+}
+
+bool deriveEcdhSharedSecret(const uint8_t private_key[ECDH_PRIVATE_KEY_SIZE],
+                            const uint8_t peer_public_key[ECDH_PUBLIC_KEY_SIZE],
+                            uint8_t shared_secret[ECDH_SHARED_SECRET_SIZE]) {
+    mbedtls_ecp_group group;
+    mbedtls_mpi d;
+    mbedtls_mpi z;
+    mbedtls_ecp_point q;
+    bool ok = false;
+
+    mbedtls_ecp_group_init(&group);
+    mbedtls_mpi_init(&d);
+    mbedtls_mpi_init(&z);
+    mbedtls_ecp_point_init(&q);
+
+    if (mbedtls_ecp_group_load(&group, MBEDTLS_ECP_DP_SECP256R1) == 0 &&
+        mbedtls_mpi_read_binary(&d, private_key, ECDH_PRIVATE_KEY_SIZE) == 0 &&
+        mbedtls_ecp_point_read_binary(&group, &q, peer_public_key, ECDH_PUBLIC_KEY_SIZE) == 0 &&
+        mbedtls_ecp_check_pubkey(&group, &q) == 0 &&
+        mbedtls_ecdh_compute_shared(&group, &z, &q, &d, ecdhRng, nullptr) == 0 &&
+        mbedtls_mpi_write_binary(&z, shared_secret, ECDH_SHARED_SECRET_SIZE) == 0) {
+        ok = true;
+    }
+
+    mbedtls_ecp_point_free(&q);
+    mbedtls_mpi_free(&z);
+    mbedtls_mpi_free(&d);
+    mbedtls_ecp_group_free(&group);
+    if (!ok) {
+        secureZero(shared_secret, ECDH_SHARED_SECRET_SIZE);
+    }
+    return ok;
+}
+
+void derivePairingSessionLmk(const uint8_t pairing_window_lmk[16],
+                             const uint8_t shared_secret[ECDH_SHARED_SECRET_SIZE],
+                             const uint8_t* discovery,
+                             size_t discovery_len,
+                             const uint8_t* challenge,
+                             size_t challenge_len,
+                             uint8_t out_lmk[16]) {
+    uint8_t full[32];
+    mbedtls_md_context_t ctx;
+    const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, info, 1);
+    mbedtls_md_hmac_starts(&ctx, pairing_window_lmk, 16);
+    mbedtls_md_hmac_update(&ctx, reinterpret_cast<const uint8_t*>(kPairingSessionLabel), strlen(kPairingSessionLabel));
+    mbedtls_md_hmac_update(&ctx, shared_secret, ECDH_SHARED_SECRET_SIZE);
+    mbedtls_md_hmac_update(&ctx, discovery, discovery_len);
+    mbedtls_md_hmac_update(&ctx, challenge, challenge_len);
+    mbedtls_md_hmac_finish(&ctx, full);
+    mbedtls_md_free(&ctx);
+
+    memcpy(out_lmk, full, 16);
+    secureZero(full, sizeof(full));
+}
+
+bool constantTimeEquals(const uint8_t* a, const uint8_t* b, size_t len) {
+    if (!a || !b) {
+        return false;
+    }
+    uint8_t diff = 0;
+    for (size_t i = 0; i < len; ++i) {
+        diff |= (uint8_t)(a[i] ^ b[i]);
+    }
+    return diff == 0;
+}
+
+void secureZero(void* data, size_t len) {
+    if (!data) {
+        return;
+    }
+    volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(data);
+    while (len--) {
+        *p++ = 0;
+    }
 }
 
 uint32_t randomNonce() {

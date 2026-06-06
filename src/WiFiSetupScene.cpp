@@ -6,6 +6,7 @@
 #include "WiFiConnection.h"
 #include "PeerLink.h"
 #include "ESPNowPairingScene.h"
+#include "ESPNowMachineScene.h"
 #include "TransportScene.h"
 #include "Drawing.h"
 #include "Menu.h"
@@ -82,7 +83,11 @@ void WiFiSetupScene::onGreenButtonPress() {
         ESP.restart();
 #endif
     } else if (wifi_use_espnow_mode()) {
-        push_scene(&espnowPairingScene);
+        if (espnow_profile_count() > 0) {
+            push_scene(&espnowMachineScene);
+        } else {
+            push_scene(&espnowPairingScene);
+        }
     } else if (!wifi_use_uart_mode()) {
         wifi_start_ap_setup();
         reDisplay();
@@ -236,7 +241,15 @@ void WiFiSetupScene::drawSettingsView() {
             centered_text("Scanning...", y, 0xcc66ff, TINY);
         } else {
             y += 18;
-            y += (round_display ? 14 : 20);
+            ESPNowProfileInfo profile;
+            int active_profile = espnow_active_profile_index();
+            if (active_profile >= 0 && espnow_get_profile((size_t)active_profile, profile)) {
+                const char* name = profile.hostname[0] ? profile.hostname : "Selected Machine";
+                auto_text(std::string(name), display.width() / 2, y, round_display ? 150 : 190, WHITE, SMALL);
+                y += (round_display ? 18 : 22);
+            } else {
+                y += (round_display ? 14 : 20);
+            }
             y += 14;
             if (espnow_is_connected()) {
                 int8_t rssi = espnow_rssi();
@@ -293,7 +306,7 @@ void WiFiSetupScene::drawSettingsView() {
     // ── Button legends ────────────────────────────────────────────────────────
     const char* green_label;
     if (uart_mode)   green_label = "Restart";
-    else if (espnow_mode) green_label = espnow_is_paired() ? "Re-pair" : "Pair";
+    else if (espnow_mode) green_label = espnow_profile_count() > 0 ? "Machines" : "Pair";
     else             green_label = "Setup";
     drawButtonLegends("Back", green_label, "More");
 }

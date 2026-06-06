@@ -403,14 +403,28 @@ int         espnow_getchar()                             { return -1; }
 bool        espnow_is_paired()                           { return true; }
 bool        espnow_is_connected()                        { return true; }
 const char* espnow_status_str()                          { return "Simulated"; }
-const char* espnow_start_pairing()                       { return "00000000"; }
+void        espnow_start_pairing()                       {}
 void        espnow_cancel_pairing()                      {}
 bool        espnow_pairing_complete()                    { return false; }
-const char* espnow_pairing_code()                        { return "00000000"; }
-uint32_t    espnow_code_remaining_ms()                   { return 30000; }
 void        espnow_clear_pairing()                       {}
 bool        espnow_has_saved_pairing()                   { return true; }
 bool        espnow_is_reconnecting()                     { return false; }
 int8_t      espnow_rssi()                                { return 0; }
 int         espnow_signal_bars()                         { return 3; }
+size_t      espnow_profile_count()                       { return 2; }
+int         espnow_active_profile_index()                { return 0; }
+bool        espnow_get_profile(size_t index, ESPNowProfileInfo& out) {
+    memset(&out, 0, sizeof(out));
+    if (index >= 2) return false;
+    static const uint8_t macs[2][6] = {
+        {0x44, 0x1d, 0x64, 0xf2, 0x27, 0xe4},
+        {0x24, 0x6f, 0x28, 0xaa, 0xbb, 0xcc},
+    };
+    memcpy(out.mac, macs[index], sizeof(out.mac));
+    out.channel = index == 0 ? 1 : 6;
+    out.active = index == 0;
+    strlcpy(out.hostname, index == 0 ? "fluidnc" : "router-cnc", sizeof(out.hostname));
+    return true;
+}
+bool        espnow_select_profile(size_t)                { return true; }
 #endif  // USE_WIFI
