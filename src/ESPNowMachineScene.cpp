@@ -4,6 +4,7 @@
 
 #include "ESPNowMachineScene.h"
 #include "ESPNowPairingScene.h"
+#include "ConfirmScene.h"
 #include "PeerLink.h"
 #include "WiFiSetupScene.h"
 #include "Drawing.h"
@@ -13,25 +14,51 @@
 #include <string.h>
 #include <string>
 
-static constexpr int ITEM_H_ROUND     = 30;
-static constexpr int ITEM_PITCH_ROUND = 31;
+static constexpr int ITEM_H_ROUND     = 40;
+static constexpr int ITEM_PITCH_ROUND = 50;
 static constexpr int ITEM_H_CYD       = 34;
-static constexpr int ITEM_PITCH_CYD   = 36;
+static constexpr int ITEM_PITCH_CYD   = 44;
 static constexpr int START_Y_ROUND    = 40;
 static constexpr int START_Y_CYD      = 34;
 
-static void mac_text(const uint8_t mac[6], uint8_t channel, char* out, size_t out_len) {
+static void mac_text(const uint8_t mac[6], char* out, size_t out_len) {
     snprintf(out, out_len,
-             "%02x:%02x:%02x:%02x:%02x:%02x  ch %u",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-             (unsigned)channel);
+             "%02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+static int visible_item_count() {
+    return round_display ? 3 : 4;
+}
+
+static int first_visible_item(int selected, int total) {
+    int visible = visible_item_count();
+    if (total <= visible) {
+        return 0;
+    }
+
+    int first = selected - visible / 2;
+    if (first < 0) {
+        first = 0;
+    }
+
+    int last_first = total - visible;
+    if (first > last_first) {
+        first = last_first;
+    }
+    return first;
 }
 
 int ESPNowMachineScene::itemCount() const {
     return _profile_count + 1;  // saved profiles + Pair New
 }
 
-void ESPNowMachineScene::onEntry(void* /*arg*/) {
+void ESPNowMachineScene::onEntry(void* arg) {
+    if (arg && strcmp((const char*)arg, "Confirmed") == 0) {
+        deletePendingProfile();
+    } else {
+        _pending_delete = -1;
+    }
     _profile_count = (int)espnow_profile_count();
     if (_selected >= itemCount()) {
         _selected = itemCount() - 1;
@@ -40,6 +67,37 @@ void ESPNowMachineScene::onEntry(void* /*arg*/) {
         _selected = 0;
     }
     reDisplay();
+}
+
+void ESPNowMachineScene::confirmDeleteSelected() {
+    if (_selected < 0 || _selected >= _profile_count) {
+        return;
+    }
+
+    ESPNowProfileInfo profile;
+    if (!espnow_get_profile((size_t)_selected, profile)) {
+        reDisplay();
+        return;
+    }
+
+    _pending_delete = _selected;
+    const char* name = profile.hostname[0] ? profile.hostname : "this machine";
+    snprintf(_confirm_message, sizeof(_confirm_message),
+             "Unpair this \nmachine?", name);
+    push_scene(&confirmScene, _confirm_message);
+}
+
+void ESPNowMachineScene::deletePendingProfile() {
+    int index = _pending_delete;
+    _pending_delete = -1;
+    if (index < 0 || !espnow_remove_profile((size_t)index)) {
+        return;
+    }
+
+    _profile_count = (int)espnow_profile_count();
+    if (_selected >= _profile_count) {
+        _selected = _profile_count > 0 ? _profile_count - 1 : 0;
+    }
 }
 
 void ESPNowMachineScene::onEncoder(int delta) {
@@ -81,7 +139,7 @@ void ESPNowMachineScene::onRedButtonPress() {
 }
 
 void ESPNowMachineScene::onGreenButtonPress() { activateSelected(); }
-void ESPNowMachineScene::onDialButtonPress()  { activateSelected(); }
+void ESPNowMachineScene::onDialButtonPress()  { confirmDeleteSelected(); }
 
 void ESPNowMachineScene::onTouchClick() {
     int item_h     = round_display ? ITEM_H_ROUND : ITEM_H_CYD;
@@ -90,8 +148,15 @@ void ESPNowMachineScene::onTouchClick() {
     int bx         = round_display ? 28 : 18;
     int bw         = round_display ? 184 : 204;
 
-    for (int i = 0; i < itemCount(); ++i) {
-        int y = start_y + i * item_pitch;
+    int total = itemCount();
+    int first = first_visible_item(_selected, total);
+    int last  = first + visible_item_count();
+    if (last > total) {
+        last = total;
+    }
+
+    for (int i = first; i < last; ++i) {
+        int y = start_y + (i - first) * item_pitch;
         if (touchX >= bx && touchX <= bx + bw &&
             touchY >= y - 3 && touchY < y + item_h + 3) {
             _selected = i;
@@ -127,12 +192,19 @@ void ESPNowMachineScene::reDisplay() {
         drawRect(55, 22, 130, 1, 0, DARKGREY);
     }
 
-    for (int i = 0; i < itemCount(); ++i) {
-        int  y   = start_y + i * item_pitch;
+    int total = itemCount();
+    int first = first_visible_item(_selected, total);
+    int last  = first + visible_item_count();
+    if (last > total) {
+        last = total;
+    }
+
+    for (int i = first; i < last; ++i) {
+        int  y   = start_y + (i - first) * item_pitch;
         bool sel = i == _selected;
 
         if (sel) {
-            drawOutlinedRect(bx, y - 4, bw, item_h, 0x1a001a, 0xcc66ff);
+            drawOutlinedRect(bx + (round_display ? 7 : 0), y - 10, bw - (round_display ? 14 : 0), item_h + 14, 0x001a4d, 0x4da6ff);
         }
 
         if (i < _profile_count) {
@@ -147,21 +219,29 @@ void ESPNowMachineScene::reDisplay() {
             }
 
             char detail[40];
-            mac_text(profile.mac, profile.channel, detail, sizeof(detail));
+            mac_text(profile.mac, detail, sizeof(detail));
 
             if (profile.active) {
-                drawFilledCircle(bx + 8, y + item_h / 2 - 1, 3, 0xcc66ff);
+                drawFilledCircle(bx + (round_display ? 14 : 6), y + (round_display ? 17 : 10), 3, 0xcc66ff);
             }
 
-            int title_x = bx + (profile.active ? 22 : 10);
-            auto_text(std::string(title), title_x, y + 9, bw - 24, sel ? WHITE : LIGHTGREY, SMALL, middle_left);
-            auto_text(std::string(detail), title_x, y + 24, bw - 24, sel ? 0xcc66ff : DARKGREY, TINY, middle_left);
+            int title_x  = bx + (profile.active ? 22 : 10);
+            int title_y  = y + (round_display ? 9 : 8);
+            int detail_y = y + (round_display ? 29 : 23);
+            int title_w  = bw - (title_x - bx) - 10;
+
+            auto_text(std::string(title), title_x, title_y, title_w,
+                      sel ? WHITE : LIGHTGREY, SMALL, middle_left);
+            centered_text(detail, detail_y + 4,
+                          sel ? 0xcc66ff : DARKGREY, TINY);
         } else {
             centered_text("Pair New", y + item_h / 2, sel ? WHITE : 0xcc66ff, SMALL);
         }
     }
 
-    drawButtonLegends("Back", _selected < _profile_count ? "Use" : "Pair", "");
+    drawButtonLegends("Back",
+                      _selected < _profile_count ? "Use" : "Pair",
+                      _selected < _profile_count ? "Forget" : "");
     refreshDisplay();
 }
 

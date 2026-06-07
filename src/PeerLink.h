@@ -39,5 +39,6 @@ size_t espnow_profile_count();
 int espnow_active_profile_index();
 bool espnow_get_profile(size_t index, ESPNowProfileInfo& out);
 bool espnow_select_profile(size_t index);
+bool espnow_remove_profile(size_t index);
 
 #endif

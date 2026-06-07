@@ -1713,6 +1713,92 @@ bool espnow_select_profile(size_t index) {
     return true;
 }
 
+bool espnow_remove_profile(size_t index) {
+    if (!_espnow_ready) return false;
+
+    Preferences prefs;
+    if (!prefs.begin(PREF_NAMESPACE, false)) return false;
+
+    StoredMachineProfileList list;
+    if (!load_profiles(prefs, list) || index >= list.count) {
+        ESPNowCrypto::secureZero(&list, sizeof(list));
+        prefs.end();
+        return false;
+    }
+
+    const bool removed_active = index == list.active;
+    uint8_t removed_mac[6];
+    memcpy(removed_mac, list.profiles[index].mac, sizeof(removed_mac));
+
+    for (size_t i = index; i + 1 < list.count; ++i) {
+        list.profiles[i] = list.profiles[i + 1];
+    }
+    --list.count;
+    memset(&list.profiles[list.count], 0, sizeof(list.profiles[list.count]));
+
+    if (list.count == 0) {
+        list.active = 0;
+    } else if (removed_active) {
+        list.active = (uint8_t)(index < list.count ? index : list.count - 1);
+    } else if (index < list.active) {
+        --list.active;
+    }
+
+    StoredMachineProfile next_profile = {};
+    if (removed_active && list.count > 0) {
+        memcpy(&next_profile, &list.profiles[list.active], sizeof(next_profile));
+    }
+
+    bool stored = prefs.putBytes("profiles", &list, sizeof(list)) == sizeof(list);
+    ESPNowCrypto::secureZero(&list, sizeof(list));
+    prefs.end();
+    if (!stored) {
+        ESPNowCrypto::secureZero(&next_profile, sizeof(next_profile));
+        return false;
+    }
+
+    if (esp_now_is_peer_exist(removed_mac)) {
+        esp_now_del_peer(removed_mac);
+    }
+    if (!removed_active) {
+        ESPNowCrypto::secureZero(&next_profile, sizeof(next_profile));
+        return true;
+    }
+
+    reset_receive_queues();
+    clear_temporary_pairing_peer();
+    clear_pairing_secrets();
+    remove_broadcast_peer();
+    reset_link_session();
+    _pairing_complete = false;
+    _peer_rssi = -100;
+    _tx_len = 0;
+
+    if (next_profile.version == PROFILE_STORE_VERSION) {
+        memcpy(_peer_mac, next_profile.mac, sizeof(_peer_mac));
+        memcpy(_lmk, next_profile.lmk, sizeof(_lmk));
+        _preferred_channel = next_profile.channel;
+        _op_channel = _preferred_channel;
+        strlcpy(_peer_hostname, next_profile.hostname, sizeof(_peer_hostname));
+
+        esp_wifi_set_channel(_op_channel, WIFI_SECOND_CHAN_NONE);
+        register_peer(_peer_mac, _op_channel, true, _lmk);
+        begin_reconnecting();
+    } else {
+        memset(_peer_mac, 0, sizeof(_peer_mac));
+        ESPNowCrypto::secureZero(_lmk, sizeof(_lmk));
+        memset(_peer_hostname, 0, sizeof(_peer_hostname));
+        _preferred_channel = ESPNOW_PAIR_CHANNEL;
+        _op_channel = ESPNOW_PAIR_CHANNEL;
+        set_link_state(LinkState::Unpaired);
+        set_disconnected_state();
+    }
+
+    ESPNowCrypto::secureZero(&next_profile, sizeof(next_profile));
+    dbg_printf("ESP-NOW: removed machine profile %u\n", (unsigned)index + 1);
+    return true;
+}
+
 void espnow_clear_pairing() {
     reset_receive_queues();
     if (_espnow_ready) {
@@ -1767,6 +1853,7 @@ size_t      espnow_profile_count() { return 0; }
 int         espnow_active_profile_index() { return -1; }
 bool        espnow_get_profile(size_t, ESPNowProfileInfo& out) { memset(&out, 0, sizeof(out)); return false; }
 bool        espnow_select_profile(size_t) { return false; }
+bool        espnow_remove_profile(size_t) { return false; }
 
 #endif  // USE_ESPNOW
 

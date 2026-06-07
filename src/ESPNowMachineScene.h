@@ -19,9 +19,13 @@ public:
 private:
     int itemCount() const;
     void activateSelected();
+    void confirmDeleteSelected();
+    void deletePendingProfile();
 
     int _selected = 0;
     int _profile_count = 0;
+    int _pending_delete = -1;
+    char _confirm_message[80] = {};
 };
 
 extern ESPNowMachineScene espnowMachineScene;

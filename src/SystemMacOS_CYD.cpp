@@ -372,9 +372,9 @@ int         ws_getchar()                                 { return -1; }
 bool          wifi_use_uart_mode()                           { return false; }
 void          wifi_set_uart_mode(bool)                       {}
 bool          wifi_is_first_boot()                           { return false; }
-TransportMode wifi_get_transport()                           { return TransportMode::WIFI; }
+TransportMode wifi_get_transport()                           { return TransportMode::ESPNOW; }
 void          wifi_set_transport(TransportMode)              {}
-bool          wifi_use_espnow_mode()                         { return false; }
+bool          wifi_use_espnow_mode()                         { return true; }
 void          wifi_request_ota_reboot()                      {}
 bool          wifi_ota_boot_requested()                      { return false; }
 
@@ -411,20 +411,33 @@ bool        espnow_has_saved_pairing()                   { return true; }
 bool        espnow_is_reconnecting()                     { return false; }
 int8_t      espnow_rssi()                                { return 0; }
 int         espnow_signal_bars()                         { return 3; }
-size_t      espnow_profile_count()                       { return 2; }
+static constexpr size_t MOCK_ESPNOW_PROFILE_COUNT = 5;
+
+size_t      espnow_profile_count()                       { return MOCK_ESPNOW_PROFILE_COUNT; }
 int         espnow_active_profile_index()                { return 0; }
 bool        espnow_get_profile(size_t index, ESPNowProfileInfo& out) {
     memset(&out, 0, sizeof(out));
-    if (index >= 2) return false;
-    static const uint8_t macs[2][6] = {
+    if (index >= MOCK_ESPNOW_PROFILE_COUNT) return false;
+    static const uint8_t macs[MOCK_ESPNOW_PROFILE_COUNT][6] = {
         {0x44, 0x1d, 0x64, 0xf2, 0x27, 0xe4},
         {0x24, 0x6f, 0x28, 0xaa, 0xbb, 0xcc},
+        {0x94, 0xb9, 0x7e, 0x41, 0x94, 0x30},
+        {0x30, 0xae, 0xa4, 0x18, 0x52, 0x71},
+        {0x7c, 0xdf, 0xa1, 0x09, 0x63, 0xb8},
+    };
+    static const char* hostnames[MOCK_ESPNOW_PROFILE_COUNT] = {
+        "shop-mill",
+        "plotter",
+        "laser-1",
+        "plasma-cutter",
+        "garage-cnc",
     };
     memcpy(out.mac, macs[index], sizeof(out.mac));
-    out.channel = index == 0 ? 1 : 6;
+    out.channel = static_cast<uint8_t>(index + 1);
     out.active = index == 0;
-    strlcpy(out.hostname, index == 0 ? "fluidnc" : "router-cnc", sizeof(out.hostname));
+    strlcpy(out.hostname, hostnames[index], sizeof(out.hostname));
     return true;
 }
 bool        espnow_select_profile(size_t)                { return true; }
+bool        espnow_remove_profile(size_t)                { return true; }
 #endif  // USE_WIFI

@@ -73,16 +73,16 @@ void ESPNowPairingScene::reDisplay() {
 
     if (round_display) {
         centered_text("Waiting", 88, WHITE, LARGE);
-        centered_text("Run in FluidNC:", 118, DARKGREY, TINY);
+        centered_text("Run in FluidNC:", 128, DARKGREY, TINY);
 
-        drawOutlinedRect(BX-8, 132, BW+12, 40, BLACK, badge_outline);
-        centered_text("$ESPNow/Pair", 154, 0x4da6ff, TINY);
+        drawOutlinedRect(BX+8, 142, BW-18, 40, BLACK, badge_outline);
+        centered_text("$espnow/pair", 164, 0x4da6ff, TINY);
     } else {
         centered_text("Waiting", 105, WHITE, LARGE);
         centered_text("Run in FluidNC:", 150, DARKGREY, TINY);
 
         drawOutlinedRect(BX-10, 166, BW+18, 40, BLACK, badge_outline);
-        centered_text("$ESPNow/Pair", 190, 0x4da6ff, TINY);
+        centered_text("$espnow/pair", 190, 0x4da6ff, TINY);
     }
 
     drawButtonLegends("Back", "", "");
