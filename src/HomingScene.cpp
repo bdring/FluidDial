@@ -29,6 +29,7 @@ void set_axis_homed(int axis) {
 }
 
 void detect_homing_info() {
+    clear_config_requests();
     for (int i = 0; i < HOMING_N_AXIS; i++) {
         homing_cycles[i].init();
         homing_allows[i].init();
@@ -44,7 +45,12 @@ bool can_home(int i) {
 }
 
 bool have_homing_info() {
-    return homing_allows[HOMING_N_AXIS - 1].known();
+    for (int i = 0; i < HOMING_N_AXIS; ++i) {
+        if (!homing_cycles[i].known() || !homing_allows[i].known()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 class HomingScene : public Scene {
@@ -99,7 +105,7 @@ public:
     void increment_axis_to_home() {
         do {
             ++_axis_to_home;
-            if (_axis_to_home > HOMING_N_AXIS) {
+            if (_axis_to_home >= HOMING_N_AXIS) {
                 _axis_to_home = -1;
                 return;
             }
