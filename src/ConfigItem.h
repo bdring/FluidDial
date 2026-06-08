@@ -5,6 +5,8 @@
 
 class ConfigItem;
 extern std::vector<ConfigItem*> configRequests;
+void service_config_requests();
+void clear_config_requests();
 
 class ConfigItem {
 private:
@@ -17,15 +19,14 @@ public:
     virtual void set(const char* s) = 0;
     const char*  name() { return _name; }
     bool         known() { return _known; }
-    void         init() {
-        _known = false;
-        configRequests.push_back(this);
+    void         send_request() {
         const char* p = _name;
         while (*p) {
             fnc_putchar(*p++);
         }
         fnc_putchar('\n');
     }
+    void init();
     void got(const char* s) {
         _known = true;
         set(s);
