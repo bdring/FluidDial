@@ -197,7 +197,7 @@ void init_capacitive_cyd() {
         cfg.i2c_port        = I2C_NUM_1;
         cfg.pin_sda         = GPIO_NUM_32;
         cfg.pin_scl         = GPIO_NUM_25;
-        cfg.pin_int         = GPIO_NUM_36;
+        cfg.pin_int         = -1;
         cfg.pin_rst         = -1;
         cfg.offset_rotation = base_rotation;
         cfg.freq            = 400000;
