@@ -58,7 +58,7 @@ def addImage(imageName, offset, srcFilePath, dstFileName):
         sys.exit(1)
     manifest['images'][imageName] = image
 
-for envName in ['m5dial', 'cyddial']:
+for envName in ['m5dial', 'cyddial', 'pibot']:
     buildDir = os.path.join('.pio', 'build', envName)
     addImage(envName, '0x0000', os.path.join(buildDir, 'merged-flash.bin'), envName + ".bin")
 
@@ -106,6 +106,9 @@ def makeManifest():
 
     addDialType("FluidDial for CYD", "FluidDial for CYD Dial", "FluidDial type")
     addInstallable(fresh_install, False, ["cyddial"])
+
+    addDialType("FluidDial for PiBot Pendant V4", "FluidDial for PiBot Pendant V4", "FluidDial type")
+    addInstallable(fresh_install, False, ["pibot"])
 
     mcu = "esp32s3"
     addMCU(mcu, "ESP32-S3-WROOM-1", "Firmware variant")
