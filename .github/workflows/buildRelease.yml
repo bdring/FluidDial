@@ -48,7 +48,7 @@ jobs:
           rm -f release/*
       - name: Build
         run: |
-          for env in m5dial cyddial; do
+          for env in m5dial cyddial pibot; do
           pio run -e $env
           pio run -e $env -t build_merged
           done
