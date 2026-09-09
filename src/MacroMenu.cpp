@@ -78,6 +78,10 @@ public:
 
     void onRedButtonPress() { refreshMacros(); }
     void onFilesList() {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-menu] onFilesList: %d item(s)%s\n", num_items(),
+                   num_items() ? "" : "  <-- screen will read \"No Macros\"");
+#endif
         _error_string.clear();
         _reading = false;
         if (num_items()) {
@@ -88,6 +92,9 @@ public:
     }
 
     void onError(const char* errstr) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-menu] onError: \"%s\"\n", errstr);
+#endif
         _error_string = errstr;
         _reading      = false;
         reDisplay();

@@ -15,6 +15,46 @@
 
 extern Menu macroMenu;
 
+#ifdef FNC_RX_TRACE
+#    include <stdarg.h>
+// Trace output is buffered in RAM and flushed only when the link is idle.
+// Printing inline is self-defeating: dbg_print blocks waiting for USB buffer
+// space, and 50 ms of blocking at 1 Mbaud is ~5 KB of arriving UART data --
+// more than the RX ring holds. The act of tracing was overflowing the ring and
+// destroying the very transfer being traced.
+static char   s_trace_buf[4096];
+static size_t s_trace_len     = 0;
+static int    s_trace_dropped = 0;
+
+static void trace_defer(const char* fmt, ...) {
+    char    line[192];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    size_t len = strlen(line);
+    if (s_trace_len + len + 1 >= sizeof(s_trace_buf)) {
+        ++s_trace_dropped;
+        return;
+    }
+    memcpy(s_trace_buf + s_trace_len, line, len);
+    s_trace_len += len;
+}
+
+static void trace_flush() {
+    if (s_trace_len == 0 && s_trace_dropped == 0) {
+        return;
+    }
+    s_trace_buf[s_trace_len] = '\0';
+    dbg_print(s_trace_buf);
+    if (s_trace_dropped) {
+        dbg_printf("[trace] %d line(s) dropped, buffer full\n", s_trace_dropped);
+    }
+    s_trace_len     = 0;
+    s_trace_dropped = 0;
+}
+#endif
+
 fileinfo              fileInfo;
 std::vector<fileinfo> fileVector;
 
@@ -243,6 +283,10 @@ private:
 
     int  _level             = 0;
     bool _in_macros_section = false;
+    // _level at which the "macros" key appeared. Entries are the objects one
+    // deeper than this; anything deeper still is nested structure inside an
+    // entry and must not be mistaken for one.
+    int _macros_level = -1;
 
 public:
     void whitespace(char c) override {}
@@ -256,33 +300,67 @@ public:
     void endArray() override {
         if (_in_macros_section) {
             _in_macros_section = false;
+            _macros_level      = -1;
+#ifdef FNC_RX_TRACE
+            trace_defer("[prefs] <<< macros section ends, %d item(s) added\n", macroMenu.num_items());
+#endif
             current_scene->onFilesList();
         }
     }
 
-    void startObject() override { ++_level; }
+    void startObject() override {
+        ++_level;
+        // Reset per-entry state. Without this the fields carry over from the
+        // previous macro, so an entry missing "action" inherits the last one's
+        // filename -- which has ALREADY had its "/localfs/" prefix inserted --
+        // and gets prefixed a second time, surfacing as "//localfs/". An entry
+        // missing "type" likewise inherits the previous type and gets added
+        // when it should have been skipped. The other two listeners already do
+        // this; this one was the odd one out.
+        if (_in_macros_section && _level == _macros_level + 1) {
+            _name.clear();
+            _target.clear();
+            _filename.clear();
+        }
+    }
     void key(const char* key) override {
         _key = key;
 #ifdef FNC_RX_TRACE
-        // Surface every key the preferences listener actually sees, with its
-        // depth-from-listener-perspective, so we can verify the structure
-        // matches what _level == 2 expects.
-        dbg_printf("[prefs] L%d key=%s\n", _level, key);
+        // Only the top level and the macros section. Printing every key was
+        // self-defeating: dbg output blocks waiting for USB buffer space, and
+        // several hundred lines through the settings/keymap blobs stalled the
+        // UART reader long enough to drop the very bytes being traced.
+        if (_level <= 1 || _in_macros_section) {
+            trace_defer("[prefs] L%d key=%s\n", _level, key);
+        }
 #endif
-        if (_level < 2) {
-            // The only thing we care about is the macros section at level 2
+        // Match the macros key at whatever depth it appears. This listener is
+        // installed part-way through the document (on the "result" key of the
+        // $File/SendJSON wrapper), so its _level is relative to wherever it
+        // took over -- preferences.json puts "settings"/"macros" at _level 1
+        // here, not 2. Pinning the check to _level == 2 meant the earlier
+        // _level < 2 bail swallowed the macros key before it was ever tested.
+        if (strcmp(key, "macros") == 0) {
+            _in_macros_section = true;
+            _macros_level      = _level;
+#ifdef FNC_RX_TRACE
+            trace_defer("[prefs] >>> macros section begins at L%d\n", _level);
+#endif
             return;
         }
-        if (_level == 2 && (strcmp(key, "macros") == 0)) {
-            _in_macros_section = true;
+        if (_level < 2) {
             return;
         }
         if (_in_macros_section) {
-            if (strcmp(key, "action") == 0) {
+            // WebUI versions disagree on the spelling: older exports use
+            // filename/target (what MacroListListener expects), newer ones use
+            // action/type. Accept either rather than silently producing an
+            // empty entry when the file uses the other one.
+            if (strcmp(key, "action") == 0 || strcmp(key, "filename") == 0) {
                 _valuep = &_filename;
                 return;
             }
-            if (strcmp(key, "type") == 0) {
+            if (strcmp(key, "type") == 0 || strcmp(key, "target") == 0) {
                 _valuep = &_target;
                 return;
             }
@@ -304,14 +382,41 @@ public:
 
     void endObject() override {
         --_level;
-        if (_in_macros_section) {
-            if (_target == "FS") {
+        if (_in_macros_section && _level == _macros_level) {
+#ifdef FNC_RX_TRACE
+            trace_defer("[prefs] macro name=\"%s\" type=\"%s\" action=\"%s\"\n",
+                       _name.c_str(), _target.c_str(), _filename.c_str());
+#endif
+            // An entry with nothing to run is not a macro. Adding it yields a
+            // menu row that does nothing, or sends a bare command line.
+            if (_filename.empty()) {
+#ifdef FNC_RX_TRACE
+                trace_defer("[prefs] ^^ DROPPED: empty action\n");
+#endif
+                return;
+            }
+            // Normalise before prefixing. One schema stores "foo.g", the
+            // other "/foo.g"; blindly inserting "/localfs/" turns the latter
+            // into "/localfs//foo.g".
+            if (_target == "FS" || _target == "ESP" || _target == "SD") {
+                if (!_filename.empty() && _filename[0] == '/') {
+                    _filename.erase(0, 1);
+                }
+            }
+            if (_target == "FS" || _target == "ESP") {
                 _filename.insert(0, "/localfs/");
             } else if (_target == "SD") {
                 _filename.insert(0, "/sd/");
             } else if (_target == "CMD") {
                 _filename.insert(0, "cmd:");
             } else {
+#ifdef FNC_RX_TRACE
+                // Every entry whose type isn't one of the three recognised
+                // spellings is silently discarded -- the array parses fine and
+                // the menu still ends up empty, which looks identical to a
+                // failed transfer.
+                trace_defer("[prefs] ^^ DROPPED: unrecognised type \"%s\"\n", _target.c_str());
+#endif
                 return;
             }
             macroMenu.addItem(new MacroItem { _name.c_str(), _filename });
@@ -329,9 +434,40 @@ JsonStreamingParser* macro_parser;
 
 bool reading_macros = false;
 
+// When the in-flight $File/SendJSON was issued, so a transfer that dies on the
+// wire can't strand the macro chain. Zero means nothing is outstanding.
+static uint32_t           s_file_request_sent_ms   = 0;
+static constexpr uint32_t FILE_REQUEST_TIMEOUT_MS = 5000;
+// How long after the last request, with no document in flight, before auto
+// reporting is turned back on.
+static constexpr uint32_t AUTO_REPORT_RESUME_MS = 1000;
+
+// FluidNC's auto-report ($RI) keeps emitting <Idle|MPos:...> status lines while
+// a file is streaming, on the same channel. Any byte lost to a stall then welds
+// the two together -- a chunk ends up carrying the tail of a status report
+// ("...|FS:0,0>") and the JSON parser derails. Nothing on the macro path needs
+// live DRO, so silence auto-reporting for the duration of the transfer.
+static bool s_auto_report_suspended = false;
+
+static void suspend_auto_report() {
+    if (!s_auto_report_suspended) {
+        s_auto_report_suspended = true;
+        send_line("$RI=0");
+    }
+}
+
+void resume_auto_report() {
+    if (s_auto_report_suspended) {
+        s_auto_report_suspended = false;
+        send_line("$RI=200");
+    }
+}
+
 void request_json_file(const char* name) {
+    suspend_auto_report();
     send_linef("$File/SendJSON=/%s", name);
-    parser_needs_reset = true;
+    parser_needs_reset     = true;
+    s_file_request_sent_ms = milliseconds();
 }
 
 // Track which file request is in flight so we can advance the macro
@@ -408,7 +544,7 @@ void try_next_macro_file(JsonListener* listener) {
 extern "C" void file_request_failed_advance() {
     if (json_in_progress()) {
 #ifdef FNC_RX_TRACE
-        dbg_printf("[macro-chain] stale error suppressed (JSON in flight)\n");
+        trace_defer("[macro-chain] stale error suppressed (JSON in flight)\n");
 #endif
         return;
     }
@@ -418,7 +554,7 @@ extern "C" void file_request_failed_advance() {
     if (s_chain_advance_at_ms != 0 &&
         (milliseconds() - s_chain_advance_at_ms) < CHAIN_ADVANCE_COOLDOWN_MS) {
 #ifdef FNC_RX_TRACE
-        dbg_printf("[macro-chain] stale error suppressed (advance cooldown)\n");
+        trace_defer("[macro-chain] stale error suppressed (advance cooldown)\n");
 #endif
         return;
     }
@@ -436,6 +572,42 @@ extern "C" void file_request_failed_advance() {
 
 void request_macros() {
     try_next_macro_file(nullptr);
+}
+
+// Called from dispatch_events(). show_error() deliberately ignores an error:N
+// that lands while a document is streaming, which is right for a stale error
+// but means a genuinely torn transfer never advances the chain -- the menu then
+// sits on "Reading Macros" forever. Give the request a deadline instead.
+void service_macro_chain() {
+    // Restore auto-reporting once nothing is streaming any more. Keying this on
+    // "no document in flight AND the last request is old enough" rather than on
+    // the terminal branches means the DRO comes back down every route home --
+    // completion, error, give-up -- and for the file list and preview transfers
+    // too, which have no chain state of their own.
+    if (s_auto_report_suspended && !s_pending_file_listener && !json_in_progress() &&
+        (uint32_t)(milliseconds() - s_file_request_sent_ms) >= AUTO_REPORT_RESUME_MS) {
+        resume_auto_report();
+    }
+#ifdef FNC_RX_TRACE
+    // Flush only when nothing is streaming, so the (blocking) USB writes can
+    // never stall the UART reader mid-document.
+    if (!json_in_progress()) {
+        trace_flush();
+    }
+#endif
+    if (!s_pending_file_listener) {
+        return;
+    }
+    if ((uint32_t)(milliseconds() - s_file_request_sent_ms) < FILE_REQUEST_TIMEOUT_MS) {
+        return;
+    }
+#ifdef FNC_RX_TRACE
+    dbg_printf("[macro-chain] request timed out, advancing\n");
+#endif
+    JsonListener* l         = s_pending_file_listener;
+    s_pending_file_listener = nullptr;
+    json_reset_depth();
+    try_next_macro_file(l);
 }
 
 void init_macro_parser() {
@@ -639,6 +811,8 @@ void init_listener() {
 }
 
 void request_file_list(const char* dirname) {
+    suspend_auto_report();
+    s_file_request_sent_ms = milliseconds();
     send_linef("$Files/ListGCode=%s", dirname);
     // parser.reset();
     parser_needs_reset = true;
@@ -652,6 +826,8 @@ void init_file_list() {
 
 void request_file_preview(const char* name, int firstline, int nlines) {
     reading_macros = false;
+    suspend_auto_report();
+    s_file_request_sent_ms = milliseconds();
     send_linef("$File/ShowSome=%d:%d,%s", firstline, firstline + nlines, name);
     // parser.reset();
 }
@@ -720,7 +896,7 @@ extern "C" void handle_json(const char* line) {
     size_t pn = len < 60 ? len : 60;
     memcpy(peek, line, pn);
     peek[pn] = '\0';
-    dbg_printf("[json] len=%u d=%d | %s%s\n", (unsigned)len, s_json_depth,
+    trace_defer("[json] len=%u d=%d | %s%s\n", (unsigned)len, s_json_depth,
                peek, len > 60 ? "..." : "");
 #endif
     // Only reset the parser at a document boundary, never mid-stream — a reset
@@ -732,6 +908,13 @@ extern "C" void handle_json(const char* line) {
         parser.reset();
     }
     parser_feed_line(line);
+
+    // No per-chunk ack is sent. Restoring the 0xB2 that aeddaa9 removed was
+    // tried here and made things worse: overlapping fragments appeared in the
+    // stream ("false" arriving as "falalse"), i.e. the sender re-emitting across
+    // a chunk boundary. The byte loss that motivated the experiment was really
+    // the WiFi stack starving the UART reader in poll_extra(), which is fixed
+    // separately. FluidNC's $File/SendJSON does not need the ack.
 }
 
 std::string wifi_mode;

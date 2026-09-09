@@ -50,3 +50,11 @@ void json_reset_depth();
 // "Reading Macros" UI doesn't hang when a $File/SendJSON request was
 // rejected. No-op if no file request is currently in flight.
 extern "C" void file_request_failed_advance();
+
+// Poll from dispatch_events(). Bounds how long the macro chain waits on a
+// $File/SendJSON that never completes, so the menu can't stall on
+// "Reading Macros" when a transfer is torn up on the wire.
+void service_macro_chain();
+
+// Re-enable FluidNC auto-reporting after a file transfer suspended it.
+void resume_auto_report();
