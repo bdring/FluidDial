@@ -314,8 +314,16 @@ void send_jog_cancel() {
 }
 
 static void vsend_linef(const char* fmt, va_list va) {
-    static char buf[128];
-    vsnprintf(buf, 128, fmt, va);
+    // This buffer MUST NOT be static. send_line() -> fnc_send_line() spins in a
+    // "while (_ackwait) { fnc_poll(); }" wait loop BEFORE it reads the string,
+    // and fnc_poll() dispatches received reports -- handlers of which call
+    // send_linef() again. A shared buffer is therefore overwritten by the inner
+    // call while the outer one is still about to transmit from it, so the outer
+    // command goes out mangled or missing its terminator. That is how a
+    // "$Files/ListGCode=/sd" ends up on the wire as "/sd$G" and why FluidNC
+    // answers a stream of error:3 (Bad $ statement).
+    char buf[128];
+    vsnprintf(buf, sizeof(buf), fmt, va);
     send_line(buf);
 }
 void send_linef(const char* fmt, ...) {
