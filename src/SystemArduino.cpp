@@ -100,8 +100,23 @@ extern "C" void poll_extra() {
 #ifdef USE_WIFI
     if (wifi_use_espnow_mode()) {
         espnow_poll();
-    } else {
+    } else if (!wifi_use_uart_mode()) {
         wifi_poll();
+    } else {
+        // UART transport. The network stack still needs servicing (the OTA
+        // server and its AP-mode DNS live in wifi_poll()), but fnc_poll() calls
+        // poll_extra() after EVERY received byte -- at 1 Mbaud that is ~100k
+        // calls per second, each one entering the WiFi stack. The reader can no
+        // longer keep up, the 256-byte UART RX ring overflows, and bytes
+        // disappear from the middle of a document: runs of text vanish and the
+        // tail of one message gets spliced into another. Poll it on a timer
+        // instead -- nothing here is on the UART data path.
+        static uint32_t last_wifi_poll_ms = 0;
+        uint32_t        now               = millis();
+        if ((uint32_t)(now - last_wifi_poll_ms) >= 20) {
+            last_wifi_poll_ms = now;
+            wifi_poll();
+        }
     }
 #endif
 #ifdef DEBUG_TO_USB
@@ -161,7 +176,11 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
         while (1) {}
         return;
     };
-    uart_driver_install(fnc_uart_port, 256, 0, 0, NULL, ESP_INTR_FLAG_IRAM);
+    // 256 bytes is only twice the hardware FIFO and gives ~2.5 ms of headroom at
+    // 1 Mbaud -- less than a single frame render, so a burst overruns the ring
+    // and bytes vanish out of the middle of a streamed JSON document. The extra
+    // few KB of RAM is cheap next to losing the document.
+    uart_driver_install(fnc_uart_port, 2048, 0, 0, NULL, ESP_INTR_FLAG_IRAM);
     uart_set_sw_flow_ctrl(fnc_uart_port, true, 64, 120);
     uint32_t baud;
     uart_get_baudrate(fnc_uart_port, &baud);

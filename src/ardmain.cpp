@@ -164,7 +164,11 @@ void loop() {
     //
     // Drain all pending data, but stop when RX is empty to avoid 
     // unnecessary Wi-Fi polling and reduce idle-loop jitter that can make small jog movements choppy.
-    for (int i = 0; i < 64; i++) {
+    // The cap only bounds a pathological burst -- the loop exits the moment RX
+    // is empty, so a larger bound costs nothing at idle. 64 bytes per tick could
+    // not keep up with a 100-byte-per-chunk file stream, leaving the remainder
+    // to age in the ring until it overflowed.
+    for (int i = 0; i < 1024; i++) {
         fnc_poll();
         if (!fnc_rx_waiting()) {
             break;
