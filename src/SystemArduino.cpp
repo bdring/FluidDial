@@ -196,19 +196,51 @@ void delay_ms(uint32_t ms) {
     delay(ms);
 }
 
+#ifdef DEBUG_TO_USB
+#    ifdef FNC_RX_TRACE
+// Diagnostic builds must not lose trace lines. The non-blocking variants below
+// drop output whenever the USB TX buffer is full, which is precisely what
+// happens during a burst -- so the log goes quiet exactly where the interesting
+// thing occurred and reads as "it stopped here" when it didn't. Wait for room
+// instead, bounded so a detached USB host can never wedge the firmware.
+static bool dbg_wait_writable(size_t needed) {
+    uint32_t deadline = millis() + 50;
+    while (debugPort.availableForWrite() <= (int)needed) {
+        if ((int32_t)(millis() - deadline) >= 0) {
+            return false;
+        }
+        delay(1);
+    }
+    return true;
+}
+#    endif
+#endif
+
 void dbg_write(uint8_t c) {
 #ifdef DEBUG_TO_USB
+#    ifdef FNC_RX_TRACE
+    if (dbg_wait_writable(1)) {
+        debugPort.write(c);
+    }
+#    else
     if (debugPort.availableForWrite() > 1) {
         debugPort.write(c);
     }
+#    endif
 #endif
 }
 
 void dbg_print(const char* s) {
 #ifdef DEBUG_TO_USB
+#    ifdef FNC_RX_TRACE
+    if (dbg_wait_writable(strlen(s))) {
+        debugPort.print(s);
+    }
+#    else
     if (debugPort.availableForWrite() > strlen(s)) {
         debugPort.print(s);
     }
+#    endif
 #endif
 }
 
