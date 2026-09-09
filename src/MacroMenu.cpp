@@ -5,13 +5,18 @@
 #include "MacroItem.h"
 #include "polar.h"
 #include "FileParser.h"
+#include "FluidNCModel.h"  // send_line()
 
 extern Scene statusScene;
 extern Scene filePreviewScene;
 
 void MacroItem::invoke(void* arg) {
+    // CMD macros carry a command line, not a path.  Running one as a file
+    // would nest a job, and commands like $Job/Resume refuse to run with a
+    // job active - so send the text on this channel instead.
+    bool is_cmd = _filename.rfind("cmd:", 0) == 0;
     if (arg && strcmp((char*)arg, "Run") == 0) {
-        if (_filename.rfind("cmd:", 0) == 0) {
+        if (is_cmd) {
             // Split on \n, \r, and ';' — FluidNC parses ';' as a line-comment,
             // so multi-statement macros like "G0 Z45; G0 Y166" must be sent as
             // separate lines. Trim whitespace and skip empty segments.
@@ -36,7 +41,8 @@ void MacroItem::invoke(void* arg) {
         } else {
             send_linef("$Localfs/Run=%s", _filename.c_str());
         }
-    } else {
+    } else if (!is_cmd) {
+        // Nothing to preview for a command
         push_scene(&filePreviewScene, (void*)_filename.c_str());
         // doFileScreen(_name);
     }
@@ -112,13 +118,30 @@ public:
         }
     }
 
+    // Only MacroItems are ever added to this menu.
+    bool selected_is_command() {
+        return num_items() && static_cast<MacroItem*>(_items[_selected])->is_command();
+    }
+
     void onGreenButtonPress() {
+        if (!num_items()) {
+            return;
+        }
+        if (selected_is_command()) {
+            // Nothing to load: a command macro has no file to preview, so the
+            // green button would otherwise do nothing at all and the command
+            // would be reachable only from the dial. Run it instead.
+            //
+            // Deliberately not gated on Idle either -- $Job/Resume and friends
+            // exist precisely for when the machine is NOT idle, which is the
+            // one state the guard below would refuse.
+            invoke((void*)"Run");
+            return;
+        }
         if (state != Idle) {
             return;
         }
-        if (num_items()) {
-            invoke();
-        }
+        invoke();
     }
 
     void onTouchClick() { onGreenButtonPress(); }
@@ -157,8 +180,13 @@ public:
         const char* orangeLabel = "";
         const char* grnLabel    = "";
 
-        if (state == Idle) {
-            if (num_items()) {
+        if (num_items()) {
+            if (selected_is_command()) {
+                // Both buttons do the same thing here, and both stay offered
+                // while the machine is busy -- see onGreenButtonPress().
+                orangeLabel = "Run";
+                grnLabel    = "Run";
+            } else if (state == Idle) {
                 orangeLabel = "Run";
                 grnLabel    = "Load";
             }
