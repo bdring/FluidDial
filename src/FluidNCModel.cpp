@@ -353,8 +353,18 @@ bool    awaiting_alarm = false;
 static void connect_init() {
     bootlog_printf("connected: state=%s", my_state_string);
     resetFlowControl();                  // clear any stale XOFF on the link
-#ifndef USE_WIFI
-    fnc_realtime((realtime_cmd_t)0x0c);  // Ctrl-L - echo off (UART only)
+    // Ctrl-L - echo off. This must follow the *runtime* transport, not the
+    // build: USE_WIFI only means a WiFi/ESP-NOW transport is available, and a
+    // pendant built with it can still be wired to FluidNC's UART. Skipping the
+    // echo-off there leaves FluidNC echoing every command back, and an echoed
+    // "$..." line arriving mid-document trips the json_reset_depth() in
+    // handle_other(), tearing down in-flight macro/file JSON.
+#ifdef USE_WIFI
+    if (wifi_use_uart_mode()) {
+        fnc_realtime((realtime_cmd_t)0x0c);
+    }
+#else
+    fnc_realtime((realtime_cmd_t)0x0c);
 #endif
     send_line("$G");                     // Refresh GCode modes
     send_line("$RI=200");                // Enable auto-reporting every 200 ms
