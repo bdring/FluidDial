@@ -445,14 +445,23 @@ extern "C" void show_error(int error) {
     if (s_jog_window > 0) {
         --s_jog_window;  // a rejected jog  ends 1 outstanding line
     }
+    // Order matters. file_request_failed_advance() deliberately ignores an
+    // error:N that arrives while a JSON document is still streaming, because
+    // FluidNC interleaves messages on the wire: an error from an already-failed
+    // request can land after the NEXT request's document has begun. Resetting
+    // the depth before calling it made that guard dead code, so a stale error
+    // both tore down a healthy macro document and advanced the chain past it --
+    // which is exactly the "No Macros" screen with the macros sitting in the
+    // buffer. Ask the question while the answer is still true.
     if (json_in_progress()) {
-        // "error:N" without a JSON wrapper ends an in-flight document.
-        json_reset_depth();
+        request_redisplay();
+        return;
     }
     // Telnet returns bare "error:N" with no JSON wrapper when $File/SendJSON
     // is rejected (file not present, etc). Without this hook the macro chain
     // sits on "Reading Macros" forever because endDocument never fires.
     file_request_failed_advance();
+    config_request_failed();
     request_redisplay();
 }
 
