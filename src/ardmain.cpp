@@ -164,7 +164,7 @@ void loop() {
     //
     // Drain all pending data, but stop when RX is empty to avoid 
     // unnecessary Wi-Fi polling and reduce idle-loop jitter that can make small jog movements choppy.
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 1024; i++) {
         fnc_poll();
         if (!fnc_rx_waiting()) {
             break;
