@@ -428,8 +428,12 @@ extern "C" void show_error(int error) {
         --s_jog_window;  // a rejected jog  ends 1 outstanding line
     }
     if (json_in_progress()) {
-        // "error:N" without a JSON wrapper ends an in-flight document.
-        json_reset_depth();
+        // An error from an earlier command can arrive while the next command's
+        // JSON is still streaming. It says nothing about that document, so
+        // leave it alone. (Resetting first also made the json_in_progress()
+        // check in file_request_failed_advance() unreachable.)
+        request_redisplay();
+        return;
     }
     // Telnet returns bare "error:N" with no JSON wrapper when $File/SendJSON
     // is rejected (file not present, etc). Without this hook the macro chain
