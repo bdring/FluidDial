@@ -11,7 +11,7 @@ extern Scene filePreviewScene;
 
 void MacroItem::invoke(void* arg) {
     if (arg && strcmp((char*)arg, "Run") == 0) {
-        if (_filename.rfind("cmd:", 0) == 0) {
+        if (is_command()) {
             // Split on \n, \r, and ';' — FluidNC parses ';' as a line-comment,
             // so multi-statement macros like "G0 Z45; G0 Y166" must be sent as
             // separate lines. Trim whitespace and skip empty segments.
@@ -36,7 +36,7 @@ void MacroItem::invoke(void* arg) {
         } else {
             send_linef("$Localfs/Run=%s", _filename.c_str());
         }
-    } else {
+    } else if (!is_command()) {
         push_scene(&filePreviewScene, (void*)_filename.c_str());
         // doFileScreen(_name);
     }
@@ -105,12 +105,17 @@ public:
         }
     }
 
+    bool selected_is_command() {
+        return num_items() && static_cast<MacroItem*>(_items[_selected])->is_command();
+    }
+
     void onGreenButtonPress() {
         if (state != Idle) {
             return;
         }
         if (num_items()) {
-            invoke();
+            // A command has no file to load and preview, so just run it
+            invoke(selected_is_command() ? (void*)"Run" : nullptr);
         }
     }
 
@@ -153,7 +158,7 @@ public:
         if (state == Idle) {
             if (num_items()) {
                 orangeLabel = "Run";
-                grnLabel    = "Load";
+                grnLabel    = selected_is_command() ? "Run" : "Load";
             }
         }
 
