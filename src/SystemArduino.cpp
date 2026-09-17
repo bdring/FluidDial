@@ -38,25 +38,38 @@ static void uart_putchar_impl(uint8_t c) {
 #endif
 }
 
+// Bytes are read from the driver in blocks; one uart_read_bytes() call per
+// byte is too slow to keep up with FluidNC at 1 Mbaud.
+static uint8_t s_rx_buf[256];
+static int     s_rx_len = 0;
+static int     s_rx_pos = 0;
+
 static int uart_getchar_impl() {
-    char c;
-    int res = uart_read_bytes(fnc_uart_port, &c, 1, 0);
-    if (res == 1) {
-#ifdef LED_DEBUG
-        if (c == '\r' || c == '\n') { ledcolor(0); }
-        else                        { ledcolor(c & 7); }
-#endif
-        update_rx_time();
-#ifdef ECHO_FNC_TO_DEBUG
-        dbg_write(c);
-#endif
-        return (unsigned char)c;
+    if (s_rx_pos >= s_rx_len) {
+        s_rx_pos = 0;
+        s_rx_len = uart_read_bytes(fnc_uart_port, s_rx_buf, sizeof(s_rx_buf), 0);
+        if (s_rx_len <= 0) {
+            s_rx_len = 0;
+            return -1;
+        }
     }
-    return -1;
+    uint8_t c = s_rx_buf[s_rx_pos++];
+#ifdef LED_DEBUG
+    if (c == '\r' || c == '\n') { ledcolor(0); }
+    else                        { ledcolor(c & 7); }
+#endif
+    update_rx_time();
+#ifdef ECHO_FNC_TO_DEBUG
+    dbg_write(c);
+#endif
+    return c;
 }
 
-// True if the UART driver already has a received byte buffered
+// True if a received byte is buffered, here or in the UART driver
 static bool uart_rx_waiting() {
+    if (s_rx_pos < s_rx_len) {
+        return true;
+    }
     size_t n = 0;
     uart_get_buffered_data_len(fnc_uart_port, &n);
     return n > 0;
@@ -100,8 +113,17 @@ extern "C" void poll_extra() {
 #ifdef USE_WIFI
     if (wifi_use_espnow_mode()) {
         espnow_poll();
-    } else {
+    } else if (!wifi_use_uart_mode()) {
         wifi_poll();
+    } else {
+        // Over UART, wifi_poll() only services OTA. fnc_poll() calls this once
+        // per received byte, so rate-limit it or the reader falls behind.
+        static uint32_t last_ms = 0;
+        uint32_t        now     = millis();
+        if (now - last_ms >= 20) {
+            last_ms = now;
+            wifi_poll();
+        }
     }
 #endif
 #ifdef DEBUG_TO_USB
@@ -140,6 +162,7 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
     fnc_uart_port = (uart_port_t)uart_num;
     int baudrate  = FNC_BAUD;
     uart_driver_delete(fnc_uart_port);
+    s_rx_len = s_rx_pos = 0;
     uart_set_pin(fnc_uart_port, (gpio_num_t)tx_pin, (gpio_num_t)rx_pin, -1, -1);
     uart_config_t conf;
 #    if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
@@ -161,7 +184,8 @@ void init_fnc_uart(int uart_num, int tx_pin, int rx_pin) {
         while (1) {}
         return;
     };
-    uart_driver_install(fnc_uart_port, 256, 0, 0, NULL, ESP_INTR_FLAG_IRAM);
+    // Large enough to absorb a whole preferences.json while the loop is busy
+    uart_driver_install(fnc_uart_port, 16384, 0, 0, NULL, ESP_INTR_FLAG_IRAM);
     uart_set_sw_flow_ctrl(fnc_uart_port, true, 64, 120);
     uint32_t baud;
     uart_get_baudrate(fnc_uart_port, &baud);
