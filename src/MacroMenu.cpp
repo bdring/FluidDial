@@ -72,6 +72,7 @@ public:
 
     void refreshMacros() {
         removeAllItems();
+        _error_string.clear();
         _reading = true;
         request_macros();
     }
