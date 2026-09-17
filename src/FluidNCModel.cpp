@@ -439,6 +439,7 @@ extern "C" void show_error(int error) {
     // is rejected (file not present, etc). Without this hook the macro chain
     // sits on "Reading Macros" forever because endDocument never fires.
     file_request_failed_advance();
+    config_request_failed();
     request_redisplay();
 }
 

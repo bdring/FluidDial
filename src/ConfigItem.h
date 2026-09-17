@@ -6,6 +6,7 @@
 class ConfigItem;
 extern std::vector<ConfigItem*> configRequests;
 void service_config_requests();
+void config_request_failed();
 void clear_config_requests();
 
 class ConfigItem {
