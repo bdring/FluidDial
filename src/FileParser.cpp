@@ -329,9 +329,14 @@ JsonStreamingParser* macro_parser;
 
 bool reading_macros = false;
 
+// When a macro file request last showed signs of life: sent, or data arrived
+static uint32_t           s_file_request_active_ms = 0;
+static constexpr uint32_t FILE_REQUEST_TIMEOUT_MS  = 5000;
+
 void request_json_file(const char* name) {
     send_linef("$File/SendJSON=/%s", name);
-    parser_needs_reset = true;
+    parser_needs_reset       = true;
+    s_file_request_active_ms = milliseconds();
 }
 
 // Track which file request is in flight so we can advance the macro
@@ -436,6 +441,19 @@ extern "C" void file_request_failed_advance() {
 
 void request_macros() {
     try_next_macro_file(nullptr);
+}
+
+// If a macro file request stops receiving data without ever completing (the
+// response was lost or cut short), move on instead of showing "Reading Macros"
+// forever.
+void service_macro_chain() {
+    if (!s_pending_file_listener || (uint32_t)(milliseconds() - s_file_request_active_ms) < FILE_REQUEST_TIMEOUT_MS) {
+        return;
+    }
+    JsonListener* listener  = s_pending_file_listener;
+    s_pending_file_listener = nullptr;
+    json_reset_depth();
+    try_next_macro_file(listener);
 }
 
 void init_macro_parser() {
@@ -742,6 +760,7 @@ extern "C" void handle_json(const char* line) {
         parser.reset();
     }
     parser_feed_line(line);
+    s_file_request_active_ms = milliseconds();
 }
 
 std::string wifi_mode;

@@ -50,3 +50,7 @@ void json_reset_depth();
 // "Reading Macros" UI doesn't hang when a $File/SendJSON request was
 // rejected. No-op if no file request is currently in flight.
 extern "C" void file_request_failed_advance();
+
+// Call regularly. Gives up on a macro file request that has stopped receiving
+// data, so the macro menu can't hang on "Reading Macros".
+void service_macro_chain();
