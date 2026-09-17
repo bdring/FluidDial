@@ -100,8 +100,17 @@ extern "C" void poll_extra() {
 #ifdef USE_WIFI
     if (wifi_use_espnow_mode()) {
         espnow_poll();
-    } else {
+    } else if (!wifi_use_uart_mode()) {
         wifi_poll();
+    } else {
+        // Over UART, wifi_poll() only services OTA. fnc_poll() calls this once
+        // per received byte, so rate-limit it or the reader falls behind.
+        static uint32_t last_ms = 0;
+        uint32_t        now     = millis();
+        if (now - last_ms >= 20) {
+            last_ms = now;
+            wifi_poll();
+        }
     }
 #endif
 #ifdef DEBUG_TO_USB
