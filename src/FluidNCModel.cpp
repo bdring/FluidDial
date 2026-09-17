@@ -314,8 +314,9 @@ void send_jog_cancel() {
 }
 
 static void vsend_linef(const char* fmt, va_list va) {
-    static char buf[128];
-    vsnprintf(buf, 128, fmt, va);
+    // Not static: send_line() can re-enter here while it waits for "ok".
+    char buf[128];
+    vsnprintf(buf, sizeof(buf), fmt, va);
     send_line(buf);
 }
 void send_linef(const char* fmt, ...) {
