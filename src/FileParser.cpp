@@ -260,7 +260,16 @@ public:
         }
     }
 
-    void startObject() override { ++_level; }
+    void startObject() override {
+        ++_level;
+        if (_in_macros_section) {
+            // Each macro entry starts empty, so a missing field can't inherit
+            // the previous entry's value
+            _name.clear();
+            _target.clear();
+            _filename.clear();
+        }
+    }
     void key(const char* key) override {
         _key = key;
 #ifdef FNC_RX_TRACE
@@ -305,6 +314,9 @@ public:
     void endObject() override {
         --_level;
         if (_in_macros_section) {
+            if (_filename.empty()) {
+                return;  // nothing to run
+            }
             if (_target == "FS") {
                 _filename.insert(0, "/localfs/");
             } else if (_target == "SD") {
