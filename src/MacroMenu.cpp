@@ -110,12 +110,17 @@ public:
     }
 
     void onGreenButtonPress() {
-        if (state != Idle) {
+        if (!num_items()) {
             return;
         }
-        if (num_items()) {
-            // A command has no file to load and preview, so just run it
-            invoke(selected_is_command() ? (void*)"Run" : nullptr);
+        // A command has no file to load and preview, so just run it. It isn't
+        // limited to Idle: it is a single line FluidNC accepts or rejects itself.
+        if (selected_is_command()) {
+            invoke((void*)"Run");
+            return;
+        }
+        if (state == Idle) {
+            invoke();
         }
     }
 
@@ -155,10 +160,13 @@ public:
         const char* orangeLabel = "";
         const char* grnLabel    = "";
 
-        if (state == Idle) {
-            if (num_items()) {
+        if (num_items()) {
+            if (selected_is_command()) {
                 orangeLabel = "Run";
-                grnLabel    = selected_is_command() ? "Run" : "Load";
+                grnLabel    = "Run";
+            } else if (state == Idle) {
+                orangeLabel = "Run";
+                grnLabel    = "Load";
             }
         }
 
