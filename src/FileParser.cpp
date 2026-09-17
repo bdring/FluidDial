@@ -539,9 +539,10 @@ private:
 public:
     void whitespace(char c) override {}
     void startDocument() override {
-        _key          = NONE;
-        _is_json_file = false;
-        _status       = "ok";
+        _key           = NONE;
+        _is_json_file  = false;
+        _status        = "ok";
+        _file_listener = nullptr;
     }
     void value(const char* value) override {
         switch (_key) {
@@ -582,10 +583,19 @@ public:
     void endObject() override { parser_needs_reset = true; }
     void endDocument() override {
         parser_needs_reset = true;
-        if (_status != "ok" && _file_listener) {
-            _status = "ok";
-            try_next_macro_file(_file_listener);
+        if (!_file_listener) {
+            return;
         }
+        JsonListener* listener = _file_listener;
+        _file_listener         = nullptr;
+        if (_status != "ok" || macroMenu.num_items() == 0) {
+            _status = "ok";
+            try_next_macro_file(listener);
+            return;
+        }
+        // Loaded. Nothing is pending any more, so a later unrelated error:N
+        // must not advance the chain.
+        s_pending_file_listener = nullptr;
     }
     void startArray() override {}
     void startObject() override {}
