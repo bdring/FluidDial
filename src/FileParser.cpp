@@ -332,8 +332,33 @@ bool reading_macros = false;
 // When a macro file request last showed signs of life: sent, or data arrived
 static uint32_t           s_file_request_active_ms = 0;
 static constexpr uint32_t FILE_REQUEST_TIMEOUT_MS  = 5000;
+// How long after the last request, with no document in flight, before auto
+// reporting is turned back on.
+static constexpr uint32_t AUTO_REPORT_RESUME_MS = 1000;
+
+// FluidNC's auto-report ($RI) keeps emitting <Idle|MPos:...> status lines while
+// a file is streaming, on the same channel. Any byte lost to a stall then welds
+// the two together -- a chunk ends up carrying the tail of a status report
+// ("...|FS:0,0>") and the JSON parser derails. Nothing on the macro path needs
+// live DRO, so silence auto-reporting for the duration of the transfer.
+static bool s_auto_report_suspended = false;
+
+static void suspend_auto_report() {
+    if (!s_auto_report_suspended) {
+        s_auto_report_suspended = true;
+        send_line("$RI=0");
+    }
+}
+
+void resume_auto_report() {
+    if (s_auto_report_suspended) {
+        s_auto_report_suspended = false;
+        send_line("$RI=200");
+    }
+}
 
 void request_json_file(const char* name) {
+    suspend_auto_report();
     send_linef("$File/SendJSON=/%s", name);
     parser_needs_reset       = true;
     s_file_request_active_ms = milliseconds();
@@ -447,6 +472,15 @@ void request_macros() {
 // response was lost or cut short), move on instead of showing "Reading Macros"
 // forever.
 void service_macro_chain() {
+    // Restore auto-reporting once nothing is streaming any more. Keying this on
+    // "no document in flight AND the last request is old enough" rather than on
+    // the terminal branches means the DRO comes back down every route home --
+    // completion, error, give-up -- and for the file list and preview transfers
+    // too, which have no chain state of their own.
+    if (s_auto_report_suspended && !s_pending_file_listener && !json_in_progress() &&
+        (uint32_t)(milliseconds() - s_file_request_active_ms) >= AUTO_REPORT_RESUME_MS) {
+        resume_auto_report();
+    }
     if (!s_pending_file_listener || (uint32_t)(milliseconds() - s_file_request_active_ms) < FILE_REQUEST_TIMEOUT_MS) {
         return;
     }
@@ -667,6 +701,8 @@ void init_listener() {
 }
 
 void request_file_list(const char* dirname) {
+    suspend_auto_report();
+    s_file_request_active_ms = milliseconds();
     send_linef("$Files/ListGCode=%s", dirname);
     // parser.reset();
     parser_needs_reset = true;
@@ -680,6 +716,8 @@ void init_file_list() {
 
 void request_file_preview(const char* name, int firstline, int nlines) {
     reading_macros = false;
+    suspend_auto_report();
+    s_file_request_active_ms = milliseconds();
     send_linef("$File/ShowSome=%d:%d,%s", firstline, firstline + nlines, name);
     // parser.reset();
 }
