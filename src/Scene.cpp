@@ -3,6 +3,7 @@
 
 #include "Scene.h"
 #include "ConfigItem.h"
+#include "FileParser.h"  // service_macro_chain()
 #include "System.h"
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
@@ -187,6 +188,7 @@ void service_redisplay() {
 void dispatch_events() {
     update_events();
     service_config_requests();
+    service_macro_chain();
 
     static int16_t oldEncoder   = 0;
     int16_t        newEncoder   = get_encoder();
