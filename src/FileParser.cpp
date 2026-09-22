@@ -243,6 +243,10 @@ private:
 
     int  _level             = 0;
     bool _in_macros_section = false;
+    // _level at which the "macros" key appeared. Entries are the objects one
+    // deeper than this; anything deeper still is nested structure inside an
+    // entry and must not be mistaken for one.
+    int _macros_level = -1;
 
 public:
     void whitespace(char c) override {}
@@ -256,11 +260,21 @@ public:
     void endArray() override {
         if (_in_macros_section) {
             _in_macros_section = false;
+            _macros_level      = -1;
             current_scene->onFilesList();
         }
     }
 
-    void startObject() override { ++_level; }
+    void startObject() override {
+        ++_level;
+        if (_in_macros_section && _level == _macros_level + 1) {
+            // Each macro entry starts empty, so a missing field can't inherit
+            // the previous entry's value
+            _name.clear();
+            _target.clear();
+            _filename.clear();
+        }
+    }
     void key(const char* key) override {
         _key = key;
 #ifdef FNC_RX_TRACE
@@ -269,20 +283,29 @@ public:
         // matches what _level == 2 expects.
         dbg_printf("[prefs] L%d key=%s\n", _level, key);
 #endif
+        // Match the macros key at whatever depth it appears. This listener is
+        // installed part-way through the document (on the "result" key of the
+        // $File/SendJSON wrapper), so its _level is relative to wherever it
+        // took over. Pinning the check to _level == 2 caused an earlier
+        // _level < 2 check to swallow the macros key before it was ever tested.
+        if (strcmp(key, "macros") == 0) {
+            _in_macros_section = true;
+            _macros_level      = _level;
+            return;
+        }
         if (_level < 2) {
             // The only thing we care about is the macros section at level 2
             return;
         }
-        if (_level == 2 && (strcmp(key, "macros") == 0)) {
-            _in_macros_section = true;
-            return;
-        }
         if (_in_macros_section) {
-            if (strcmp(key, "action") == 0) {
+            // WebUI versions disagree on the spelling: older exports use
+            // filename/target (what MacroListListener expects), newer ones use
+            // action/type. Accept either.
+            if (strcmp(key, "action") == 0 || strcmp(key, "filename") == 0) {
                 _valuep = &_filename;
                 return;
             }
-            if (strcmp(key, "type") == 0) {
+            if (strcmp(key, "type") == 0 || strcmp(key, "target") == 0) {
                 _valuep = &_target;
                 return;
             }
@@ -304,8 +327,18 @@ public:
 
     void endObject() override {
         --_level;
-        if (_in_macros_section) {
-            if (_target == "FS") {
+        if (_in_macros_section && _level == _macros_level) {
+            if (_filename.empty()) {
+                return;  // nothing to run
+            }
+            // Normalise before prefixing: strip a leading slash so
+            // neither convention yields "/localfs//foo.g".
+            if (_target == "FS" || _target == "ESP" || _target == "SD") {
+                if (!_filename.empty() && _filename[0] == '/') {
+                    _filename.erase(0, 1);
+                }
+            }
+            if (_target == "FS" || _target == "ESP") {
                 _filename.insert(0, "/localfs/");
             } else if (_target == "SD") {
                 _filename.insert(0, "/sd/");
