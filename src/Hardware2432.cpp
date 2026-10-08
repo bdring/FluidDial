@@ -93,17 +93,17 @@ uint8_t base_rotation = 2;
 lgfx::Bus_SPI bus;
 static void   init_bus() {
       auto cfg       = bus.config();
-      cfg.freq_write = 55000000;
-      cfg.freq_read  = 16000000;
-      cfg.use_lock   = true;
+      cfg.freq_write = 40000000; //original: 55000000
+      cfg.freq_read  = 20000000;
+      cfg.use_lock   = false;
 
       cfg.dma_channel = SPI_DMA_CH_AUTO;
-      cfg.spi_host    = HSPI_HOST;
-      cfg.pin_mosi    = GPIO_NUM_13;
-      cfg.pin_miso    = GPIO_NUM_12;
-      cfg.pin_sclk    = GPIO_NUM_14;
-      cfg.pin_dc      = GPIO_NUM_2;
-      cfg.spi_mode    = 0;
+      cfg.spi_host    = VSPI_HOST; //original: HSPI_HOST
+      cfg.pin_mosi    = GPIO_NUM_13; // original: GPIO_NUM_13
+      cfg.pin_miso    = GPIO_NUM_12; // original: GPIO_NUM_12
+      cfg.pin_sclk    = GPIO_NUM_14; // original: GPIO_NUM_14
+      cfg.pin_dc      = GPIO_NUM_2; // original: GPIO_NUM_2
+      cfg.spi_mode    = 1;
       cfg.spi_3wire   = false;
 
       bus.config(cfg);
@@ -114,7 +114,7 @@ lgfx::Light_PWM light;
 
 void init_light() {
     auto cfg        = light.config();
-    cfg.pin_bl      = GPIO_NUM_21;
+    cfg.pin_bl      = GPIO_NUM_27; //original: 21
     cfg.freq        = 12000;
     cfg.pwm_channel = 7;
     cfg.offset      = 0;
@@ -129,19 +129,21 @@ void setBacklightPin(uint8_t pinnum) {
     light.init(255);
 }
 
-lgfx::Panel_ST7789  _panel_st7789;
+lgfx::Panel_ST7796 _panel_st7796;
 lgfx::Panel_ILI9341 _panel_ili9341;
 
-static void init_panel_st7789() {
+static void init_panel_st7796() {
     base_rotation = 0;
 
-    auto& p = _panel_st7789;
+    auto& p = _panel_st7796;
     p.bus(&bus);
 
     auto cfg            = p.config();
     cfg.pin_cs          = GPIO_NUM_15;
     cfg.offset_rotation = base_rotation;
-    cfg.bus_shared      = false;
+    cfg.bus_shared      = true;
+
+
 #ifdef PIBOT_PENDANT
     cfg.invert = true;
 #endif
@@ -212,14 +214,14 @@ void init_capacitive_cyd() {
 #    else
         auto cfg            = _touch_cst816s.config();
         cfg.i2c_port        = I2C_NUM_0;
-        cfg.pin_sda         = GPIO_NUM_33;
-        cfg.pin_scl         = GPIO_NUM_32;
-        cfg.pin_rst         = GPIO_NUM_25;
-        cfg.pin_int         = -1;
+        cfg.pin_sda         = GPIO_NUM_33; //33
+        cfg.pin_scl         = GPIO_NUM_32; //32
+        cfg.pin_rst         = GPIO_NUM_25; //25
+        cfg.pin_int         = -1; // -1
         cfg.offset_rotation = base_rotation;
         cfg.freq            = 400000;
-        cfg.x_max           = 240;
-        cfg.y_max           = 320;
+        cfg.x_max           = 319;
+        cfg.y_max           = 479;
         _touch_cst816s.config(cfg);
         display.getPanel()->setTouch(&_touch_cst816s);
         display.getPanel()->initTouch();
@@ -246,8 +248,8 @@ void init_capacitive_cyd() {
 #    elif defined(CYD_BUTTONS)
     enc_a = GPIO_NUM_22;
     enc_b = GPIO_NUM_21;
-    // rotary_button_pin = GPIO_NUM_35;
-    // pinMode(rotary_button_pin, INPUT);  // Pullup does not work on GPIO35
+//    rotary_button_pin = GPIO_NUM_21;
+//    pinMode(rotary_button_pin, INPUT);  // Pullup does not work on GPIO35
 
     red_button_pin   = GPIO_NUM_4;   // RGB LED Red
     dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
@@ -256,8 +258,8 @@ void init_capacitive_cyd() {
     pinMode(dial_button_pin, INPUT_PULLUP);
     pinMode(green_button_pin, INPUT_PULLUP);
 #    else
-    enc_a          = GPIO_NUM_22;
-    enc_b          = GPIO_NUM_17;  // RGB LED Blue
+    enc_a          = GPIO_NUM_22;  // 22
+    enc_b          = GPIO_NUM_17;  // 17 RGB LED Blue
 #    endif
 }
 #endif  // CAPACITIVE_CYD
@@ -268,33 +270,35 @@ lgfx::Touch_XPT2046 _touch_xpt2046;
 void init_resistive_cyd() {
     {
         auto cfg            = _touch_xpt2046.config();
-        cfg.x_min           = 300;
-        cfg.x_max           = 3900;
-        cfg.y_min           = 3700;
-        cfg.y_max           = 200;
-        cfg.pin_int         = -1;
-        cfg.bus_shared      = false;
-        cfg.spi_host        = -1;  // -1:use software SPI for XPT2046
-        cfg.pin_sclk        = GPIO_NUM_25;
-        cfg.pin_mosi        = GPIO_NUM_32;
-        cfg.pin_miso        = GPIO_NUM_39;
-        cfg.pin_cs          = GPIO_NUM_33;
-        cfg.offset_rotation = base_rotation ^ 2;
+        cfg.x_min           = 100;
+        cfg.x_max           = 4000;
+        cfg.y_min           = 100;
+        cfg.y_max           = 4000;
+        cfg.pin_int         = GPIO_NUM_36; //touch interrupt pin
+        cfg.bus_shared      = true;
+        cfg.spi_host        = 2;  // -1:use software SPI for XPT2046
+        cfg.pin_sclk        = GPIO_NUM_14; //GPIO_NUM_25;
+        cfg.pin_mosi        = GPIO_NUM_13; //GPIO_NUM_32;
+        cfg.pin_miso        = GPIO_NUM_12; //GPIO_NUM_39;
+        cfg.pin_cs          = GPIO_NUM_33; //GPIO_NUM_33;
+        cfg.offset_rotation = base_rotation ^ 2; // base_rotation ^ 2
         _touch_xpt2046.config(cfg);
         display.getPanel()->setTouch(&_touch_xpt2046);
         display.getPanel()->initTouch();
     }
 
-    setBacklightPin(GPIO_NUM_21);
+    setBacklightPin(GPIO_NUM_27); //original 21
 
     pinMode(lockout_pin, INPUT);
 
-    enc_a = GPIO_NUM_22;
-    enc_b = GPIO_NUM_27;
+    enc_a = GPIO_NUM_35; //original: 22
+    enc_b = GPIO_NUM_22; //original: 27
+//    rotary_button_pin = GPIO_NUM_21;
+//    pinMode(rotary_button_pin, INPUT);
 #    ifdef CYD_BUTTONS
     red_button_pin   = GPIO_NUM_4;   // RGB LED Red
     dial_button_pin  = GPIO_NUM_17;  // RGB LED Blue
-    green_button_pin = GPIO_NUM_16;  // RGB LED Green
+    green_button_pin = GPIO_NUM_21;  // 16 RGB LED Green
     pinMode(red_button_pin, INPUT_PULLUP);
     pinMode(dial_button_pin, INPUT_PULLUP);
     pinMode(green_button_pin, INPUT_PULLUP);
@@ -307,10 +311,10 @@ void init_resistive_cyd() {
 bool round_display = false;
 
 const int n_buttons      = 3;
-const int button_w       = 80;
-const int button_h       = 80;
+const int button_w       = 110; //80
+const int button_h       = 110; //80
 const int button_half_wh = button_w / 2;
-const int sprite_wh      = 240;
+const int sprite_wh      = 320; //240
 Point     button_wh(button_w, button_h);
 
 int button_colors[] = { RED, YELLOW, GREEN };
@@ -400,10 +404,12 @@ int try_touch_chips() {
     while (true) {
         init_capacitive_cyd();
         if (try_touch("Capacitive -")) {
+            dbg_printf("Capacitive Screen\n");
             return 2;
         }
         init_resistive_cyd();
         if (try_touch("Resistive -")) {
+            dbg_printf("Resistive Screen\n");
             return 1;
         }
     }
@@ -411,6 +417,7 @@ int try_touch_chips() {
 void choose_board() {
     uint32_t timeout = millis() + 1000;
     pinMode(0, INPUT);
+    dbg_printf("Choose board NVS\n");
     while (millis() < timeout) {
         if (digitalRead(0) == 0) {
             nvs_set_i32(hw_nvs, "display", 0);
@@ -421,6 +428,7 @@ void choose_board() {
     }
 
     nvs_get_i32(hw_nvs, "display", &display_num);
+    dbg_printf("Display num: \n");
 
     switch (display_num) {
         case 0:
@@ -476,20 +484,16 @@ void init_hardware() {
         dbg_printf("ILI9341 panel\n");
         init_panel_ili9341();
     } else {
-        dbg_printf("ST7789 panel\n");
-        init_panel_st7789();
+        dbg_printf("ST7796 panel\n");
+        init_panel_st7796();
     }
     display.init();
-
     choose_board();
-
     nvs_get_i32(hw_nvs, "layout", &layout_num);
-
     set_layout(layout_num);
-
     touch.begin(&display);
-
     init_encoder(enc_a, enc_b);
+    dbg_printf("passed init_encoder\n");
 #ifdef USE_WIFI
     if (wifi_use_uart_mode()) {
         init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
@@ -524,7 +528,7 @@ void redrawButtons() {
             display.fillCircle(position.x + button_half_wh, position.y + button_half_wh, 28, last_locked == 1 ? DARKGREY : button_colors[i]);
             if (last_locked != 1) {
                 const char* filename = (i == 0) ? "/red_button.png" : (i == 1) ? "/orange_button.png" : "/green_button.png";
-                display.drawPngFile(LittleFS, filename, position.x + 10, position.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+                display.drawPngFile(LittleFS, filename, position.x + 25, position.y + 25, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
             }
         }
     }

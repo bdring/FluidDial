@@ -134,7 +134,7 @@ public:
 
     // The number of filenames that can be displayed at once.
     // It should be odd.
-    static const int N_DISPLAYED_FILENAMES = 3;
+    static const int N_DISPLAYED_FILENAMES = 3; //3
 
     // Height of the highlight box for the selected file.
     // This must be large enough for the big filename
@@ -153,8 +153,8 @@ public:
 
     // Separation between big filename + info and small filenames
     // This depends on big_height and the small filename font size
-    int y_distance = 40;
-    int y_inc      = 18;
+    int y_distance = 60; //40
+    int y_inc      = 27; //18
 
     // Offsets the x position to account for the scroll indicator on the right
     static const int big_width = 225;  // display_short_size() - scroll_width * 2
@@ -244,7 +244,7 @@ public:
                 // If there are at most three files, all are displayed, without
                 // a scroll indicator.
                 if (fileVector.size() > 3) {
-                    int width  = 8;
+                    int width  = 10; //8
                     int radius = width / 2;
                     if (round_display) {
                         for (int i = 0; i < width; i++) {

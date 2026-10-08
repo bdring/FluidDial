@@ -199,10 +199,11 @@ public:
 
     void drawJogBg() {
         // Recreate jogbg.png with drawing primitives — faster than rendering png which was causing heap issues with WiFi and overall sluggishness :(
-        const int cx = 120, cy = 120;
-        const int R  = 119;   // outer circle radius
-        const int ri = 50;    // inner (center circle) radius
-        const int hw = 3;     // half-width of separator bands (parallel edges)
+//        const int cx = 120, cy = 120;
+        const int cx = 160, cy = 160;
+        const int R  = 159;   // outer circle radius 119
+        const int ri = 67;    // inner (center circle) radius 50
+        const int hw = 5;     // half-width of separator bands (parallel edges) 3
         const uint16_t zone_color    = 0x1a4d;  // nicer blue
         const uint16_t sep_color     = 0x0000;  // black
         const uint16_t outline_color = 0x8410;
@@ -272,9 +273,9 @@ public:
             centered_text("Jog Canceled", 120, RED, MEDIUM);
         } else {
             int n          = num_axes();
-            int dro_height = (n <= 3) ? 32 : (n == 4 ? 25 : 18);
-            int dro_gap    = (n <= 3) ? 33 : (dro_height + 5);
-            int start_y    = (n <= 3) ? 68 : (n == 4 ? 58 : 50);
+            int dro_height = (n <= 3) ? 32 : (n == 4 ? 25 : 27); //18
+            int dro_gap    = (n <= 3) ? 33 : (dro_height + 5); //5
+            int start_y    = (n <= 3) ? 68 : (n == 4 ? 58 : 75); //50
             fontnum_t font = (n <= 4) ? MEDIUM : SMALL;
             DRO dro(16, start_y, 210, dro_height, font, dro_gap);
             for (size_t axis = 0; axis < n; axis++) {

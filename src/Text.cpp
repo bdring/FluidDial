@@ -110,7 +110,7 @@ void wrapped_text(const char* msg, int y, int w, int color, fontnum_t fontnum) {
     }
     
     // Draw lines
-    int line_height = 22;
+    int line_height = 33; //22
     int total_height = line_count * line_height;
     int start_y = y - (total_height / 2);
     int line_num = 0;
