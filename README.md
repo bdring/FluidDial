@@ -9,6 +9,7 @@ Due to my inability to RTFM, I made the mistake of purchasing a 3.5" model CYD i
 Mainly due to the pricing during purchase:
 
 2.8" Resistive RM43.89 = USD 10.73
+
 3.5" Resistive RM57.73 = USD 14.11
 
 As such, through pain and suffering, I have managed to make the following changes to make it fullscreen(ish) on the 3.5" Resistive Model CYD. 
