@@ -1,4 +1,4 @@
-# FluidDial: A Wired/Wireless CNC Pendant for FluidNC Firmware.
+# FluidDial: A Wired/Wireless CNC Pendant for FluidNC Firmware (3.5" ver.).
 
 <img src="https://i.imgur.com/hZieBhW.jpeg" alt="M5 Fluid Dial" height="500">
 <img src="https://i.imgur.com/M6RNvzp.jpeg" alt="CYD Dial Pendant 3.5 inch" height="500">
