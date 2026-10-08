@@ -95,7 +95,7 @@ public:
 
         if (state == Idle) {
             if (_needlines == false) {
-                int y  = 48;
+                int y  = 64; //48
                 int tl = 0;
                 if (_lines.size()) {
                     for (auto const& entry : _lines) {

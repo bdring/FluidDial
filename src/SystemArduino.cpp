@@ -131,7 +131,7 @@ void drawPngFile(LGFX_Sprite* sprite, const char* filename, int x, int y) {
 
 // Baud rates up to 10M work
 #ifndef FNC_BAUD
-#    define FNC_BAUD 1000000
+#    define FNC_BAUD 1000000 //define FNC_BAUD 1000000
 #endif
 
 extern void init_hardware();
@@ -178,7 +178,7 @@ void init_system() {
 
     // Make an offscreen canvas that can be copied to the screen all at once
     canvas.setColorDepth(8);
-    canvas.createSprite(240, 240);  // display.width(), display.height());
+    canvas.createSprite(320, 320);  // ori 240x240 display.width(), display.height());
 }
 void resetFlowControl() {
 #ifdef USE_WIFI

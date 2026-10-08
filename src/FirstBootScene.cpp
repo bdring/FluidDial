@@ -17,13 +17,13 @@ extern void first_boot_complete();
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
-static constexpr int BTN_W = 160;
-static constexpr int BTN_H = 40;
-static constexpr int BTN_X = (240 - BTN_W) / 2;
+static constexpr int BTN_W = 200; //160
+static constexpr int BTN_H = 40; //40
+static constexpr int BTN_X = (320 - BTN_W) / 2; //240 screen width
 
-static constexpr int UART_BTN_Y    = 60;
-static constexpr int WIFI_BTN_Y    = 112;
-static constexpr int ESPNOW_BTN_Y  = 164;
+static constexpr int UART_BTN_Y    = 60; //60
+static constexpr int WIFI_BTN_Y    = 112; //112
+static constexpr int ESPNOW_BTN_Y  = 164; //164
 
 class FirstBootScene : public Scene {
     uint32_t _entry_ms = 0;

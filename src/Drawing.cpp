@@ -117,10 +117,10 @@ std::map<state_t, int> stateFGColors = {
 // clang-format on
 
 void drawStatus() {
-    static constexpr int x      = 100;
-    static constexpr int y      = 24;
-    static constexpr int width  = 140;
-    static constexpr int height = 36;
+    static constexpr int x      = 133; //100
+    static constexpr int y      = 36; // 24
+    static constexpr int width  = 186; // 140
+    static constexpr int height = 54; // 36
 
 #ifdef USE_WIFI
     if (state == Disconnected && !wifi_use_uart_mode()) {

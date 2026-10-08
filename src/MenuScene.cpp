@@ -10,7 +10,7 @@
 
 void noop(void* arg) {}
 
-const int buttonRadius = 30;
+const int buttonRadius = 30; //30
 
 static const char* menu_help_text[] = { "FluidDial",
                                         "Touch icon for scene",
