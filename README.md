@@ -22,4 +22,5 @@ Notes:
 - Serial functions properly. Other connectivity methods untested.
 
 Special thanks to [Fluidnc](https://github.com/bdring/FluidDial) for a wonderful project.
-Special thanks to https://github.com/chacuavip10/CYD-3.5inch_ESP32-3248S035 for the documentation on my model.
+
+And thanks to https://github.com/chacuavip10/CYD-3.5inch_ESP32-3248S035 for the documentation on my model.
