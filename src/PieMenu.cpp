@@ -103,6 +103,9 @@ void PieMenu::onTouchFlick() {
 void PieMenu::onDialButtonPress() {
     invoke();
 }
+void PieMenu::onGreenButtonPress() {
+    invoke();
+}
 
 void PieMenu::onTouchHold() {
     int item = touchedItem(touchX, touchY);

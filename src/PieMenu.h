@@ -26,6 +26,7 @@ public:
     void onTouchClick() override;
     void onTouchFlick() override;
     void onDialButtonPress() override;
+    void onGreenButtonPress() override;
     void addItem(Item* item) {
         Menu::addItem(item);
         calculatePositions();
